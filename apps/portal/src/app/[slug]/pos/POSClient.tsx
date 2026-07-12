@@ -113,7 +113,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
     <div className="h-screen flex flex-col">
       {/* Top bar */}
       <header className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-gray-200 shadow-sm">
-        <div className="flex items-center gap-2" style={{ color: theme.secondaryColor }}>
+        <div className="flex items-center gap-3" style={{ color: theme.secondaryColor }}>
           {/* Hamburger — mobile only */}
           <button
             onClick={() => setMobileSidebarOpen(true)}
@@ -122,6 +122,15 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
             ☰
           </button>
           <span className="text-lg font-bold">{brandName}</span>
+          {(user?.publicMetadata as Record<string, any> | undefined)?.role === 'super_admin' && (
+            <a
+              href="/dashboard"
+              className="ml-2 px-3 py-1 text-xs font-medium rounded border bg-white hover:bg-gray-50 transition-colors"
+              style={{ borderColor: theme.primaryColor, color: theme.primaryColor }}
+            >
+              ← All POS
+            </a>
+          )}
         </div>
         <div className="flex items-center gap-4">
           <input
