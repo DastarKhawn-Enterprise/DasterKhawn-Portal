@@ -49,7 +49,7 @@ export default function ReceiptView({ data, brandName, theme, onClose }: Props) 
           {content}
           <button
             onClick={onClose}
-            className="mt-4 w-full px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium"
+            className="no-print mt-4 w-full px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium"
           >
             Close
           </button>
@@ -61,19 +61,24 @@ export default function ReceiptView({ data, brandName, theme, onClose }: Props) 
         <style>{`
           .receipt-print-area { display: none; }
           @media print {
+            @page { size: 80mm auto; margin: 0; }
             #__next { display: none !important; }
+            html, body { margin: 0 !important; padding: 0 !important; }
             .receipt-print-area {
               display: block !important;
               position: absolute;
               top: 0;
               left: 0;
               width: 80mm;
-              padding: 10mm;
+              padding: 4mm 6mm;
               background: white;
               font-size: 12px;
               font-family: 'Courier New', Courier, monospace;
+              box-sizing: border-box;
             }
           }
+          /* Browser print header/footer (date, URL) is controlled via print dialog settings, not CSS.
+             @page margin:0 minimizes their space; uncheck "Headers and footers" in Chrome print dialog. */
         `}</style>,
         document.head
       )}
