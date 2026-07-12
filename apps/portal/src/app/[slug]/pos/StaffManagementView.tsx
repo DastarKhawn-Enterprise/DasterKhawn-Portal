@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { getStaffList, inviteStaff, removeStaff } from './staff-actions';
 import type { StaffMember, StaffListResult } from './staff-actions';
+import { hasPermission, decodeJwt } from './permissions';
 
 interface Props {
   slug: string;
@@ -33,9 +34,8 @@ export default function StaffManagementView({ slug }: Props) {
       try {
         const token = await getToken({ template: 'supabase' });
         if (token) {
-          const payload = JSON.parse(atob(token.split('.')[1]));
-          const perms: string[] = payload.user_roles ?? [];
-          setCanManage(perms.includes('staff:manage'));
+          const decoded = decodeJwt(token);
+          if (decoded) setCanManage(hasPermission(decoded.permissions, decoded.tenant_role, 'staff:manage'));
         }
       } catch {}
     })();

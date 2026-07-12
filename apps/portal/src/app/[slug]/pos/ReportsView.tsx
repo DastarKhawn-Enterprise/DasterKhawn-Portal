@@ -4,6 +4,7 @@ import { useAuth } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { hasPermission, decodeJwt } from './permissions';
 
 interface Props {
   supabaseUrl: string;
@@ -107,17 +108,8 @@ export default function ReportsView({ supabaseUrl, supabaseAnonKey, theme }: Pro
     getToken({ template: 'supabase' })
       .then((token) => {
         if (!token) return;
-        try {
-          let base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-          while (base64.length % 4) base64 += '=';
-          const payload = JSON.parse(atob(base64));
-          const perms = payload.permissions;
-          const tenantRole = payload.tenant_role || '';
-          const permList: string[] = typeof perms === 'string' ? (() => { try { return JSON.parse(perms); } catch { return []; } })() : (perms ?? []);
-          setHasReportsView(permList.includes('reports:view') || tenantRole === 'super_admin');
-        } catch (e) {
-          console.error('[Reports Permissions] decode error:', e);
-        }
+        const decoded = decodeJwt(token);
+        if (decoded) setHasReportsView(hasPermission(decoded.permissions, decoded.tenant_role, 'reports:view'));
       })
       .finally(() => setPermissionChecked(true));
   }, [authReady, getToken]);

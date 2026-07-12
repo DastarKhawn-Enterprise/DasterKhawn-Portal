@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
+import { hasPermission, decodeJwt } from './permissions';
 
 interface MenuItemRecord {
   id: string;
@@ -67,22 +68,10 @@ export default function MenuManagementView({ supabaseUrl, supabaseAnonKey, theme
     getToken({ template: 'supabase' })
       .then((token) => {
         if (!token) return;
-        try {
-          let base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-          while (base64.length % 4) base64 += '=';
-          const payload = JSON.parse(atob(base64));
-          const perms = payload.permissions;
-          const tenantRole = payload.tenant_role || '';
-          console.log('[Menu Permissions] raw JWT:', JSON.stringify({ permissions: perms, tenant_role: tenantRole }));
-          const permList: string[] = typeof perms === 'string' ? (() => { try { return JSON.parse(perms); } catch { return []; } })() : (perms ?? []);
-          const hasPermission = permList.includes('menu:edit') || tenantRole === 'super_admin';
-          console.log('[Menu Permissions] has menu:edit?', permList.includes('menu:edit'), '| super_admin?', tenantRole === 'super_admin', '| canEdit:', hasPermission);
-          setCanEdit(hasPermission);
-        } catch (e) {
-          console.error('[Menu Permissions] decode error:', e);
-        }
+        const decoded = decodeJwt(token);
+        if (decoded) setCanEdit(hasPermission(decoded.permissions, decoded.tenant_role, 'menu:edit'));
       })
-      .catch((e) => console.error('[Menu Permissions] getToken error:', e));
+      .catch(() => {});
   }, [authReady, getToken]);
 
   // Fetch all menu items
