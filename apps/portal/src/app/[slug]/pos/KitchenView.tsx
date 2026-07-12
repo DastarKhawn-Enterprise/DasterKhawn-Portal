@@ -144,7 +144,12 @@ export default function KitchenView({ supabaseUrl, supabaseAnonKey, brandName }:
         setUpdating(null);
         return;
       }
-      console.log('[KitchenView] Status updated:', orderId, '->', newStatus);
+      // Optimistic local update — UI responds immediately without waiting for Realtime
+      if (newStatus === 'completed') {
+        setOrders((prev) => prev.filter((o) => o.id !== orderId));
+      } else {
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)));
+      }
     } catch (e) {
       console.error('[KitchenView] Status update threw:', e);
     }
