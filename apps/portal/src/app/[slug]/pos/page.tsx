@@ -34,10 +34,8 @@ function AccessDeniedScreen({ brandName }: { brandName: string }) {
 
 export default async function POSPage({
   params,
-  searchParams,
 }: {
   params: { slug: string };
-  searchParams?: { tab?: string };
 }) {
   const tenant = await getTenantBySlug(params.slug);
 
@@ -73,7 +71,6 @@ export default async function POSPage({
       supabaseAnonKey={tenant.supabase_anon_key}
       brandName={tenant.brand_name}
       theme={tenant.theme_config}
-      initialTab={searchParams?.tab ?? 'order'}
     />
   );
 }
