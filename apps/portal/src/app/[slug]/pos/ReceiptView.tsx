@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 
 interface ReceiptItem {
@@ -29,55 +30,68 @@ interface Props {
 }
 
 export default function ReceiptView({ data, brandName, theme, onClose }: Props) {
-  const printRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      window.print();
-    }, 300);
+    setMounted(true);
+    const timer = setTimeout(() => window.print(), 300);
     return () => clearTimeout(timer);
   }, []);
 
   const subtotal = data.items.reduce((s, i) => s + i.price * i.quantity, 0);
+  const content = receiptContent(brandName, theme, data, subtotal);
 
   return (
     <>
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          #receipt-print-area, #receipt-print-area * { visibility: visible; }
-          #receipt-print-area { position: absolute; left: 0; top: 0; width: 80mm; }
-          .no-print { display: none !important; }
-        }
-      `}</style>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 no-print" onClick={onClose}>
-        <div
-          ref={printRef}
-          id="receipt-print-area"
-          className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-6"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {receiptContent(brandName, theme, data, subtotal)}
+      {/* Screen modal — shown on screen, hidden during print via #__next { display:none } */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+          {content}
           <button
             onClick={onClose}
-            className="no-print mt-4 w-full px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium"
+            className="mt-4 w-full px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium"
           >
             Close
           </button>
         </div>
       </div>
+
+      {/* Print-only: styles in <head> + receipt at end of <body>, both outside #__next */}
+      {mounted && createPortal(
+        <style>{`
+          .receipt-print-area { display: none; }
+          @media print {
+            #__next { display: none !important; }
+            .receipt-print-area {
+              display: block !important;
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 80mm;
+              padding: 10mm;
+              background: white;
+              font-size: 12px;
+              font-family: 'Courier New', Courier, monospace;
+            }
+          }
+        `}</style>,
+        document.head
+      )}
+      {mounted && createPortal(
+        <div className="receipt-print-area">{content}</div>,
+        document.body
+      )}
     </>
   );
 }
 
 function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData, subtotal: number) {
   const orderTypeLabel = data.orderType
-    ? { dine_in: 'Dine In', takeaway: 'Take Away', delivery: 'Delivery', drive_thru: 'Drive Thru' }[data.orderType] || data.orderType
+    ? ({ dine_in: 'Dine In', takeaway: 'Take Away', delivery: 'Delivery', drive_thru: 'Drive Thru' } as Record<string, string>)[data.orderType] || data.orderType
     : '';
 
   return (
     <div className="text-sm">
-      {/* Header */}
       <div className="text-center mb-4 pb-3 border-b-2 border-dashed border-gray-300">
         <div className="text-lg font-bold" style={{ color: theme.primaryColor }}>
           {brandName}
@@ -85,7 +99,6 @@ function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData
         <div className="text-xs text-gray-500 mt-0.5">Order Receipt</div>
       </div>
 
-      {/* Info rows */}
       <div className="mb-3 space-y-0.5 text-xs text-gray-600">
         <div className="flex justify-between">
           <span>Order #</span>
@@ -123,7 +136,6 @@ function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData
         )}
       </div>
 
-      {/* Items */}
       <table className="w-full text-xs mb-3">
         <thead>
           <tr className="border-t border-b border-gray-300 text-gray-500">
@@ -145,7 +157,6 @@ function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData
         </tbody>
       </table>
 
-      {/* Totals */}
       <div className="border-t border-gray-300 pt-2 space-y-0.5 text-xs">
         <div className="flex justify-between text-gray-500">
           <span>Subtotal</span>
@@ -157,7 +168,6 @@ function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData
         </div>
       </div>
 
-      {/* Footer */}
       <div className="text-center mt-4 pt-3 border-t-2 border-dashed border-gray-300 text-xs text-gray-400">
         <p>Thank you for your order!</p>
       </div>
