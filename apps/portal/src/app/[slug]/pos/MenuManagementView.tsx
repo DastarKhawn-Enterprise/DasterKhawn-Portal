@@ -68,17 +68,16 @@ export default function MenuManagementView({ supabaseUrl, supabaseAnonKey, theme
       .then((token) => {
         if (!token) return;
         try {
-          // JWT payload is base64url — convert to standard base64 first
           let base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
           while (base64.length % 4) base64 += '=';
           const payload = JSON.parse(atob(base64));
           const perms = payload.permissions;
-          console.log('[Menu Permissions] raw from JWT:', JSON.stringify(perms));
-          // perms could be a JSON array string or an actual array depending on Clerk template rendering
+          const tenantRole = payload.tenant_role || '';
+          console.log('[Menu Permissions] raw JWT:', JSON.stringify({ permissions: perms, tenant_role: tenantRole }));
           const permList: string[] = typeof perms === 'string' ? (() => { try { return JSON.parse(perms); } catch { return []; } })() : (perms ?? []);
-          console.log('[Menu Permissions] parsed list:', JSON.stringify(permList));
-          console.log('[Menu Permissions] has menu:edit?', permList.includes('menu:edit'));
-          setCanEdit(permList.includes('menu:edit'));
+          const hasPermission = permList.includes('menu:edit') || tenantRole === 'super_admin';
+          console.log('[Menu Permissions] has menu:edit?', permList.includes('menu:edit'), '| super_admin?', tenantRole === 'super_admin', '| canEdit:', hasPermission);
+          setCanEdit(hasPermission);
         } catch (e) {
           console.error('[Menu Permissions] decode error:', e);
         }
