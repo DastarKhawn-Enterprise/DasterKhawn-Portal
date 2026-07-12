@@ -1,5 +1,10 @@
 /**
- * Temporary admin utility to set a Clerk user's tenant_id and role in publicMetadata.
+ * Admin utility to set a Clerk user's tenant_id and role in publicMetadata.
+ *
+ * NOTE: Staff invites should now go through the Staff Management UI in the POS
+ * (/[slug]/pos, "Staff" sidebar item). This script is only needed for:
+ *   - super_admin assignment
+ *   - owner assignment (rare, use the UI for staff)
  *
  * Usage:
  *   pnpm tsx scripts/set-user-tenant.ts <clerk-user-id> <tenant-id> <role>

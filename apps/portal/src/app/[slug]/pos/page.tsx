@@ -71,6 +71,7 @@ export default async function POSPage({
       supabaseAnonKey={tenant.supabase_anon_key}
       brandName={tenant.brand_name}
       theme={tenant.theme_config}
+      slug={params.slug}
     />
   );
 }

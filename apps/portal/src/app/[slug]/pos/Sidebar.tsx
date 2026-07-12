@@ -65,9 +65,10 @@ interface SidebarProps {
   accentColor: string;
   mobileOpen?: boolean;
   onMobileClose?: () => void;
+  hiddenViews?: ViewId[];
 }
 
-export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCollapse, accentColor, mobileOpen, onMobileClose }: SidebarProps) {
+export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCollapse, accentColor, mobileOpen, onMobileClose, hiddenViews }: SidebarProps) {
   const [ordersOpen, setOrdersOpen] = useState(true);
 
   const isActive = (id: ViewId) => activeView === id;
@@ -76,6 +77,15 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
     onNavigate(id);
     onMobileClose?.();
   };
+
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if (!hiddenViews || hiddenViews.length === 0) return true;
+    if (item.children) {
+      const filteredChildren = item.children.filter((c) => !hiddenViews.includes(c.id));
+      return filteredChildren.length > 0 || !hiddenViews.includes(item.id);
+    }
+    return !hiddenViews.includes(item.id);
+  });
 
   const content = (
     <>
@@ -89,7 +99,7 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
 
       {/* Nav items */}
       <div className="flex-1 overflow-y-auto">
-        {NAV_ITEMS.map((item) => {
+        {visibleItems.map((item) => {
           if (item.children) {
             return (
               <div key={item.id}>

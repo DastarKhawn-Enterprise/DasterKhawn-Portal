@@ -151,3 +151,54 @@ export async function getTenantServiceCredentials(slug: string): Promise<{ supab
   if (error || !data) return null;
   return { supabase_service_key: (data as { supabase_service_key: string }).supabase_service_key };
 }
+
+export interface StaffRoleRow {
+  id: string;
+  clerk_user_id: string;
+  tenant_id: string;
+  role: string;
+  permissions: string[];
+  created_at: string;
+}
+
+export async function getStaffByTenant(tenantId: string): Promise<StaffRoleRow[]> {
+  const client = getGatewayClient();
+  const { data, error } = await client
+    .from('staff_roles')
+    .select('id, clerk_user_id, tenant_id, role, permissions, created_at')
+    .eq('tenant_id', tenantId);
+
+  if (error) return [];
+  return data as StaffRoleRow[];
+}
+
+export async function addStaffRole(
+  clerkUserId: string,
+  tenantId: string,
+  role: string,
+  permissions: string[],
+): Promise<{ success: boolean; error?: string }> {
+  const client = getGatewayClient();
+  const { error } = await client.from('staff_roles').insert({
+    clerk_user_id: clerkUserId,
+    tenant_id: tenantId,
+    role,
+    permissions,
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+export async function removeStaffRole(
+  clerkUserId: string,
+  tenantId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const client = getGatewayClient();
+  const { error } = await client
+    .from('staff_roles')
+    .delete()
+    .eq('clerk_user_id', clerkUserId)
+    .eq('tenant_id', tenantId);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}

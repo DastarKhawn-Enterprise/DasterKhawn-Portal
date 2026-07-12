@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useAuth, UserButton } from '@clerk/nextjs';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useAuth, useUser, UserButton } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import Sidebar, { type ViewId } from './Sidebar';
@@ -9,12 +9,15 @@ import CurrentOrdersView from './CurrentOrdersView';
 import DineInView from './DineInView';
 import MenuManagementView from './MenuManagementView';
 import ReportsView from './ReportsView';
+import StaffManagementView from './StaffManagementView';
+import type { ViewId as StaffViewId } from './Sidebar';
 
 interface POSClientProps {
   supabaseUrl: string;
   supabaseAnonKey: string;
   brandName: string;
   theme: ThemeConfig;
+  slug: string;
 }
 
 function PlaceholderPage({ title }: { title: string }) {
@@ -28,12 +31,25 @@ function PlaceholderPage({ title }: { title: string }) {
   );
 }
 
-export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, theme }: POSClientProps) {
+export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, theme, slug }: POSClientProps) {
   const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
   const [authReady, setAuthReady] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [activeView, setActiveView] = useState<ViewId>('current-orders');
+
+  const hiddenViews = useMemo(() => {
+    const meta = user?.publicMetadata as Record<string, any> | undefined;
+    const perms: string[] = meta?.permissions ?? [];
+    const role: string = meta?.role ?? '';
+    if (role === 'super_admin') return [];
+    const hidden: ViewId[] = [];
+    if (!perms.includes('staff:manage')) hidden.push('staff');
+    if (!perms.includes('menu:edit')) hidden.push('menu');
+    if (!perms.includes('reports:view')) hidden.push('reports');
+    return hidden;
+  }, [user]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -77,7 +93,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
       case 'expenses':
         return placeholder('Expenses');
       case 'staff':
-        return placeholder('Staff Management');
+        return <StaffManagementView slug={slug} />;
       case 'settings':
         return placeholder('Settings');
       default:
@@ -128,6 +144,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
           accentColor={theme.primaryColor}
           mobileOpen={mobileSidebarOpen}
           onMobileClose={() => setMobileSidebarOpen(false)}
+          hiddenViews={hiddenViews}
         />
         {renderContent()}
       </div>
