@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@pos-ui/*": ["packages/pos-ui/src/*"],
+      "@supabase-client/*": ["packages/supabase-client/src/*"],
+      "@gateway-sdk/*": ["packages/gateway-sdk/src/*"],
+      "@ui/*": ["packages/ui/src/*"]
+    }
+  },
+  "exclude": ["node_modules"]
+}

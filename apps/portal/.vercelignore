@@ -1,0 +1,6 @@
+# Dev-only files — not needed in production
+scripts/
+migrations/
+*.md
+*.log
+.DS_Store

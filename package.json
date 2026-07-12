@@ -1,0 +1,27 @@
+{
+  "name": "sat-sys",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "clean": "turbo clean"
+  },
+  "devDependencies": {
+    "@clerk/backend": "^3.11.4",
+    "@types/node": "^20.0.0",
+    "pg": "^8.22.0",
+    "tsx": "^4.23.0",
+    "turbo": "^2.3.0",
+    "typescript": "^5.4.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@clerk/shared"
+    ]
+  },
+  "packageManager": "pnpm@10.34.4",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
