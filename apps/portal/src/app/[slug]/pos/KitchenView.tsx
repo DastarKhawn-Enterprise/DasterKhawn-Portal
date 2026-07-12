@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
-import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import type { RealtimePostgresChangesPayload, SupabaseClient } from '@supabase/supabase-js';
 
 interface OrderItem {
   quantity: number;
@@ -20,7 +20,7 @@ interface Order {
   order_items: OrderItem[];
 }
 
-interface KitchenClientProps {
+interface KitchenViewProps {
   supabaseUrl: string;
   supabaseAnonKey: string;
   brandName: string;
@@ -33,7 +33,7 @@ const statusDisplay: Record<string, string> = {
   completed: 'Completed',
 };
 
-export default function KitchenClient({ supabaseUrl, supabaseAnonKey, brandName }: KitchenClientProps) {
+export default function KitchenView({ supabaseUrl, supabaseAnonKey, brandName }: KitchenViewProps) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [authReady, setAuthReady] = useState(false);
@@ -54,7 +54,7 @@ export default function KitchenClient({ supabaseUrl, supabaseAnonKey, brandName 
   }, [isLoaded, isSignedIn]);
 
   const fetchOrderWithItems = useCallback(
-    async (client: Awaited<ReturnType<typeof getSupabaseClient>>, orderId: string) => {
+    async (client: SupabaseClient, orderId: string) => {
       const { data } = await client
         .from('orders')
         .select(
@@ -72,7 +72,7 @@ export default function KitchenClient({ supabaseUrl, supabaseAnonKey, brandName 
     if (!authReady) return;
 
     let cancelled = false;
-    let channel: ReturnType<Awaited<ReturnType<typeof getSupabaseClient>>['channel']> | null = null;
+    let channel: ReturnType<SupabaseClient['channel']> | null = null;
 
     const init = async () => {
       const client = await getSupabaseClient();
@@ -118,8 +118,8 @@ export default function KitchenClient({ supabaseUrl, supabaseAnonKey, brandName 
             const { id, status } = rec;
             if (status === 'completed') {
               setOrders((prev) => prev.filter((o) => o.id !== id));
-            } else {
-              if (status) setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
+            } else if (status) {
+              setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
             }
           },
         )
@@ -140,23 +140,16 @@ export default function KitchenClient({ supabaseUrl, supabaseAnonKey, brandName 
       const client = await getSupabaseClient();
       await client.from('orders').update({ status: newStatus }).eq('id', orderId);
     } catch (e) {
-      console.error('[KitchenClient] Status update failed:', e);
+      console.error('[KitchenView] Status update failed:', e);
     }
     setUpdating(null);
   };
 
-  if (!isLoaded || !authReady) {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-gray-500">Loading...</p>
-      </main>
-    );
-  }
+  if (!isLoaded || !authReady) return null;
 
   return (
-    <main className="min-h-screen bg-gray-50 p-6">
+    <div className="flex-1 overflow-auto p-6 bg-gray-50">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-800 mb-1">{brandName} &mdash; Kitchen</h1>
         <p className="text-gray-500 mb-6">
           {orders.length} active order{orders.length !== 1 ? 's' : ''}
         </p>
@@ -180,7 +173,7 @@ export default function KitchenClient({ supabaseUrl, supabaseAnonKey, brandName 
           </div>
         )}
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -193,6 +186,12 @@ function OrderCard({
   updating: boolean;
   onUpdateStatus: (id: string, status: string) => void;
 }) {
+  const badgeColor: Record<string, string> = {
+    pending: 'bg-yellow-100 text-yellow-800',
+    in_kitchen: 'bg-blue-100 text-blue-800',
+    ready: 'bg-green-100 text-green-800',
+  };
+
   const action =
     order.status === 'pending'
       ? { label: 'Start Cooking', next: 'in_kitchen', bg: 'bg-blue-600 hover:bg-blue-700' }
@@ -201,12 +200,6 @@ function OrderCard({
         : order.status === 'ready'
           ? { label: 'Complete Order', next: 'completed', bg: 'bg-green-600 hover:bg-green-700' }
           : null;
-
-  const badgeColor: Record<string, string> = {
-    pending: 'bg-yellow-100 text-yellow-800',
-    in_kitchen: 'bg-blue-100 text-blue-800',
-    ready: 'bg-green-100 text-green-800',
-  };
 
   return (
     <div className="bg-white rounded-lg shadow p-5 border-l-4 border-l-blue-500">

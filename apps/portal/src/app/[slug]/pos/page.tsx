@@ -3,6 +3,8 @@ import { getTenantBySlug } from '@sat-sys/gateway-sdk';
 import { notFound, redirect } from 'next/navigation';
 import POSClient from './POSClient';
 
+export const dynamic = 'force-dynamic';
+
 function ServicePausedScreen({ brandName }: { brandName: string }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -32,8 +34,10 @@ function AccessDeniedScreen({ brandName }: { brandName: string }) {
 
 export default async function POSPage({
   params,
+  searchParams,
 }: {
   params: { slug: string };
+  searchParams?: { tab?: string };
 }) {
   const tenant = await getTenantBySlug(params.slug);
 
@@ -69,6 +73,7 @@ export default async function POSPage({
       supabaseAnonKey={tenant.supabase_anon_key}
       brandName={tenant.brand_name}
       theme={tenant.theme_config}
+      initialTab={searchParams?.tab ?? 'order'}
     />
   );
 }

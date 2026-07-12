@@ -3,25 +3,38 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
+import { useRouter, usePathname } from 'next/navigation';
 import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
 import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
+import KitchenView from './KitchenView';
 
 interface POSClientProps {
   supabaseUrl: string;
   supabaseAnonKey: string;
   brandName: string;
   theme: ThemeConfig;
+  initialTab: string;
 }
 
-export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, theme }: POSClientProps) {
+export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, theme, initialTab }: POSClientProps) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [tab, setTabState] = useState<'order' | 'kitchen'>(initialTab === 'kitchen' ? 'kitchen' : 'order');
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [checkingOut, setCheckingOut] = useState(false);
   const [confirmation, setConfirmation] = useState<{ orderNumber: number } | null>(null);
   const [authReady, setAuthReady] = useState(false);
 
-  // Fetch a fresh token on every call — Clerk tokens are short-lived
+  const switchTab = useCallback(
+    (t: 'order' | 'kitchen') => {
+      setTabState(t);
+      router.replace(`${pathname}?tab=${t}`, { scroll: false });
+    },
+    [router, pathname],
+  );
+
   const getSupabaseClient = useCallback(async () => {
     const token = await getToken({ template: 'supabase' });
     if (!token) throw new Error('No auth token');
@@ -133,7 +146,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
     );
   }
 
-  if (confirmation) {
+  if (confirmation && tab === 'order') {
     return (
       <main className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center p-8 bg-white rounded-lg shadow-md">
@@ -161,19 +174,49 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
         style={{ backgroundColor: theme.secondaryColor }}
       >
         <h1 className="text-xl font-bold">{brandName} — POS</h1>
-        <span className="text-sm opacity-80">{cart.length} item{cart.length !== 1 ? 's' : ''} in cart</span>
+        {tab === 'order' && (
+          <span className="text-sm opacity-80">{cart.length} item{cart.length !== 1 ? 's' : ''} in cart</span>
+        )}
       </header>
-      <div className="flex flex-1 overflow-hidden">
-        <MenuGrid menuItems={menuItems} onAddToCart={handleAddToCart} theme={theme} />
-        <CartSidebar
-          cartItems={cart}
-          onUpdateQuantity={handleUpdateQuantity}
-          onRemoveItem={handleRemoveItem}
-          onCheckout={handleCheckout}
-          disabled={cart.length === 0 || checkingOut}
-          theme={theme}
-        />
+
+      <div className="flex border-b border-gray-200 bg-white px-6">
+        <button
+          onClick={() => switchTab('order')}
+          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
+            tab === 'order'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Order
+        </button>
+        <button
+          onClick={() => switchTab('kitchen')}
+          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
+            tab === 'kitchen'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Kitchen
+        </button>
       </div>
+
+      {tab === 'order' ? (
+        <div className="flex flex-1 overflow-hidden">
+          <MenuGrid menuItems={menuItems} onAddToCart={handleAddToCart} theme={theme} />
+          <CartSidebar
+            cartItems={cart}
+            onUpdateQuantity={handleUpdateQuantity}
+            onRemoveItem={handleRemoveItem}
+            onCheckout={handleCheckout}
+            disabled={cart.length === 0 || checkingOut}
+            theme={theme}
+          />
+        </div>
+      ) : (
+        <KitchenView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} brandName={brandName} />
+      )}
     </div>
   );
 }
