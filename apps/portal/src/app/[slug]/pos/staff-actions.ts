@@ -11,7 +11,10 @@ import {
 } from '@sat-sys/gateway-sdk';
 
 function generatePassword(): string {
-  return 'Staff!' + randomBytes(6).toString('hex');
+  // 18 cryptographically random bytes → ~24 base64 chars (no predictable prefix/pattern)
+  return randomBytes(18)
+    .toString('base64')
+    .replace(/[/+]/g, () => '!@#$%^&*'[Math.floor(Math.random() * 8)]);
 }
 
 export interface StaffMember {
