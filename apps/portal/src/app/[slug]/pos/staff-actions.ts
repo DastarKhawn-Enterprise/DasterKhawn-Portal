@@ -1,5 +1,6 @@
 'use server';
 
+import { randomBytes } from 'crypto';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import {
   getTenantBySlug,
@@ -9,9 +10,8 @@ import {
   PERMISSIONS,
 } from '@sat-sys/gateway-sdk';
 
-function getBaseUrl() {
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+function generatePassword(): string {
+  return 'Staff!' + randomBytes(6).toString('hex');
 }
 
 export interface StaffMember {
@@ -88,10 +88,11 @@ export async function getStaffList(slug: string): Promise<StaffListResult> {
   }
 }
 
-export async function inviteStaff(
+export async function createStaffAccount(
   slug: string,
   email: string,
-): Promise<{ success: boolean; error?: string; message?: string }> {
+  password?: string,
+): Promise<{ success: boolean; error?: string; credentials?: { email: string; password: string } }> {
   try {
     const { userId } = auth();
     if (!userId) return { success: false, error: 'Not authenticated' };
@@ -103,10 +104,10 @@ export async function inviteStaff(
     const existing = await client.users.getUserList({ emailAddress: [email] });
 
     const staffPermissions = [...PERMISSIONS.staff];
-    let targetUserId: string;
+    const finalPassword = password || generatePassword();
 
     if (existing.data.length > 0) {
-      targetUserId = existing.data[0].id;
+      const targetUserId = existing.data[0].id;
       await client.users.updateUser(targetUserId, {
         publicMetadata: {
           tenant_id: tenant.id,
@@ -114,25 +115,29 @@ export async function inviteStaff(
           permissions: staffPermissions,
         },
       });
-    } else {
-      const invitation = await client.invitations.createInvitation({
-        emailAddress: email,
-        publicMetadata: {
-          tenant_id: tenant.id,
-          role: 'staff',
-          permissions: staffPermissions,
-        } as any,
-        redirectUrl: `${getBaseUrl()}/${slug}/pos`,
-      });
-      targetUserId = ''; // will be set when they accept
+      const result = await addStaffRole(targetUserId, tenant.id, 'staff', staffPermissions);
+      if (!result.success) return { success: false, error: result.error };
+      return { success: true };
     }
 
-    const result = await addStaffRole(targetUserId || email, tenant.id, 'staff', staffPermissions);
+    // NOTE: This same direct-creation pattern should be used for owner accounts
+    // (Path B, ARCHITECTURE.md §6 — new business signup) when that feature is built.
+    const created = await client.users.createUser({
+      emailAddress: [email],
+      password: finalPassword,
+      publicMetadata: {
+        tenant_id: tenant.id,
+        role: 'staff',
+        permissions: staffPermissions,
+      },
+    });
+
+    const result = await addStaffRole(created.id, tenant.id, 'staff', staffPermissions);
     if (!result.success) return { success: false, error: result.error };
 
     return {
       success: true,
-      message: existing.data.length > 0 ? 'Staff member added' : 'Invitation sent',
+      credentials: { email, password: finalPassword },
     };
   } catch (e: any) {
     return { success: false, error: e.message };

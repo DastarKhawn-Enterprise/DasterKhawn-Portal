@@ -1,7 +1,7 @@
-import { auth, currentUser, clerkClient } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { getTenantById, getAllStaffByEmail, updateStaffRoleUserId } from '@sat-sys/gateway-sdk';
+import { getTenantById } from '@sat-sys/gateway-sdk';
 
 function NoAssignedTenant() {
   return (
@@ -31,7 +31,7 @@ function PosCard({ brandName, slug }: { brandName: string; slug: string }) {
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams?: { from?: string; fixed?: string };
+  searchParams?: { from?: string };
 }) {
   const { userId } = auth();
   if (!userId) redirect('/sign-in');
@@ -45,39 +45,6 @@ export default async function DashboardPage({
   };
   const role = metadata?.role;
   const tenantId = metadata?.tenant_id;
-
-  // Prevent auto-fix loop: if we just applied the fix, `?fixed=1` is present
-  const alreadyFixed = searchParams?.fixed === '1';
-
-  // Auto-fix: Clerk invitation publicMetadata is NOT applied on signup.
-  // If user has no tenant_id but was invited via staff_roles, apply metadata now.
-  if (!alreadyFixed && !tenantId && user) {
-    let fixApplied = false;
-    try {
-      const email = user.emailAddresses?.[0]?.emailAddress;
-      if (email) {
-        const pending = await getAllStaffByEmail(email);
-        if (pending.length > 0) {
-          const first = pending[0];
-          const client = await clerkClient();
-          await client.users.updateUser(userId, {
-            publicMetadata: { tenant_id: first.tenant_id, role: first.role, permissions: first.permissions },
-          });
-          await updateStaffRoleUserId(email, userId, first.tenant_id);
-          for (let i = 1; i < pending.length; i++) {
-            await updateStaffRoleUserId(email, userId, pending[i].tenant_id);
-          }
-          fixApplied = true;
-        }
-      }
-    } catch {
-      // Graceful fallback: if anything fails, show the normal dashboard state
-    }
-    // redirect() must be OUTSIDE try/catch — it throws NEXT_REDIRECT which would be swallowed
-    if (fixApplied) {
-      redirect('/dashboard?fixed=1');
-    }
-  }
 
   const fromAdmin = searchParams?.from === 'admin';
 

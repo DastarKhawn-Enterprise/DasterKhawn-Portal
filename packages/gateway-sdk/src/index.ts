@@ -203,44 +203,4 @@ export async function removeStaffRole(
   return { success: true };
 }
 
-export async function updateStaffRoleUserId(
-  oldUserId: string,
-  newUserId: string,
-  tenantId: string,
-): Promise<{ success: boolean; error?: string }> {
-  const client = getGatewayClient();
-  const { error } = await client
-    .from('staff_roles')
-    .update({ clerk_user_id: newUserId })
-    .eq('clerk_user_id', oldUserId)
-    .eq('tenant_id', tenantId);
-  if (error) return { success: false, error: error.message };
-  return { success: true };
-}
 
-export async function getStaffByEmail(
-  email: string,
-  tenantId: string,
-): Promise<StaffRoleRow | null> {
-  const client = getGatewayClient();
-  const { data, error } = await client
-    .from('staff_roles')
-    .select('id, clerk_user_id, tenant_id, role, permissions, created_at')
-    .eq('clerk_user_id', email)
-    .eq('tenant_id', tenantId)
-    .maybeSingle();
-  if (error || !data) return null;
-  return data as StaffRoleRow;
-}
-
-export async function getAllStaffByEmail(
-  email: string,
-): Promise<StaffRoleRow[]> {
-  const client = getGatewayClient();
-  const { data, error } = await client
-    .from('staff_roles')
-    .select('id, clerk_user_id, tenant_id, role, permissions, created_at')
-    .eq('clerk_user_id', email);
-  if (error) return [];
-  return data as StaffRoleRow[];
-}

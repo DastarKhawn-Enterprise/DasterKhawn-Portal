@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import { getStaffList, inviteStaff, removeStaff } from './staff-actions';
+import { getStaffList, createStaffAccount, removeStaff } from './staff-actions';
 import type { StaffMember, StaffListResult } from './staff-actions';
 import { hasPermission, decodeJwt } from './permissions';
 
@@ -19,10 +19,12 @@ export default function StaffManagementView({ slug }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviting, setInviting] = useState(false);
-  const [inviteMsg, setInviteMsg] = useState('');
-  const [inviteError, setInviteError] = useState('');
+  const [createEmail, setCreateEmail] = useState('');
+  const [createPassword, setCreatePassword] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [createMsg, setCreateMsg] = useState('');
+  const [createError, setCreateError] = useState('');
+  const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string } | null>(null);
 
   const [removingId, setRemovingId] = useState('');
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
@@ -58,21 +60,36 @@ export default function StaffManagementView({ slug }: Props) {
     if (authReady) fetchStaff();
   }, [authReady, fetchStaff]);
 
-  const handleInvite = async () => {
-    const email = inviteEmail.trim();
+  const generatePassword = () => {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%';
+    let pwd = '';
+    for (let i = 0; i < 12; i++) {
+      pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setCreatePassword(pwd);
+  };
+
+  const handleCreate = async () => {
+    const email = createEmail.trim();
     if (!email) return;
-    setInviting(true);
-    setInviteMsg('');
-    setInviteError('');
-    const result = await inviteStaff(slug, email);
+    const password = createPassword.trim() || undefined;
+    setCreating(true);
+    setCreateMsg('');
+    setCreateError('');
+    setCreatedCredentials(null);
+    const result = await createStaffAccount(slug, email, password);
     if (result.success) {
-      setInviteMsg(result.message || 'Success');
-      setInviteEmail('');
+      if (result.credentials) {
+        setCreatedCredentials(result.credentials);
+      }
+      setCreateMsg(result.credentials ? 'Account created' : 'Staff member added');
+      setCreateEmail('');
+      setCreatePassword('');
       fetchStaff();
     } else {
-      setInviteError(result.error || 'Failed to invite');
+      setCreateError(result.error || 'Failed to create account');
     }
-    setInviting(false);
+    setCreating(false);
   };
 
   const handleRemove = async (clerkUserId: string) => {
@@ -126,28 +143,52 @@ export default function StaffManagementView({ slug }: Props) {
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>
         )}
 
-        {/* Invite form */}
+        {/* Create account form */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-700 mb-3">Invite Staff Member</h2>
-          <div className="flex flex-col sm:flex-row gap-3">
+          <h2 className="text-lg font-semibold text-gray-700 mb-3">Create Staff Account</h2>
+          <div className="flex flex-col gap-3">
             <input
               type="email"
               placeholder="staff@example.com"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
+              value={createEmail}
+              onChange={(e) => setCreateEmail(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
             />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Password (or generate one)"
+                value={createPassword}
+                onChange={(e) => setCreatePassword(e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+              />
+              <button
+                onClick={generatePassword}
+                type="button"
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300"
+              >
+                Generate
+              </button>
+            </div>
             <button
-              onClick={handleInvite}
-              disabled={inviting || !inviteEmail.trim()}
-              className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleCreate}
+              disabled={creating || !createEmail.trim()}
+              className="w-full px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {inviting ? 'Inviting...' : '+ Invite Staff'}
+              {creating ? 'Creating...' : '+ Create Staff Account'}
             </button>
           </div>
-          {inviteMsg && <p className="mt-2 text-sm text-green-600">{inviteMsg}</p>}
-          {inviteError && <p className="mt-2 text-sm text-red-600">{inviteError}</p>}
+          {createMsg && <p className="mt-2 text-sm text-green-600">{createMsg}</p>}
+          {createError && <p className="mt-2 text-sm text-red-600">{createError}</p>}
+          {createdCredentials && (
+            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-sm font-semibold text-green-800 mb-1">Account Created — Share these credentials:</p>
+              <p className="text-sm text-green-700 font-mono">Email: {createdCredentials.email}</p>
+              <p className="text-sm text-green-700 font-mono">Password: {createdCredentials.password}</p>
+              <p className="text-xs text-green-600 mt-1">The staff member can sign in at the login page with these credentials.</p>
+            </div>
+          )}
         </div>
 
         {/* Staff list */}
@@ -236,8 +277,8 @@ export default function StaffManagementView({ slug }: Props) {
         </div>
 
         <p className="mt-4 text-xs text-gray-400">
-          Staff invites replace the manual set-user-tenant.ts script for staff roles.
-          Owner assignments should still use the script.
+          Staff accounts are created directly with email + password. Share credentials securely with the staff member.
+          For owner accounts, use the set-user-tenant.ts script.
         </p>
       </div>
     </div>

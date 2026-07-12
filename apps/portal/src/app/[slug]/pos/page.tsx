@@ -1,5 +1,5 @@
-import { auth, currentUser, clerkClient } from '@clerk/nextjs/server';
-import { getTenantBySlug, getStaffByEmail, updateStaffRoleUserId } from '@sat-sys/gateway-sdk';
+import { auth, currentUser } from '@clerk/nextjs/server';
+import { getTenantBySlug } from '@sat-sys/gateway-sdk';
 import { notFound, redirect } from 'next/navigation';
 import POSClient from './POSClient';
 
@@ -60,31 +60,6 @@ export default async function POSPage({
 
   const isAssigned = tenantId && tenantId === tenant.id;
   const isSuperAdmin = role === 'super_admin';
-
-  // Auto-fix: Clerk invitation publicMetadata is NOT applied on signup.
-  // If user has no tenant_id but was invited via staff_roles, apply metadata now.
-  if (!isAssigned && !isSuperAdmin && user) {
-    let fixApplied = false;
-    try {
-      const email = user.emailAddresses?.[0]?.emailAddress;
-      if (email) {
-        const pending = await getStaffByEmail(email, tenant.id);
-        if (pending) {
-          const client = await clerkClient();
-          await client.users.updateUser(userId, {
-            publicMetadata: { tenant_id: tenant.id, role: pending.role, permissions: pending.permissions },
-          });
-          await updateStaffRoleUserId(email, userId, tenant.id);
-          fixApplied = true;
-        }
-      }
-    } catch {
-      // Graceful fallback — show AccessDenied below
-    }
-    if (fixApplied) {
-      redirect(`/${params.slug}/pos`);
-    }
-  }
 
   if (!isAssigned && !isSuperAdmin) {
     return <AccessDeniedScreen brandName={tenant.brand_name} />;
