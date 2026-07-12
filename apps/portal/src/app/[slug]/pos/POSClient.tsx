@@ -45,9 +45,9 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
   const renderContent = () => {
     switch (activeView) {
       case 'current-orders':
-        return <CurrentOrdersView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
+        return <CurrentOrdersView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} brandName={brandName} />;
       case 'take-away':
-        return <CurrentOrdersView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} viewConfig={{ title: 'Take Away', orderType: 'takeaway', showCustomerFields: true }} />;
+        return <CurrentOrdersView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} brandName={brandName} viewConfig={{ title: 'Take Away', orderType: 'takeaway', showCustomerFields: true }} />;
       case 'dashboard':
         return placeholder('Dashboard');
       case 'orders-completed':
@@ -57,7 +57,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
       case 'orders-draft':
         return placeholder('Draft Orders');
       case 'dine-in':
-        return <DineInView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
+        return <DineInView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} brandName={brandName} />;
       case 'delivery':
         return placeholder('Delivery');
       case 'drive-thru':

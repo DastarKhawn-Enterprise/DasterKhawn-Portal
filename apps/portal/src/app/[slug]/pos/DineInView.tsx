@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
 import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
 import type { SupabaseClient, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import ReceiptView from './ReceiptView';
 
 interface TableRecord {
   id: string;
@@ -17,6 +18,7 @@ interface TableRecord {
 }
 
 interface OrderItem {
+  menu_item_id: string;
   quantity: number;
   price_at_order: number;
   menu_items: { name: string };
@@ -35,6 +37,7 @@ interface Props {
   supabaseUrl: string;
   supabaseAnonKey: string;
   theme: ThemeConfig;
+  brandName: string;
 }
 
 const statusDisplay: Record<string, string> = {
@@ -64,7 +67,7 @@ const tableBorder: Record<string, string> = {
   reserved: 'border-yellow-300 hover:border-yellow-500',
 };
 
-export default function DineInView({ supabaseUrl, supabaseAnonKey, theme }: Props) {
+export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandName }: Props) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [authReady, setAuthReady] = useState(false);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -76,6 +79,9 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme }: Prop
   const [tableOrderLoading, setTableOrderLoading] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
+  const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
+  const [editingOrder, setEditingOrder] = useState(false);
+  const [editCart, setEditCart] = useState<CartItem[]>([]);
 
   const getSupabaseClient = useCallback(async () => {
     const token = await getToken({ template: 'supabase' });
@@ -164,7 +170,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme }: Prop
     getSupabaseClient()
       .then((client) => client
         .from('orders')
-        .select('id, order_number, status, total, created_at, order_items (quantity, price_at_order, menu_items (name))')
+        .select('id, order_number, status, total, created_at, order_items (menu_item_id, quantity, price_at_order, menu_items (name))')
         .eq('id', selectedTable.current_order_id)
         .single()
       )
@@ -256,6 +262,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme }: Prop
         total,
         created_at: order.created_at,
         order_items: cart.map((item) => ({
+          menu_item_id: item.id,
           quantity: item.quantity,
           price_at_order: item.price,
           menu_items: { name: item.name },
@@ -288,6 +295,72 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme }: Prop
     setUpdating(null);
   }, [selectedTable, getSupabaseClient]);
 
+  const handlePrintBill = useCallback((order: Order) => {
+    setReceiptOrder(order);
+  }, []);
+
+  const handleStartEdit = useCallback(() => {
+    if (!tableOrder) return;
+    setEditCart(
+      tableOrder.order_items.map((oi) => ({
+        id: oi.menu_item_id,
+        name: oi.menu_items?.name || 'Unknown',
+        price: Number(oi.price_at_order),
+        quantity: oi.quantity,
+      }))
+    );
+    setEditingOrder(true);
+  }, [tableOrder]);
+
+  const handleEditAdd = useCallback((item: MenuItem) => {
+    setEditCart((prev) => {
+      const existing = prev.find((ci) => ci.id === item.id);
+      if (existing) return prev.map((ci) => (ci.id === item.id ? { ...ci, quantity: ci.quantity + 1 } : ci));
+      return [...prev, { id: item.id, name: item.name, price: item.price, quantity: 1 }];
+    });
+  }, []);
+
+  const handleEditUpdateQty = useCallback((itemId: string, qty: number) => {
+    if (qty <= 0) { setEditCart((prev) => prev.filter((ci) => ci.id !== itemId)); return; }
+    setEditCart((prev) => prev.map((ci) => (ci.id === itemId ? { ...ci, quantity: qty } : ci)));
+  }, []);
+
+  const handleEditRemove = useCallback((itemId: string) => {
+    setEditCart((prev) => prev.filter((ci) => ci.id !== itemId));
+  }, []);
+
+  const handleSaveEdit = useCallback(async () => {
+    if (!tableOrder || !tableOrder.id) return;
+    setUpdating(tableOrder.id);
+    try {
+      const client = await getSupabaseClient();
+      const total = editCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+      await client.from('order_items').delete().eq('order_id', tableOrder.id);
+      if (editCart.length > 0) {
+        const items = editCart.map((item) => ({
+          order_id: tableOrder.id,
+          menu_item_id: item.id,
+          quantity: item.quantity,
+          price_at_order: item.price,
+        }));
+        await client.from('order_items').insert(items);
+      }
+      await client.from('orders').update({ total }).eq('id', tableOrder.id);
+
+      setTableOrder((prev) =>
+        prev ? { ...prev, total, order_items: editCart.map((ci) => ({ menu_item_id: ci.id, quantity: ci.quantity, price_at_order: ci.price, menu_items: { name: ci.name } })) } : prev
+      );
+      setEditingOrder(false);
+    } catch (e) { console.error('[DineIn Edit Order]', e); }
+    setUpdating(null);
+  }, [tableOrder, editCart, getSupabaseClient]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingOrder(false);
+    setEditCart([]);
+  }, []);
+
   if (!isLoaded || !authReady) {
     return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
   }
@@ -296,7 +369,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme }: Prop
   const selectedIsReserved = selectedTable?.status === 'reserved';
 
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <><div className="flex-1 flex overflow-hidden">
       {/* ── FLOOR PLAN ── */}
       <div className={`${mobilePanelOpen ? 'hidden md:flex' : 'flex'} flex-1 overflow-y-auto bg-gray-50 p-4 md:p-6`}>
         <h2 className="text-lg font-bold text-gray-700 mb-4 uppercase tracking-wider">Floor Plan</h2>
@@ -415,57 +488,92 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme }: Prop
                   <div className="flex items-center justify-center h-full"><p className="text-gray-400">Loading order...</p></div>
                 ) : tableOrder ? (
                   <>
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h4 className="font-bold text-lg">Order #{tableOrder.order_number}</h4>
-                        <p className="text-xs text-gray-500">{new Date(tableOrder.created_at).toLocaleString()}</p>
+                    {editingOrder ? (
+                      <div className="flex-1 flex flex-col overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200">
+                          <h4 className="text-sm font-semibold text-gray-700">Editing Order #{tableOrder.order_number}</h4>
+                          <div className="flex gap-2">
+                            <button onClick={handleCancelEdit} className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-200 rounded">Cancel</button>
+                            <button onClick={handleSaveEdit} disabled={updating === tableOrder.id} className="px-3 py-1.5 text-xs font-semibold text-white rounded disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>
+                              {updating === tableOrder.id ? '...' : 'Save'}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="px-4 py-3 border-b border-gray-100 space-y-2 max-h-60 overflow-y-auto">
+                          {editCart.length === 0 && <p className="text-xs text-gray-400 text-center py-4">No items in order.</p>}
+                          {editCart.map((ci) => (
+                            <div key={ci.id} className="flex items-center gap-2 p-1.5 rounded border border-gray-200">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{ci.name}</div>
+                                <div className="text-xs text-gray-400">${ci.price.toFixed(2)} each</div>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button onClick={() => handleEditUpdateQty(ci.id, ci.quantity - 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">−</button>
+                                <span className="w-6 text-center text-sm">{ci.quantity}</span>
+                                <button onClick={() => handleEditUpdateQty(ci.id, ci.quantity + 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">+</button>
+                              </div>
+                              <button onClick={() => handleEditRemove(ci.id)} className="text-gray-400 hover:text-red-500 text-sm">✕</button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="px-4 py-2 border-b border-gray-100 text-right text-sm font-bold">
+                          Total: ${editCart.reduce((s, ci) => s + ci.price * ci.quantity, 0).toFixed(2)}
+                        </div>
+                        {menuItems.length > 0 ? (
+                          <MenuGrid menuItems={menuItems} onAddToCart={handleEditAdd} theme={theme} />
+                        ) : (
+                          <div className="flex-1 flex items-center justify-center"><p className="text-gray-400">Loading menu...</p></div>
+                        )}
                       </div>
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusColor[tableOrder.status] || ''}`}>
-                        {statusDisplay[tableOrder.status] || tableOrder.status}
-                      </span>
-                    </div>
+                    ) : (
+                      <>
+                        <table className="w-full text-sm mb-4">
+                          <thead>
+                            <tr className="text-gray-500 border-b">
+                              <th className="text-left py-1.5 font-medium">Item</th>
+                              <th className="text-right py-1.5 font-medium">Qty</th>
+                              <th className="text-right py-1.5 font-medium">Price</th>
+                              <th className="text-right py-1.5 font-medium">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tableOrder.order_items.map((item, i) => (
+                              <tr key={i} className="border-b border-gray-100">
+                                <td className="py-1.5">{item.menu_items?.name || 'Unknown'}</td>
+                                <td className="text-right py-1.5">{item.quantity}</td>
+                                <td className="text-right py-1.5">${Number(item.price_at_order).toFixed(2)}</td>
+                                <td className="text-right py-1.5 font-medium">${(item.quantity * Number(item.price_at_order)).toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="font-semibold text-base">
+                              <td colSpan={3} className="text-right py-1.5">Total</td>
+                              <td className="text-right py-1.5">${Number(tableOrder.total).toFixed(2)}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
 
-                    <table className="w-full text-sm mb-4">
-                      <thead>
-                        <tr className="text-gray-500 border-b">
-                          <th className="text-left py-1.5 font-medium">Item</th>
-                          <th className="text-right py-1.5 font-medium">Qty</th>
-                          <th className="text-right py-1.5 font-medium">Price</th>
-                          <th className="text-right py-1.5 font-medium">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {tableOrder.order_items.map((item, i) => (
-                          <tr key={i} className="border-b border-gray-100">
-                            <td className="py-1.5">{item.menu_items?.name || 'Unknown'}</td>
-                            <td className="text-right py-1.5">{item.quantity}</td>
-                            <td className="text-right py-1.5">${Number(item.price_at_order).toFixed(2)}</td>
-                            <td className="text-right py-1.5 font-medium">${(item.quantity * Number(item.price_at_order)).toFixed(2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="font-semibold text-base">
-                          <td colSpan={3} className="text-right py-1.5">Total</td>
-                          <td className="text-right py-1.5">${Number(tableOrder.total).toFixed(2)}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-
-                    <div className="flex flex-wrap gap-2">
-                      {tableOrder.status === 'pending' && (
-                        <ActionButton label="Start Cooking" color="bg-blue-600 hover:bg-blue-700" disabled={updating === tableOrder.id} onClick={() => handleUpdateStatus(tableOrder.id, 'in_kitchen')} updating={updating === tableOrder.id} />
-                      )}
-                      {tableOrder.status === 'in_kitchen' && (
-                        <ActionButton label="Mark Ready" color="bg-amber-600 hover:bg-amber-700" disabled={updating === tableOrder.id} onClick={() => handleUpdateStatus(tableOrder.id, 'ready')} updating={updating === tableOrder.id} />
-                      )}
-                      {tableOrder.status === 'ready' && (
-                        <ActionButton label="Complete Order" color="bg-green-600 hover:bg-green-700" disabled={updating === tableOrder.id} onClick={() => handleUpdateStatus(tableOrder.id, 'completed')} updating={updating === tableOrder.id} />
-                      )}
-                      {tableOrder.status !== 'cancelled' && (
-                        <ActionButton label="Cancel Order" color="bg-red-600 hover:bg-red-700" disabled={updating === tableOrder.id} onClick={() => handleUpdateStatus(tableOrder.id, 'cancelled')} updating={updating === tableOrder.id} />
-                      )}
-                    </div>
+                        <div className="flex flex-wrap gap-2">
+                          {tableOrder.status === 'pending' && (
+                            <ActionButton label="Start Cooking" color="bg-blue-600 hover:bg-blue-700" disabled={updating === tableOrder.id} onClick={() => handleUpdateStatus(tableOrder.id, 'in_kitchen')} updating={updating === tableOrder.id} />
+                          )}
+                          {tableOrder.status === 'in_kitchen' && (
+                            <ActionButton label="Mark Ready" color="bg-amber-600 hover:bg-amber-700" disabled={updating === tableOrder.id} onClick={() => handleUpdateStatus(tableOrder.id, 'ready')} updating={updating === tableOrder.id} />
+                          )}
+                          {tableOrder.status === 'ready' && (
+                            <ActionButton label="Complete Order" color="bg-green-600 hover:bg-green-700" disabled={updating === tableOrder.id} onClick={() => handleUpdateStatus(tableOrder.id, 'completed')} updating={updating === tableOrder.id} />
+                          )}
+                          <ActionButton label="Print Bill" color="bg-gray-600 hover:bg-gray-700" disabled={false} onClick={() => handlePrintBill(tableOrder)} updating={false} />
+                          {tableOrder.status !== 'completed' && tableOrder.status !== 'cancelled' && (
+                            <ActionButton label="Edit Order" color="bg-indigo-600 hover:bg-indigo-700" disabled={false} onClick={handleStartEdit} updating={false} />
+                          )}
+                          {tableOrder.status !== 'cancelled' && (
+                            <ActionButton label="Cancel Order" color="bg-red-600 hover:bg-red-700" disabled={updating === tableOrder.id} onClick={() => handleUpdateStatus(tableOrder.id, 'cancelled')} updating={updating === tableOrder.id} />
+                          )}
+                        </div>
+                      </>
+                    )}
                   </>
                 ) : (
                   <div className="flex items-center justify-center h-full"><p className="text-gray-400">No order data found for this table.</p></div>
@@ -476,6 +584,30 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme }: Prop
         </div>
       )}
     </div>
+    {receiptOrder && (
+      <ReceiptView
+        data={{
+          orderNumber: receiptOrder.order_number,
+          status: receiptOrder.status,
+          total: Number(receiptOrder.total),
+          createdAt: receiptOrder.created_at,
+          orderType: 'dine_in',
+          customerName: null,
+          customerPhone: null,
+          pickupTime: null,
+          tableNumber: selectedTable?.table_number ?? null,
+          items: receiptOrder.order_items.map((oi) => ({
+            name: oi.menu_items?.name || 'Unknown',
+            quantity: oi.quantity,
+            price: Number(oi.price_at_order),
+          })),
+        }}
+        brandName={brandName}
+        theme={theme}
+        onClose={() => setReceiptOrder(null)}
+      />
+    )}
+    </>
   );
 }
 
