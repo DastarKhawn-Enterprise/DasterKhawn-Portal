@@ -61,15 +61,6 @@ export default function StaffManagementView({ slug }: Props) {
     if (authReady) fetchStaff();
   }, [authReady, fetchStaff]);
 
-  const generatePassword = () => {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%';
-    let pwd = '';
-    for (let i = 0; i < 12; i++) {
-      pwd += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    setCreatePassword(pwd);
-  };
-
   const handleCreate = async () => {
     const email = createEmail.trim();
     if (!email) return;
@@ -180,22 +171,13 @@ export default function StaffManagementView({ slug }: Props) {
                 Owner
               </button>
             </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Password (or generate one)"
-                value={createPassword}
-                onChange={(e) => setCreatePassword(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-              />
-              <button
-                onClick={generatePassword}
-                type="button"
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300"
-              >
-                Generate
-              </button>
-            </div>
+            <input
+              type="password"
+              placeholder="Enter password"
+              value={createPassword}
+              onChange={(e) => setCreatePassword(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
             <button
               onClick={handleCreate}
               disabled={creating || !createEmail.trim()}
