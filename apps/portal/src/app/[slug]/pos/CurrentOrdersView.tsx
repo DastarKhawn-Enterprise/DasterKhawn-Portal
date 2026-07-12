@@ -26,6 +26,12 @@ interface Order {
   order_items: OrderItem[];
 }
 
+interface TableRecord {
+  id: string;
+  table_number: string;
+  status: string;
+}
+
 export interface ViewConfig {
   title: string;
   orderType: string | null;
@@ -38,6 +44,15 @@ interface Props {
   theme: ThemeConfig;
   viewConfig?: Partial<ViewConfig>;
 }
+
+type OrderTypeOption = 'dine_in' | 'takeaway' | 'delivery' | 'drive_thru';
+
+const ORDER_TYPE_LABELS: Record<OrderTypeOption, string> = {
+  dine_in: 'Dine In',
+  takeaway: 'Take Away',
+  delivery: 'Delivery',
+  drive_thru: 'Drive Thru',
+};
 
 const statusDisplay: Record<string, string> = {
   pending: 'Pending',
@@ -68,11 +83,19 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
 
-  // Customer fields (takeaway)
+  // Customer fields (takeaway / delivery / drive_thru)
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [pickupASAP, setPickupASAP] = useState(true);
   const [pickupScheduledTime, setPickupScheduledTime] = useState('');
+
+  // Order type selector (all-orders view only)
+  const [selectedOrderType, setSelectedOrderType] = useState<OrderTypeOption>('dine_in');
+  const [orderedTables, setOrderedTables] = useState<TableRecord[]>([]);
+  const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
+
+  const isScoped = cfg.orderType !== null;
+  const effectiveOrderType: string = cfg.orderType || selectedOrderType;
 
   const selectedOrder = orders.find((o) => o.id === selectedId) ?? null;
 
@@ -100,6 +123,20 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
         return client.from('menu_items').select('id, name, description, price, category, available').order('name');
       })
       .then((r: any) => { if (!cancelled && r && !r.error) setMenuItems(r.data ?? []); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [authReady, getSupabaseClient]);
+
+  // Fetch tables (for dine_in table selector)
+  useEffect(() => {
+    if (!authReady) return;
+    let cancelled = false;
+    getSupabaseClient()
+      .then((client) => {
+        if (cancelled) return null;
+        return client.from('tables').select('id, table_number, status').order('table_number');
+      })
+      .then((r: any) => { if (!cancelled && r && !r.error) setOrderedTables(r.data ?? []); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [authReady, getSupabaseClient]);
@@ -209,21 +246,28 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
       const client = await getSupabaseClient();
       const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-      // Build pickup_time
+      // Build pickup_time (takeaway only)
       let pickupTime: string | null = null;
-      if (!pickupASAP && pickupScheduledTime) {
+      if (!pickupASAP && pickupScheduledTime && effectiveOrderType === 'takeaway') {
         const [h, m] = pickupScheduledTime.split(':').map(Number);
         const d = new Date();
         d.setHours(h, m, 0, 0);
         pickupTime = d.toISOString();
       }
 
-      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total };
-      if (cfg.orderType) orderPayload.order_type = cfg.orderType;
-      if (cfg.showCustomerFields) {
+      // Build order payload based on effective order type
+      const shouldCaptureCustomer = isScoped
+        ? cfg.showCustomerFields
+        : effectiveOrderType !== 'dine_in';
+
+      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total, order_type: effectiveOrderType };
+      if (shouldCaptureCustomer) {
         if (customerName) orderPayload.customer_name = customerName;
         if (customerPhone) orderPayload.customer_phone = customerPhone;
-        orderPayload.pickup_time = pickupTime;
+        if (effectiveOrderType === 'takeaway') orderPayload.pickup_time = pickupTime;
+      }
+      if (effectiveOrderType === 'dine_in' && selectedTableId) {
+        orderPayload.table_id = selectedTableId;
       }
 
       const { data: order, error: orderError } = await client
@@ -234,16 +278,22 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
       const { error: itemsError } = await client.from('order_items').insert(items);
       if (itemsError) { console.error('[Checkout items]', itemsError); setCheckingOut(false); return; }
 
+      // Update table to occupied for dine_in orders
+      if (effectiveOrderType === 'dine_in' && selectedTableId) {
+        await client.from('tables').update({ status: 'occupied', current_order_id: order.id }).eq('id', selectedTableId);
+        setOrderedTables((prev) => prev.map((t) => (t.id === selectedTableId ? { ...t, status: 'occupied' } : t)));
+      }
+
       const newOrder: Order = {
         id: order.id,
         order_number: order.order_number,
         status: 'pending',
         total,
         created_at: order.created_at,
-        order_type: cfg.orderType || undefined,
-        customer_name: cfg.showCustomerFields ? (customerName || null) : undefined,
-        customer_phone: cfg.showCustomerFields ? (customerPhone || null) : undefined,
-        pickup_time: cfg.showCustomerFields ? pickupTime : undefined,
+        order_type: effectiveOrderType,
+        customer_name: shouldCaptureCustomer ? (customerName || null) : undefined,
+        customer_phone: shouldCaptureCustomer ? (customerPhone || null) : undefined,
+        pickup_time: shouldCaptureCustomer && effectiveOrderType === 'takeaway' ? pickupTime : undefined,
         order_items: cart.map((item) => ({
           quantity: item.quantity,
           price_at_order: item.price,
@@ -252,10 +302,11 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
       };
       setOrders((prev) => [newOrder, ...prev]);
       setCart([]);
+      setSelectedTableId(null);
       resetCustomerFields();
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
-  }, [cart, cfg.orderType, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, getSupabaseClient, resetCustomerFields]);
+  }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, getSupabaseClient, resetCustomerFields]);
 
   // Status update
   const updateStatus = useCallback(async (orderId: string, newStatus: string) => {
@@ -277,6 +328,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
   const handleNewOrder = useCallback(() => {
     setCart([]);
     setSelectedId(null);
+    setSelectedTableId(null);
     resetCustomerFields();
   }, [resetCustomerFields]);
 
@@ -284,7 +336,20 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
     return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
   }
 
-  const isTakeaway = cfg.showCustomerFields;
+  const availableTables = orderedTables.filter((t) => t.status === 'available');
+  const orderTypeBadge: Record<string, string> = {
+    dine_in: 'bg-purple-100 text-purple-800',
+    takeaway: 'bg-blue-100 text-blue-800',
+    delivery: 'bg-orange-100 text-orange-800',
+    drive_thru: 'bg-teal-100 text-teal-800',
+  };
+  const orderTypeDisplay: Record<string, string> = {
+    dine_in: 'Dine In',
+    takeaway: 'Take Away',
+    delivery: 'Delivery',
+    drive_thru: 'Drive Thru',
+    third_party: '3rd Party',
+  };
 
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -315,29 +380,34 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
             >
               <div className="flex items-center justify-between mb-1">
                 <span className="font-bold text-sm">#{order.order_number}</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${statusColor[order.status] || ''}`}>
-                  {statusDisplay[order.status] || order.status}
-                </span>
+                <div className="flex items-center gap-1">
+                  {order.order_type && (
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${orderTypeBadge[order.order_type] || 'bg-gray-100 text-gray-600'}`}>
+                      {orderTypeDisplay[order.order_type] || order.order_type}
+                    </span>
+                  )}
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${statusColor[order.status] || ''}`}>
+                    {statusDisplay[order.status] || order.status}
+                  </span>
+                </div>
               </div>
-              {isTakeaway ? (
-                <>
-                  <div className="text-xs text-gray-500">
-                    {order.customer_name || 'Walk-in'}
-                    {order.customer_phone ? ` · ${order.customer_phone}` : ''}
-                  </div>
-                  <div className="text-xs text-gray-400">
-                    {order.pickup_time ? new Date(order.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'ASAP'}
-                    {' · '}{order.order_items?.length || 0} item{(order.order_items?.length || 0) !== 1 ? 's' : ''}
-                  </div>
-                </>
+              {order.customer_name ? (
+                <div className="text-xs text-gray-500">
+                  {order.customer_name}
+                  {order.customer_phone ? ` · ${order.customer_phone}` : ''}
+                </div>
               ) : (
-                <>
-                  <div className="text-xs text-gray-500">
-                    {new Date(order.created_at).toLocaleTimeString()} · {order.order_items?.length || 0} item{(order.order_items?.length || 0) !== 1 ? 's' : ''}
-                  </div>
-                </>
+                <div className="text-xs text-gray-500">
+                  {new Date(order.created_at).toLocaleTimeString()}
+                </div>
               )}
-              <div className="text-xs font-semibold text-gray-700 mt-1">${Number(order.total).toFixed(2)}</div>
+              <div className="flex text-xs text-gray-400">
+                {order.pickup_time
+                  ? `Pickup ${new Date(order.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · `
+                  : order.order_type === 'takeaway' ? 'ASAP · ' : ''}
+                {order.order_items?.length || 0} item{(order.order_items?.length || 0) !== 1 ? 's' : ''}
+                <span className="ml-auto font-semibold text-gray-700">${Number(order.total).toFixed(2)}</span>
+              </div>
             </button>
           ))}
         </div>
@@ -431,8 +501,45 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
           <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">New {cfg.title}</h3>
         </div>
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Customer fields for takeaway */}
-          {isTakeaway && (
+          {/* Order type selector (all-orders view only) */}
+          {!isScoped && (
+            <div className="flex border-b border-gray-200">
+              {(Object.keys(ORDER_TYPE_LABELS) as OrderTypeOption[]).map((type) => (
+                <button
+                  key={type}
+                  onClick={() => { setSelectedOrderType(type); setSelectedTableId(null); resetCustomerFields(); }}
+                  className={`flex-1 px-2 py-2 text-xs font-semibold transition-colors border-b-2 ${
+                    selectedOrderType === type ? '' : 'border-transparent text-gray-400 hover:text-gray-600'
+                  }`}
+                  style={selectedOrderType === type ? { borderBottomColor: theme.primaryColor, color: theme.primaryColor } : {}}
+                >
+                  {ORDER_TYPE_LABELS[type]}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Dine In: table selector */}
+          {effectiveOrderType === 'dine_in' && (
+            <div className="px-4 py-3 border-b border-gray-200">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Table</label>
+              {availableTables.length > 0 ? (
+                <select
+                  value={selectedTableId || ''}
+                  onChange={(e) => setSelectedTableId(e.target.value || null)}
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                >
+                  <option value="">-- Select table --</option>
+                  {availableTables.map((t) => (
+                    <option key={t.id} value={t.id}>Table {t.table_number}</option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-xs text-gray-400">No available tables</p>
+              )}
+            </div>
+          )}
+          {/* Take Away: customer fields + pickup time */}
+          {effectiveOrderType === 'takeaway' && (
             <div className="px-4 py-3 border-b border-gray-200 space-y-2">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Customer Name</label>
@@ -474,6 +581,31 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
                     />
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+          {/* Delivery / Drive Thru: customer name + phone only */}
+          {(effectiveOrderType === 'delivery' || effectiveOrderType === 'drive_thru') && (
+            <div className="px-4 py-3 border-b border-gray-200 space-y-2">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Customer Name</label>
+                <input
+                  type="text"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="Walk-in"
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number</label>
+                <input
+                  type="tel"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  placeholder="(Optional)"
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                />
               </div>
             </div>
           )}
