@@ -1,7 +1,7 @@
 {
   "framework": "nextjs",
   "buildCommand": "npx turbo build",
-  "outputDirectory": "apps/portal/.next",
+  "outputDirectory": ".next",
   "ignoreCommand": "npx turbo-ignore",
   "installCommand": "pnpm install"
 }
