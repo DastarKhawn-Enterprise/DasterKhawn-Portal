@@ -5,6 +5,7 @@ import { useAuth, useUser, UserButton } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import Sidebar, { type ViewId } from './Sidebar';
+import DashboardView from './DashboardView';
 import CurrentOrdersView from './CurrentOrdersView';
 import DineInView from './DineInView';
 import MenuManagementView from './MenuManagementView';
@@ -37,7 +38,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
   const [authReady, setAuthReady] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [activeView, setActiveView] = useState<ViewId>('current-orders');
+  const [activeView, setActiveView] = useState<ViewId>('dashboard');
 
   const hiddenViews = useMemo(() => {
     const meta = user?.publicMetadata as Record<string, any> | undefined;
@@ -65,7 +66,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
       case 'take-away':
         return <CurrentOrdersView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} brandName={brandName} viewConfig={{ title: 'Take Away', orderType: 'takeaway', showCustomerFields: true }} />;
       case 'dashboard':
-        return placeholder('Dashboard');
+        return <DashboardView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
       case 'orders-completed':
         return placeholder('Completed Orders');
       case 'orders-cancelled':
