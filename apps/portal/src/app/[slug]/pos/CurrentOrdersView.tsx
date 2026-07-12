@@ -168,7 +168,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme 
       const { error: itemsError } = await client.from('order_items').insert(items);
       if (itemsError) { console.error('[Checkout items]', itemsError); setCheckingOut(false); return; }
 
-      // Add the new order to the active list immediately (avoids Realtime race with order_items)
+      // Add the new order to the active list immediately
       const newOrder: Order = {
         id: order.id,
         order_number: order.order_number,
@@ -181,7 +181,12 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme 
           menu_items: { name: item.name },
         })),
       };
-      setOrders((prev) => [newOrder, ...prev]);
+      console.log('[Checkout] newOrder constructed:', JSON.stringify(newOrder));
+      setOrders((prev) => {
+        const next = [newOrder, ...prev];
+        console.log('[Checkout] orders array length:', prev.length, '->', next.length);
+        return next;
+      });
 
       setCart([]);
     } catch (e) { console.error('[Checkout]', e); }

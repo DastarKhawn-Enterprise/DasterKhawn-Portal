@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import Sidebar, { type ViewId } from './Sidebar';
 import CurrentOrdersView from './CurrentOrdersView';
+import DineInView from './DineInView';
 
 interface POSClientProps {
   supabaseUrl: string;
@@ -51,7 +52,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
       case 'orders-draft':
         return placeholder('Draft Orders');
       case 'dine-in':
-        return placeholder('Dine In');
+        return <DineInView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
       case 'take-away':
         return placeholder('Take Away');
       case 'delivery':
