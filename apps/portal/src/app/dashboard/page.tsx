@@ -18,13 +18,17 @@ function NoAssignedTenant() {
 
 function PosCard({ brandName, slug }: { brandName: string; slug: string }) {
   return (
-    <Link
-      href={`/${slug}/pos`}
-      className="block p-6 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border border-gray-200"
-    >
+    <div className="p-6 bg-white rounded-lg shadow-md border border-gray-200">
       <h2 className="text-xl font-semibold text-gray-800">{brandName}</h2>
-      <p className="text-sm text-blue-600 mt-1">Open POS &rarr;</p>
-    </Link>
+      <div className="flex gap-4 mt-3">
+        <Link href={`/${slug}/pos`} className="text-sm text-blue-600 underline hover:text-blue-800">
+          Open POS &rarr;
+        </Link>
+        <Link href={`/${slug}/kitchen`} className="text-sm text-amber-600 underline hover:text-amber-800">
+          Kitchen &rarr;
+        </Link>
+      </div>
+    </div>
   );
 }
 

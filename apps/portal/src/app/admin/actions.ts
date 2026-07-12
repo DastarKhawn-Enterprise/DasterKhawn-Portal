@@ -89,17 +89,14 @@ export async function getRevenueStats(
       }
     }
 
-    let query = client.from('orders').select('total, status', { count: 'exact', head: false });
+    let query = client.from('orders').select('total', { count: 'exact', head: false }).eq('status', 'completed');
     if (since) query = query.gte('created_at', since);
     const { data, error, count } = await query;
 
     if (error) return { totalOrders: 0, totalRevenue: 0, avgOrderValue: 0, error: error.message };
 
-    // NOTE: Revenue calculated from ALL orders, not just 'completed'.
-    // Revisit this once order status tracking (kitchen tab) is built,
-    // and filter on status = 'completed' at that point.
     const totalRevenue = (data ?? []).reduce((sum: number, o: any) => sum + Number(o.total), 0);
-    const totalOrders = count ?? data?.length ?? 0;
+    const totalOrders = count ?? 0;
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
     return { totalOrders, totalRevenue, avgOrderValue };
