@@ -52,6 +52,7 @@ export default async function DashboardPage({
   // Auto-fix: Clerk invitation publicMetadata is NOT applied on signup.
   // If user has no tenant_id but was invited via staff_roles, apply metadata now.
   if (!alreadyFixed && !tenantId && user) {
+    let fixApplied = false;
     try {
       const email = user.emailAddresses?.[0]?.emailAddress;
       if (email) {
@@ -66,11 +67,15 @@ export default async function DashboardPage({
           for (let i = 1; i < pending.length; i++) {
             await updateStaffRoleUserId(email, userId, pending[i].tenant_id);
           }
-          redirect('/dashboard?fixed=1');
+          fixApplied = true;
         }
       }
     } catch {
       // Graceful fallback: if anything fails, show the normal dashboard state
+    }
+    // redirect() must be OUTSIDE try/catch — it throws NEXT_REDIRECT which would be swallowed
+    if (fixApplied) {
+      redirect('/dashboard?fixed=1');
     }
   }
 

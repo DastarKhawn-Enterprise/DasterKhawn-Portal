@@ -64,6 +64,7 @@ export default async function POSPage({
   // Auto-fix: Clerk invitation publicMetadata is NOT applied on signup.
   // If user has no tenant_id but was invited via staff_roles, apply metadata now.
   if (!isAssigned && !isSuperAdmin && user) {
+    let fixApplied = false;
     try {
       const email = user.emailAddresses?.[0]?.emailAddress;
       if (email) {
@@ -74,11 +75,14 @@ export default async function POSPage({
             publicMetadata: { tenant_id: tenant.id, role: pending.role, permissions: pending.permissions },
           });
           await updateStaffRoleUserId(email, userId, tenant.id);
-          redirect(`/${params.slug}/pos`);
+          fixApplied = true;
         }
       }
     } catch {
       // Graceful fallback — show AccessDenied below
+    }
+    if (fixApplied) {
+      redirect(`/${params.slug}/pos`);
     }
   }
 
