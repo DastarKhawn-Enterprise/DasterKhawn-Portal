@@ -120,7 +120,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
     getSupabaseClient()
       .then((client) => {
         if (cancelled) return null;
-        return client.from('menu_items').select('id, name, description, price, category, available').order('name');
+        return client.from('menu_items').select('id, name, description, price, category, available').order('name').not('available', 'eq', false);
       })
       .then((r: any) => { if (!cancelled && r && !r.error) setMenuItems(r.data ?? []); })
       .catch(() => {});

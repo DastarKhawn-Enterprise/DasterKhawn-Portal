@@ -7,6 +7,7 @@ import type { ThemeConfig } from '@sat-sys/pos-ui';
 import Sidebar, { type ViewId } from './Sidebar';
 import CurrentOrdersView from './CurrentOrdersView';
 import DineInView from './DineInView';
+import MenuManagementView from './MenuManagementView';
 
 interface POSClientProps {
   supabaseUrl: string;
@@ -64,7 +65,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
       case 'reservations':
         return placeholder('Reservations');
       case 'menu':
-        return placeholder('Menu Management');
+        return <MenuManagementView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
       case 'inventory':
         return placeholder('Inventory');
       case 'customers':

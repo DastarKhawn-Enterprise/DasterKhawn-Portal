@@ -19,7 +19,7 @@ export default function MenuGrid({ menuItems, onAddToCart, theme }: MenuGridProp
           </h2>
           <div className="space-y-0.5">
             {menuItems
-              .filter((item) => (item.category ?? 'Uncategorized') === category)
+              .filter((item) => (item.category ?? 'Uncategorized') === category && item.available !== false)
               .map((item) => (
                 <button
                   key={item.id}
