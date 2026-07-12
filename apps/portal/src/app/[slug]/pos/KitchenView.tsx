@@ -138,9 +138,15 @@ export default function KitchenView({ supabaseUrl, supabaseAnonKey, brandName }:
     setUpdating(orderId);
     try {
       const client = await getSupabaseClient();
-      await client.from('orders').update({ status: newStatus }).eq('id', orderId);
+      const { error } = await client.from('orders').update({ status: newStatus }).eq('id', orderId);
+      if (error) {
+        console.error('[KitchenView] Status update failed:', error.message, error);
+        setUpdating(null);
+        return;
+      }
+      console.log('[KitchenView] Status updated:', orderId, '->', newStatus);
     } catch (e) {
-      console.error('[KitchenView] Status update failed:', e);
+      console.error('[KitchenView] Status update threw:', e);
     }
     setUpdating(null);
   };
