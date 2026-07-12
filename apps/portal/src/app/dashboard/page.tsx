@@ -50,9 +50,9 @@ export default async function DashboardPage({
 
   if (role === 'super_admin') {
     return (
-      <main className="min-h-screen bg-gray-50 p-8">
+      <main className="min-h-screen bg-gray-50 p-4 md:p-8">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-800 mb-1">Super Admin Dashboard</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-1">Super Admin Dashboard</h1>
           <p className="text-gray-500 mb-4">
             Go to{' '}
             <a href="/admin" className="text-blue-600 underline">
@@ -104,10 +104,10 @@ export default async function DashboardPage({
     }
 
     return (
-      <main className="min-h-screen bg-gray-50 p-8">
+      <main className="min-h-screen bg-gray-50 p-4 md:p-8">
         <div className="max-w-4xl mx-auto">
           {banner}
-          <h1 className="text-3xl font-bold text-gray-800 mb-1">Dashboard</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-1">Dashboard</h1>
           <p className="text-gray-500 mb-6">
             {role === 'owner' ? 'Owner' : 'Staff'} &mdash; {tenant.brand_name}
           </p>

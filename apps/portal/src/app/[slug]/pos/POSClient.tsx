@@ -31,6 +31,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
   const { isLoaded, isSignedIn } = useAuth();
   const [authReady, setAuthReady] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [activeView, setActiveView] = useState<ViewId>('current-orders');
 
   useEffect(() => {
@@ -95,7 +96,14 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
     <div className="h-screen flex flex-col">
       {/* Top bar */}
       <header className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-gray-200 shadow-sm">
-        <div className="flex items-center gap-3" style={{ color: theme.secondaryColor }}>
+        <div className="flex items-center gap-2" style={{ color: theme.secondaryColor }}>
+          {/* Hamburger — mobile only */}
+          <button
+            onClick={() => setMobileSidebarOpen(true)}
+            className="md:hidden text-xl p-1 hover:bg-gray-100 rounded"
+          >
+            ☰
+          </button>
           <span className="text-lg font-bold">{brandName}</span>
         </div>
         <div className="flex items-center gap-4">
@@ -117,6 +125,8 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed((p) => !p)}
           accentColor={theme.primaryColor}
+          mobileOpen={mobileSidebarOpen}
+          onMobileClose={() => setMobileSidebarOpen(false)}
         />
         {renderContent()}
       </div>

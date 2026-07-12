@@ -63,23 +63,26 @@ interface SidebarProps {
   collapsed: boolean;
   onToggleCollapse: () => void;
   accentColor: string;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
-export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCollapse, accentColor }: SidebarProps) {
+export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCollapse, accentColor, mobileOpen, onMobileClose }: SidebarProps) {
   const [ordersOpen, setOrdersOpen] = useState(true);
 
   const isActive = (id: ViewId) => activeView === id;
 
-  return (
-    <nav
-      className={`flex flex-col bg-slate-900 text-white transition-all duration-200 ${
-        collapsed ? 'w-16' : 'w-56'
-      }`}
-    >
-      {/* Collapse toggle */}
+  const handleNavigate = (id: ViewId) => {
+    onNavigate(id);
+    onMobileClose?.();
+  };
+
+  const content = (
+    <>
+      {/* Collapse toggle — hidden on mobile */}
       <button
         onClick={onToggleCollapse}
-        className="flex items-center justify-center h-12 text-gray-400 hover:text-white hover:bg-slate-800"
+        className="hidden md:flex items-center justify-center h-12 text-gray-400 hover:text-white hover:bg-slate-800"
       >
         <span className="text-lg">{collapsed ? '▶' : '◀'}</span>
       </button>
@@ -110,7 +113,7 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
                 {ordersOpen && !collapsed && item.children.map((child) => (
                   <button
                     key={child.id}
-                    onClick={() => onNavigate(child.id)}
+                    onClick={() => handleNavigate(child.id)}
                     className={`flex items-center w-full pl-12 pr-4 py-2 text-sm transition-colors ${
                       isActive(child.id)
                         ? 'font-semibold'
@@ -128,7 +131,7 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
           return (
             <button
               key={item.id}
-              onClick={() => onNavigate(item.id)}
+              onClick={() => handleNavigate(item.id)}
               className={`flex items-center w-full px-4 py-2.5 text-sm transition-colors ${
                 isActive(item.id)
                   ? 'font-semibold'
@@ -142,6 +145,40 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
           );
         })}
       </div>
-    </nav>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-40 bg-black/40" onClick={onMobileClose} />
+      )}
+
+      {/* Desktop sidebar */}
+      <nav
+        className={`hidden md:flex flex-col bg-slate-900 text-white transition-all duration-200 ${
+          collapsed ? 'w-16' : 'w-56'
+        }`}
+      >
+        {content}
+      </nav>
+
+      {/* Mobile drawer */}
+      <nav
+        className={`md:hidden fixed top-0 left-0 z-50 h-full bg-slate-900 text-white transition-all duration-300 ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        } w-64`}
+      >
+        {/* Close button */}
+        <button
+          onClick={onMobileClose}
+          className="flex items-center justify-center h-12 w-full text-gray-400 hover:text-white hover:bg-slate-800"
+        >
+          <span className="text-lg">✕</span>
+        </button>
+        {content}
+      </nav>
+    </>
   );
 }

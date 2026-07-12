@@ -24,7 +24,7 @@ export default function MenuGrid({ menuItems, onAddToCart, theme }: MenuGridProp
                 <button
                   key={item.id}
                   onClick={() => onAddToCart(item)}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-3 py-3 md:py-2.5 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm text-gray-900">{item.name}</div>

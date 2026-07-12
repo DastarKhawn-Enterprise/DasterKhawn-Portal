@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import type { CartItem, ThemeConfig } from './types';
 import CheckoutButton from './CheckoutButton';
 
@@ -19,12 +20,14 @@ export default function CartSidebar({
   disabled,
   theme,
 }: CartSidebarProps) {
+  const [mobileOpen, setMobileOpen] = useState(false);
   const total = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const itemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
-  return (
-    <div className="w-80 flex flex-col border-l bg-white" style={{ borderColor: theme.secondaryColor + '20' }}>
+  const cartContent = (
+    <>
       <div className="p-4 font-bold text-lg border-b" style={{ borderColor: theme.secondaryColor + '20' }}>
-        Cart
+        Cart {itemCount > 0 && `(${itemCount})`}
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {cartItems.length === 0 && (
@@ -41,14 +44,14 @@ export default function CartSidebar({
             <div className="flex items-center gap-1">
               <button
                 onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
-                className="w-6 h-6 rounded text-sm font-bold hover:bg-gray-100"
+                className="w-7 h-7 md:w-6 md:h-6 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center"
               >
                 −
               </button>
               <span className="w-6 text-center text-sm">{item.quantity}</span>
               <button
                 onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                className="w-6 h-6 rounded text-sm font-bold hover:bg-gray-100"
+                className="w-7 h-7 md:w-6 md:h-6 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center"
               >
                 +
               </button>
@@ -69,6 +72,43 @@ export default function CartSidebar({
         </div>
         <CheckoutButton onCheckout={onCheckout} disabled={disabled} theme={theme} />
       </div>
-    </div>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop sidebar */}
+      <div className="hidden md:flex w-80 flex-col border-l bg-white" style={{ borderColor: theme.secondaryColor + '20' }}>
+        {cartContent}
+      </div>
+
+      {/* Mobile floating cart button */}
+      {itemCount > 0 && (
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="md:hidden fixed bottom-4 right-4 z-30 flex items-center gap-2 px-4 py-3 rounded-full text-white text-sm font-bold shadow-lg"
+          style={{ backgroundColor: theme.primaryColor }}
+        >
+          🛒 {itemCount} item{itemCount !== 1 ? 's' : ''} · ${total.toFixed(2)}
+        </button>
+      )}
+
+      {/* Mobile cart drawer */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex flex-col">
+          {/* Overlay */}
+          <div className="absolute inset-0 bg-black/40" onClick={() => setMobileOpen(false)} />
+          {/* Drawer */}
+          <div className="relative mt-auto bg-white rounded-t-2xl shadow-xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-center pt-2 pb-1">
+              <div className="w-8 h-1 rounded-full bg-gray-300" />
+            </div>
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {cartContent}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

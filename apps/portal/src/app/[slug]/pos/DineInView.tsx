@@ -75,6 +75,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme }: Prop
   const [tableOrder, setTableOrder] = useState<Order | null>(null);
   const [tableOrderLoading, setTableOrderLoading] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
 
   const getSupabaseClient = useCallback(async () => {
     const token = await getToken({ template: 'supabase' });
@@ -180,12 +181,14 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme }: Prop
     setCart([]);
     setTableOrder(null);
     setSelectedTable(table);
+    setMobilePanelOpen(true);
   }, []);
 
   const handleClosePanel = useCallback(() => {
     setSelectedTable(null);
     setCart([]);
     setTableOrder(null);
+    setMobilePanelOpen(false);
   }, []);
 
   const toggleReserve = useCallback(async (table: TableRecord) => {
@@ -295,14 +298,14 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme }: Prop
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* ── FLOOR PLAN ── */}
-      <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
+      <div className={`${mobilePanelOpen ? 'hidden md:flex' : 'flex'} flex-1 overflow-y-auto bg-gray-50 p-4 md:p-6`}>
         <h2 className="text-lg font-bold text-gray-700 mb-4 uppercase tracking-wider">Floor Plan</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
           {tables.map((table) => (
             <button
               key={table.id}
               onClick={() => handleSelectTable(table)}
-              className={`relative p-4 rounded-xl border-2 text-center transition-all hover:shadow-md ${tableBorder[table.status] || 'border-gray-300'} ${
+              className={`relative p-3 md:p-4 rounded-xl border-2 text-center transition-all hover:shadow-md ${tableBorder[table.status] || 'border-gray-300'} ${
                 selectedTable?.id === table.id ? 'ring-2 ring-offset-2 ring-blue-400' : ''
               }`}
             >
@@ -311,7 +314,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme }: Prop
                 {table.status}
               </span>
               {/* Table shape */}
-              <div className="mx-auto mb-1 flex items-center justify-center w-14 h-10 rounded border-2 border-gray-400 bg-white/60 text-gray-600 text-xs font-bold">
+              <div className="mx-auto mb-1 flex items-center justify-center w-12 h-9 md:w-14 md:h-10 rounded border-2 border-gray-400 bg-white/60 text-gray-600 text-xs font-bold">
                 {table.table_number}
               </div>
               <div className="text-xs text-gray-500">{table.capacity} seat{table.capacity !== 1 ? 's' : ''}</div>
@@ -335,23 +338,31 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme }: Prop
 
       {/* ── SIDE PANEL ── */}
       {selectedTable && (
-        <div className="w-[480px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
+        <div className={`${mobilePanelOpen ? 'flex' : 'hidden md:flex'} w-full md:w-[480px] flex-shrink-0 bg-white border-l border-gray-200 flex-col overflow-hidden`}>
           {/* Panel header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-            <div>
-              <h3 className="font-bold text-gray-800">
-                Table {selectedTable.table_number}
-              </h3>
-              <p className="text-xs text-gray-500">
-                {selectedTable.capacity} seats &middot;{' '}
-                <span className={`font-semibold ${selectedTable.status === 'available' ? 'text-green-600' : selectedTable.status === 'occupied' ? 'text-red-600' : 'text-yellow-600'}`}>
-                  {selectedTable.status.charAt(0).toUpperCase() + selectedTable.status.slice(1)}
-                </span>
-              </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleClosePanel}
+                className="md:hidden text-sm text-gray-500 hover:text-gray-800"
+              >
+                ← Back
+              </button>
+              <div>
+                <h3 className="font-bold text-gray-800">
+                  Table {selectedTable.table_number}
+                </h3>
+                <p className="text-xs text-gray-500">
+                  {selectedTable.capacity} seats &middot;{' '}
+                  <span className={`font-semibold ${selectedTable.status === 'available' ? 'text-green-600' : selectedTable.status === 'occupied' ? 'text-red-600' : 'text-yellow-600'}`}>
+                    {selectedTable.status.charAt(0).toUpperCase() + selectedTable.status.slice(1)}
+                  </span>
+                </p>
+              </div>
             </div>
             <button
               onClick={handleClosePanel}
-              className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+              className="hidden md:block text-gray-400 hover:text-gray-600 text-lg leading-none"
             >
               ✕
             </button>

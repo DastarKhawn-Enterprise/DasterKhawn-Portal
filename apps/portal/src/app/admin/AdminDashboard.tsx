@@ -65,11 +65,82 @@ export default function AdminDashboard({ tenants }: AdminDashboardProps) {
         </div>
       )}
 
-      <main className="min-h-screen bg-gray-50 p-8">
+      <main className="min-h-screen bg-gray-50 p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-800 mb-6">Super Admin Dashboard</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-6">Super Admin Dashboard</h1>
 
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+          {/* Mobile: stacked cards */}
+          <div className="md:hidden space-y-3">
+            {localTenants.map((t) => (
+              <div key={t.id} className="bg-white rounded-lg shadow border border-gray-200 p-4">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <div className="font-semibold text-gray-900">{t.brand_name}</div>
+                    <div className="text-xs text-gray-500">{t.slug}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
+                        t.status === 'active'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-red-100 text-red-700'
+                      }`}
+                    >
+                      {t.status}
+                    </span>
+                    {t.billing ? (
+                      <span
+                        className={`text-xs font-medium ${
+                          t.billing.payment_status === 'paid' ? 'text-green-600' : 'text-yellow-600'
+                        }`}
+                      >
+                        {t.billing.payment_status}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-xs text-gray-400 mb-3">
+                  Created {new Date(t.created_at).toLocaleDateString()}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    href={`/${t.slug}/pos`}
+                    className="text-sm px-3 py-1.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                  >
+                    Open POS
+                  </Link>
+                  <button
+                    onClick={() => setThemeTarget(t)}
+                    className="text-sm px-3 py-1.5 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+                  >
+                    Edit Theme
+                  </button>
+                  <button
+                    onClick={() => setSuspendTarget(t)}
+                    disabled={busy === t.id}
+                    className={`text-sm px-3 py-1.5 rounded ${
+                      t.status === 'active'
+                        ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                        : 'bg-green-100 text-green-700 hover:bg-green-200'
+                    } disabled:opacity-50`}
+                  >
+                    {busy === t.id ? '...' : t.status === 'active' ? 'Suspend' : 'Activate'}
+                  </button>
+                  <button
+                    onClick={() => setRevenueTarget(t)}
+                    className="text-sm px-3 py-1.5 bg-amber-100 text-amber-700 rounded hover:bg-amber-200"
+                  >
+                    Revenue
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop: table */}
+          <div className="hidden md:block bg-white rounded-lg shadow overflow-x-auto">
             <table className="w-full text-left">
               <thead className="bg-gray-100 text-gray-600 text-sm uppercase">
                 <tr>

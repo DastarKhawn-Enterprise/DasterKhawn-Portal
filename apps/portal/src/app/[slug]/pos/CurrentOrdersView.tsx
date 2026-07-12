@@ -94,6 +94,9 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
   const [orderedTables, setOrderedTables] = useState<TableRecord[]>([]);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
 
+  // Mobile panel navigation
+  const [mobilePanel, setMobilePanel] = useState<'list' | 'detail' | 'new-order'>('list');
+
   const isScoped = cfg.orderType !== null;
   const effectiveOrderType: string = cfg.orderType || selectedOrderType;
 
@@ -351,14 +354,18 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
     third_party: '3rd Party',
   };
 
+  // Mobile panel navigation
+  const pc = (panel: 'list' | 'detail' | 'new-order', base: string) =>
+    `${mobilePanel === panel ? 'flex' : 'hidden md:flex'} ${base}`;
+
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* ── LEFT PANEL: Order list ── */}
-      <div className="w-72 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
+      <div className={`${pc('list', 'w-full md:w-72 flex-shrink-0 bg-white border-r border-gray-200 flex-col overflow-hidden')}`}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">{cfg.title}</h2>
           <button
-            onClick={handleNewOrder}
+            onClick={() => { handleNewOrder(); setMobilePanel('new-order'); }}
             className="text-xs px-3 py-1.5 rounded text-white font-semibold"
             style={{ backgroundColor: theme.primaryColor }}
           >
@@ -372,7 +379,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
           {orders.map((order) => (
             <button
               key={order.id}
-              onClick={() => setSelectedId(order.id)}
+              onClick={() => { setSelectedId(order.id); setMobilePanel('detail'); }}
               className={`w-full text-left p-3 rounded-lg border transition-colors ${
                 selectedId === order.id ? '' : 'hover:bg-gray-50'
               }`}
@@ -414,9 +421,16 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
       </div>
 
       {/* ── CENTER PANEL: Selected order detail ── */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
+      <div className={`${pc('detail', 'flex-1 bg-gray-50 flex-col overflow-hidden')}`}>
+        {/* Mobile back button */}
+        <button
+          onClick={() => setMobilePanel('list')}
+          className="md:hidden flex items-center gap-1 px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 border-b border-gray-200"
+        >
+          ← Orders
+        </button>
         {selectedOrder ? (
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-4 md:p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-xl font-bold">Order #{selectedOrder.order_number}</h2>
@@ -496,7 +510,14 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
       </div>
 
       {/* ── RIGHT PANEL: New order builder ── */}
-      <div className="w-[480px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
+      <div className={`${pc('new-order', 'w-full md:w-[480px] flex-shrink-0 bg-white border-l border-gray-200 flex-col overflow-hidden')}`}>
+        {/* Mobile back button */}
+        <button
+          onClick={() => setMobilePanel('list')}
+          className="md:hidden flex items-center gap-1 px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 border-b border-gray-200"
+        >
+          ← Back
+        </button>
         <div className="px-4 py-3 border-b border-gray-200">
           <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">New {cfg.title}</h3>
         </div>
