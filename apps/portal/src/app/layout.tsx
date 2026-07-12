@@ -3,8 +3,8 @@ import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SAT SYS",
-  description: "Multi-tenant POS Portal",
+  title: "Dastarkhwan",
+  description: "Multi-brand POS Portal",
 };
 
 export default function RootLayout({
