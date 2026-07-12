@@ -64,13 +64,26 @@ export default function MenuManagementView({ supabaseUrl, supabaseAnonKey, theme
   // Decode permissions from Supabase JWT
   useEffect(() => {
     if (!authReady) return;
-    getToken({ template: 'supabase' }).then((token) => {
-      if (!token) return;
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        setCanEdit((payload.permissions as string[] ?? []).includes('menu:edit'));
-      } catch {}
-    });
+    getToken({ template: 'supabase' })
+      .then((token) => {
+        if (!token) return;
+        try {
+          // JWT payload is base64url — convert to standard base64 first
+          let base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+          while (base64.length % 4) base64 += '=';
+          const payload = JSON.parse(atob(base64));
+          const perms = payload.permissions;
+          console.log('[Menu Permissions] raw from JWT:', JSON.stringify(perms));
+          // perms could be a JSON array string or an actual array depending on Clerk template rendering
+          const permList: string[] = typeof perms === 'string' ? (() => { try { return JSON.parse(perms); } catch { return []; } })() : (perms ?? []);
+          console.log('[Menu Permissions] parsed list:', JSON.stringify(permList));
+          console.log('[Menu Permissions] has menu:edit?', permList.includes('menu:edit'));
+          setCanEdit(permList.includes('menu:edit'));
+        } catch (e) {
+          console.error('[Menu Permissions] decode error:', e);
+        }
+      })
+      .catch((e) => console.error('[Menu Permissions] getToken error:', e));
   }, [authReady, getToken]);
 
   // Fetch all menu items
