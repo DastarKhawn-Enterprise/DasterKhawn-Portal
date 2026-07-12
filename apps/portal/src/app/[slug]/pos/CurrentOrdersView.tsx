@@ -496,7 +496,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
       </div>
 
       {/* ── RIGHT PANEL: New order builder ── */}
-      <div className="w-[400px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
+      <div className="w-[480px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-200">
           <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">New {cfg.title}</h3>
         </div>
@@ -610,9 +610,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
             </div>
           )}
           {menuItems.length > 0 ? (
-            <div className="flex-1 overflow-y-auto">
-              <MenuGrid menuItems={menuItems} onAddToCart={handleAddToCart} theme={theme} />
-            </div>
+            <MenuGrid menuItems={menuItems} onAddToCart={handleAddToCart} theme={theme} gridClass="grid grid-cols-1 sm:grid-cols-2 gap-2" />
           ) : (
             <div className="flex-1 flex items-center justify-center"><p className="text-gray-400">Loading menu...</p></div>
           )}

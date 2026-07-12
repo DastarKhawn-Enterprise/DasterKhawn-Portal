@@ -335,7 +335,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme }: Prop
 
       {/* ── SIDE PANEL ── */}
       {selectedTable && (
-        <div className="w-[420px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
+        <div className="w-[480px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
           {/* Panel header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
             <div>
@@ -371,9 +371,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme }: Prop
                   </button>
                 </div>
                 {menuItems.length > 0 ? (
-                  <div className="flex-1 overflow-y-auto">
-                    <MenuGrid menuItems={menuItems} onAddToCart={handleAddToCart} theme={theme} />
-                  </div>
+                  <MenuGrid menuItems={menuItems} onAddToCart={handleAddToCart} theme={theme} gridClass="grid grid-cols-1 sm:grid-cols-2 gap-2" />
                 ) : (
                   <div className="flex-1 flex items-center justify-center"><p className="text-gray-400">Loading menu...</p></div>
                 )}

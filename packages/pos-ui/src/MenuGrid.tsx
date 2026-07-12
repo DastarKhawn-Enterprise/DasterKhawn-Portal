@@ -5,9 +5,10 @@ interface MenuGridProps {
   menuItems: MenuItem[];
   onAddToCart: (item: MenuItem) => void;
   theme: ThemeConfig;
+  gridClass?: string;
 }
 
-export default function MenuGrid({ menuItems, onAddToCart, theme }: MenuGridProps) {
+export default function MenuGrid({ menuItems, onAddToCart, theme, gridClass }: MenuGridProps) {
   const categories = [...new Set(menuItems.map((item) => item.category ?? 'Uncategorized'))].sort();
 
   return (
@@ -17,7 +18,7 @@ export default function MenuGrid({ menuItems, onAddToCart, theme }: MenuGridProp
           <h2 className="text-lg font-semibold mb-3" style={{ color: theme.primaryColor }}>
             {category}
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className={gridClass || 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'}>
             {menuItems
               .filter((item) => (item.category ?? 'Uncategorized') === category)
               .map((item) => (
