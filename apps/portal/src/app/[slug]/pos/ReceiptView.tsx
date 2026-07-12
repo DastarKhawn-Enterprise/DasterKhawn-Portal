@@ -59,11 +59,12 @@ export default function ReceiptView({ data, brandName, theme, onClose }: Props) 
       {/* Print-only: styles in <head> + receipt at end of <body>, both outside #__next */}
       {mounted && createPortal(
         <style>{`
+          @page { size: 80mm auto; margin: 0; }
           .receipt-print-area { display: none; }
           @media print {
-            @page { size: 80mm auto; margin: 0; }
             #__next { display: none !important; }
             html, body { margin: 0 !important; padding: 0 !important; }
+            .no-print { display: none !important; }
             .receipt-print-area {
               display: block !important;
               position: absolute;
@@ -77,8 +78,8 @@ export default function ReceiptView({ data, brandName, theme, onClose }: Props) 
               box-sizing: border-box;
             }
           }
-          /* Browser print header/footer (date, URL) is controlled via print dialog settings, not CSS.
-             @page margin:0 minimizes their space; uncheck "Headers and footers" in Chrome print dialog. */
+          /* Browser print header/footer (date, URL) controlled via print dialog settings, not CSS.
+             Uncheck "Headers and footers" in Chrome print dialog -> More settings. */
         `}</style>,
         document.head
       )}
