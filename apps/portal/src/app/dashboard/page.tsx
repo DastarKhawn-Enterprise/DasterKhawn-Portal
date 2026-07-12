@@ -1,7 +1,7 @@
-import { auth, currentUser } from '@clerk/nextjs/server';
+import { auth, currentUser, clerkClient } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { getTenantById } from '@sat-sys/gateway-sdk';
+import { getTenantById, getAllStaffByEmail, updateStaffRoleUserId } from '@sat-sys/gateway-sdk';
 
 function NoAssignedTenant() {
   return (
@@ -45,6 +45,28 @@ export default async function DashboardPage({
   };
   const role = metadata?.role;
   const tenantId = metadata?.tenant_id;
+
+  // Auto-fix: Clerk invitation publicMetadata is NOT applied on signup.
+  // If user has no tenant_id but was invited via staff_roles, apply metadata now.
+  if (!tenantId && user) {
+    const email = user.emailAddresses?.[0]?.emailAddress;
+    if (email) {
+      const pending = await getAllStaffByEmail(email);
+      if (pending.length > 0) {
+        const first = pending[0];
+        const client = await clerkClient();
+        await client.users.updateUser(userId, {
+          publicMetadata: { tenant_id: first.tenant_id, role: first.role, permissions: first.permissions },
+        });
+        await updateStaffRoleUserId(email, userId, first.tenant_id);
+        // Remove any additional pending rows for other tenants (shouldn't happen, but clean up)
+        for (let i = 1; i < pending.length; i++) {
+          await updateStaffRoleUserId(email, userId, pending[i].tenant_id);
+        }
+        redirect('/dashboard');
+      }
+    }
+  }
 
   const fromAdmin = searchParams?.from === 'admin';
 
