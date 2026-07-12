@@ -371,7 +371,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme }: Prop
                   </button>
                 </div>
                 {menuItems.length > 0 ? (
-                  <MenuGrid menuItems={menuItems} onAddToCart={handleAddToCart} theme={theme} gridClass="grid grid-cols-1 sm:grid-cols-2 gap-2" />
+                  <MenuGrid menuItems={menuItems} onAddToCart={handleAddToCart} theme={theme} />
                 ) : (
                   <div className="flex-1 flex items-center justify-center"><p className="text-gray-400">Loading menu...</p></div>
                 )}
