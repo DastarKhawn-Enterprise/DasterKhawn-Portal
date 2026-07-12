@@ -8,6 +8,7 @@ import Sidebar, { type ViewId } from './Sidebar';
 import CurrentOrdersView from './CurrentOrdersView';
 import DineInView from './DineInView';
 import MenuManagementView from './MenuManagementView';
+import ReportsView from './ReportsView';
 
 interface POSClientProps {
   supabaseUrl: string;
@@ -72,7 +73,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
       case 'customers':
         return placeholder('Customers');
       case 'reports':
-        return placeholder('Reports');
+        return <ReportsView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
       case 'expenses':
         return placeholder('Expenses');
       case 'staff':
