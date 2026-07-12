@@ -43,6 +43,8 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
     switch (activeView) {
       case 'current-orders':
         return <CurrentOrdersView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
+      case 'take-away':
+        return <CurrentOrdersView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} viewConfig={{ title: 'Take Away', orderType: 'takeaway', showCustomerFields: true }} />;
       case 'dashboard':
         return placeholder('Dashboard');
       case 'orders-completed':
@@ -53,8 +55,6 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
         return placeholder('Draft Orders');
       case 'dine-in':
         return <DineInView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
-      case 'take-away':
-        return placeholder('Take Away');
       case 'delivery':
         return placeholder('Delivery');
       case 'drive-thru':

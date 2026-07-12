@@ -19,13 +19,24 @@ interface Order {
   status: string;
   total: number;
   created_at: string;
+  order_type?: string;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  pickup_time?: string | null;
   order_items: OrderItem[];
+}
+
+export interface ViewConfig {
+  title: string;
+  orderType: string | null;
+  showCustomerFields: boolean;
 }
 
 interface Props {
   supabaseUrl: string;
   supabaseAnonKey: string;
   theme: ThemeConfig;
+  viewConfig?: Partial<ViewConfig>;
 }
 
 const statusDisplay: Record<string, string> = {
@@ -43,7 +54,11 @@ const statusColor: Record<string, string> = {
   cancelled: 'bg-red-100 text-red-800 border-red-300',
 };
 
-export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme }: Props) {
+const SELECT_ORDER_FIELDS = 'id, order_number, status, total, created_at, order_type, customer_name, customer_phone, pickup_time, order_items (quantity, price_at_order, menu_items (name))';
+
+export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme, viewConfig }: Props) {
+  const cfg: ViewConfig = { title: 'Active Orders', orderType: null, showCustomerFields: false, ...viewConfig };
+
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [authReady, setAuthReady] = useState(false);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -52,6 +67,12 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme 
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
+
+  // Customer fields (takeaway)
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [pickupASAP, setPickupASAP] = useState(true);
+  const [pickupScheduledTime, setPickupScheduledTime] = useState('');
 
   const selectedOrder = orders.find((o) => o.id === selectedId) ?? null;
 
@@ -87,7 +108,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme 
   const fetchOrderWithItems = useCallback(async (client: SupabaseClient, orderId: string) => {
     const { data } = await client
       .from('orders')
-      .select('id, order_number, status, total, created_at, order_items (quantity, price_at_order, menu_items (name))')
+      .select(SELECT_ORDER_FIELDS)
       .eq('id', orderId)
       .single();
     return data as unknown as Order | null;
@@ -102,30 +123,48 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme 
       const client = await getSupabaseClient();
       if (cancelled) return;
 
-      const { data, error } = await client
+      // Build initial query
+      let query = client
         .from('orders')
-        .select('id, order_number, status, total, created_at, order_items (quantity, price_at_order, menu_items (name))')
+        .select(SELECT_ORDER_FIELDS);
+      if (cfg.orderType) {
+        query = query.eq('order_type', cfg.orderType);
+      }
+      const { data, error } = await query
         .not('status', 'in', '("completed","cancelled")')
         .order('created_at', { ascending: true });
 
       if (!cancelled && !error && data) setOrders(data as unknown as Order[]);
 
+      // Realtime — subscribe with optional order_type filter on INSERT
+      const insertFilter = cfg.orderType
+        ? `order_type=eq.${cfg.orderType}`
+        : 'status=neq.completed';
+
       channel = client
-        .channel('current-orders')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders', filter: 'status=neq.completed' },
+        .channel(cfg.orderType ? `orders-${cfg.orderType}` : 'current-orders')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders', filter: insertFilter },
           async (payload: RealtimePostgresChangesPayload<{ id: string }>) => {
             const rec = payload.new as { id?: string } | null;
             if (!rec?.id) return;
             const o = await fetchOrderWithItems(client, rec.id);
-            if (o) setOrders((prev) => (prev.some((x) => x.id === o.id) ? prev : [...prev, o]));
+            if (o && o.status !== 'completed' && o.status !== 'cancelled') {
+              setOrders((prev) => (prev.some((x) => x.id === o.id) ? prev : [...prev, o]));
+            }
           })
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' },
-          (payload: RealtimePostgresChangesPayload<{ id: string; status: string }>) => {
-            const rec = payload.new as { id?: string; status?: string } | null;
+          (payload: RealtimePostgresChangesPayload<{ id: string; status: string; order_type?: string }>) => {
+            const rec = payload.new as { id?: string; status?: string; order_type?: string } | null;
             if (!rec?.id) return;
-            const { id, status } = rec;
+            const { id, status, order_type } = rec;
+            // Only process if this order matches our filter (or no filter)
+            if (cfg.orderType && order_type !== cfg.orderType) {
+              setOrders((prev) => prev.filter((o) => o.id !== id));
+              return;
+            }
             if (status === 'completed' || status === 'cancelled') {
               setOrders((prev) => prev.filter((o) => o.id !== id));
+              setSelectedId((prev) => (prev === id ? null : prev));
             } else if (status) {
               setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
             }
@@ -135,7 +174,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme 
 
     init();
     return () => { cancelled = true; if (channel) channel.unsubscribe(); };
-  }, [authReady, getSupabaseClient, fetchOrderWithItems]);
+  }, [authReady, getSupabaseClient, fetchOrderWithItems, cfg.orderType]);
 
   // Cart handlers
   const handleAddToCart = useCallback((item: MenuItem) => {
@@ -155,43 +194,68 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme 
     setCart((prev) => prev.filter((ci) => ci.id !== itemId));
   }, []);
 
+  // Reset customer fields
+  const resetCustomerFields = useCallback(() => {
+    setCustomerName('');
+    setCustomerPhone('');
+    setPickupASAP(true);
+    setPickupScheduledTime('');
+  }, []);
+
   const handleCheckout = useCallback(async () => {
     if (cart.length === 0) return;
     setCheckingOut(true);
     try {
       const client = await getSupabaseClient();
       const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+      // Build pickup_time
+      let pickupTime: string | null = null;
+      if (!pickupASAP && pickupScheduledTime) {
+        const [h, m] = pickupScheduledTime.split(':').map(Number);
+        const d = new Date();
+        d.setHours(h, m, 0, 0);
+        pickupTime = d.toISOString();
+      }
+
+      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total };
+      if (cfg.orderType) orderPayload.order_type = cfg.orderType;
+      if (cfg.showCustomerFields) {
+        if (customerName) orderPayload.customer_name = customerName;
+        if (customerPhone) orderPayload.customer_phone = customerPhone;
+        orderPayload.pickup_time = pickupTime;
+      }
+
       const { data: order, error: orderError } = await client
-        .from('orders').insert({ status: 'pending', source: 'pos', total }).select('id, order_number, created_at').single();
+        .from('orders').insert(orderPayload).select('id, order_number, created_at').single();
       if (orderError || !order) { console.error('[Checkout]', orderError); setCheckingOut(false); return; }
+
       const items = cart.map((item) => ({ order_id: order.id, menu_item_id: item.id, quantity: item.quantity, price_at_order: item.price }));
       const { error: itemsError } = await client.from('order_items').insert(items);
       if (itemsError) { console.error('[Checkout items]', itemsError); setCheckingOut(false); return; }
 
-      // Add the new order to the active list immediately
       const newOrder: Order = {
         id: order.id,
         order_number: order.order_number,
         status: 'pending',
         total,
         created_at: order.created_at,
+        order_type: cfg.orderType || undefined,
+        customer_name: cfg.showCustomerFields ? (customerName || null) : undefined,
+        customer_phone: cfg.showCustomerFields ? (customerPhone || null) : undefined,
+        pickup_time: cfg.showCustomerFields ? pickupTime : undefined,
         order_items: cart.map((item) => ({
           quantity: item.quantity,
           price_at_order: item.price,
           menu_items: { name: item.name },
         })),
       };
-      console.log('[Checkout] newOrder constructed:', JSON.stringify(newOrder));
-      setOrders((prev) => {
-        const next = [newOrder, ...prev];
-        console.log('[Checkout] orders array length:', prev.length, '->', next.length);
-        return next;
-      });
-
+      setOrders((prev) => [newOrder, ...prev]);
       setCart([]);
+      resetCustomerFields();
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
-  }, [cart, getSupabaseClient]);
+  }, [cart, cfg.orderType, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, getSupabaseClient, resetCustomerFields]);
 
   // Status update
   const updateStatus = useCallback(async (orderId: string, newStatus: string) => {
@@ -213,18 +277,21 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme 
   const handleNewOrder = useCallback(() => {
     setCart([]);
     setSelectedId(null);
-  }, []);
+    resetCustomerFields();
+  }, [resetCustomerFields]);
 
   if (!isLoaded || !authReady) {
     return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
   }
+
+  const isTakeaway = cfg.showCustomerFields;
 
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* ── LEFT PANEL: Order list ── */}
       <div className="w-72 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Active Orders</h2>
+          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">{cfg.title}</h2>
           <button
             onClick={handleNewOrder}
             className="text-xs px-3 py-1.5 rounded text-white font-semibold"
@@ -252,9 +319,24 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme 
                   {statusDisplay[order.status] || order.status}
                 </span>
               </div>
-              <div className="text-xs text-gray-500">
-                {new Date(order.created_at).toLocaleTimeString()} &middot; {order.order_items?.length || 0} item{(order.order_items?.length || 0) !== 1 ? 's' : ''}
-              </div>
+              {isTakeaway ? (
+                <>
+                  <div className="text-xs text-gray-500">
+                    {order.customer_name || 'Walk-in'}
+                    {order.customer_phone ? ` · ${order.customer_phone}` : ''}
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    {order.pickup_time ? new Date(order.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'ASAP'}
+                    {' · '}{order.order_items?.length || 0} item{(order.order_items?.length || 0) !== 1 ? 's' : ''}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-xs text-gray-500">
+                    {new Date(order.created_at).toLocaleTimeString()} · {order.order_items?.length || 0} item{(order.order_items?.length || 0) !== 1 ? 's' : ''}
+                  </div>
+                </>
+              )}
               <div className="text-xs font-semibold text-gray-700 mt-1">${Number(order.total).toFixed(2)}</div>
             </button>
           ))}
@@ -270,6 +352,11 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme 
                 <h2 className="text-xl font-bold">Order #{selectedOrder.order_number}</h2>
                 <p className="text-sm text-gray-500">
                   {new Date(selectedOrder.created_at).toLocaleString()}
+                  {selectedOrder.customer_name ? ` · ${selectedOrder.customer_name}` : ''}
+                  {selectedOrder.customer_phone ? ` · ${selectedOrder.customer_phone}` : ''}
+                  {selectedOrder.pickup_time
+                    ? ` · Pickup ${new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                    : selectedOrder.order_type === 'takeaway' ? ' · ASAP' : ''}
                 </p>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${statusColor[selectedOrder.status] || ''}`}>
@@ -304,7 +391,6 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme 
               </tfoot>
             </table>
 
-            {/* Notes field (visual only) */}
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-1">Order Notes</label>
               <textarea
@@ -315,7 +401,6 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme 
               />
             </div>
 
-            {/* Action buttons */}
             <div className="flex flex-wrap gap-3">
               {selectedOrder.status === 'pending' && (
                 <ActionButton label="Start Cooking" color="bg-blue-600 hover:bg-blue-700" disabled={updating === selectedOrder.id} onClick={() => updateStatus(selectedOrder.id, 'in_kitchen')} updating={updating === selectedOrder.id} />
@@ -343,15 +428,63 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme 
       {/* ── RIGHT PANEL: New order builder ── */}
       <div className="w-[400px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-200">
-          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">New Order</h3>
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">New {cfg.title}</h3>
         </div>
-        {menuItems.length > 0 ? (
-          <div className="flex-1 overflow-y-auto">
-            <MenuGrid menuItems={menuItems} onAddToCart={handleAddToCart} theme={theme} />
-          </div>
-        ) : (
-          <div className="flex-1 flex items-center justify-center"><p className="text-gray-400">Loading menu...</p></div>
-        )}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Customer fields for takeaway */}
+          {isTakeaway && (
+            <div className="px-4 py-3 border-b border-gray-200 space-y-2">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Customer Name</label>
+                <input
+                  type="text"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="Walk-in"
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number</label>
+                <input
+                  type="tel"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  placeholder="(Optional)"
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Pickup Time</label>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 text-sm">
+                    <input type="radio" name="pickup" checked={pickupASAP} onChange={() => setPickupASAP(true)} />
+                    ASAP
+                  </label>
+                  <label className="flex items-center gap-1.5 text-sm">
+                    <input type="radio" name="pickup" checked={!pickupASAP} onChange={() => setPickupASAP(false)} />
+                    Schedule
+                  </label>
+                  {!pickupASAP && (
+                    <input
+                      type="time"
+                      value={pickupScheduledTime}
+                      onChange={(e) => setPickupScheduledTime(e.target.value)}
+                      className="px-2 py-1 text-sm border border-gray-300 rounded w-28"
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          {menuItems.length > 0 ? (
+            <div className="flex-1 overflow-y-auto">
+              <MenuGrid menuItems={menuItems} onAddToCart={handleAddToCart} theme={theme} />
+            </div>
+          ) : (
+            <div className="flex-1 flex items-center justify-center"><p className="text-gray-400">Loading menu...</p></div>
+          )}
+        </div>
         <CartSidebar
           cartItems={cart}
           onUpdateQuantity={handleUpdateQuantity}
