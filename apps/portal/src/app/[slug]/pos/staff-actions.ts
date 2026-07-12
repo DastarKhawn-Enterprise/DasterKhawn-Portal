@@ -114,27 +114,45 @@ export async function createStaffAccount(
 
     if (existing.data.length > 0) {
       const targetUserId = existing.data[0].id;
-      await client.users.updateUser(targetUserId, {
+      try {
+        await client.users.updateUser(targetUserId, {
+          publicMetadata: {
+            tenant_id: tenant.id,
+            role,
+            permissions,
+          },
+        });
+      } catch (e2: any) {
+        let msg = e2.message || 'Failed to update existing user';
+        if (e2.errors && Array.isArray(e2.errors) && e2.errors.length > 0) {
+          msg = e2.errors.map((err: any) => err.longMessage || err.message).join('; ');
+        }
+        return { success: false, error: msg };
+      }
+      const result = await addStaffRole(targetUserId, tenant.id, role, permissions);
+      if (!result.success) return { success: false, error: result.error };
+      return { success: true };
+    }
+
+    let created;
+    try {
+      created = await client.users.createUser({
+        emailAddress: [email],
+        password: finalPassword,
+        skipPasswordChecks: true,
         publicMetadata: {
           tenant_id: tenant.id,
           role,
           permissions,
         },
       });
-      const result = await addStaffRole(targetUserId, tenant.id, role, permissions);
-      if (!result.success) return { success: false, error: result.error };
-      return { success: true };
+    } catch (e2: any) {
+      let msg = e2.message || 'Failed to create user';
+      if (e2.errors && Array.isArray(e2.errors) && e2.errors.length > 0) {
+        msg = e2.errors.map((err: any) => err.longMessage || err.message).join('; ');
+      }
+      return { success: false, error: msg };
     }
-
-    const created = await client.users.createUser({
-      emailAddress: [email],
-      password: finalPassword,
-      publicMetadata: {
-        tenant_id: tenant.id,
-        role,
-        permissions,
-      },
-    });
 
     const result = await addStaffRole(created.id, tenant.id, role, permissions);
     if (!result.success) return { success: false, error: result.error };
@@ -144,7 +162,12 @@ export async function createStaffAccount(
       credentials: { email, password: finalPassword },
     };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    // Extract detailed Clerk error messages from the errors array
+    let msg = e.message || 'Unknown error';
+    if (e.errors && Array.isArray(e.errors) && e.errors.length > 0) {
+      msg = e.errors.map((err: any) => err.longMessage || err.message).join('; ');
+    }
+    return { success: false, error: msg };
   }
 }
 
