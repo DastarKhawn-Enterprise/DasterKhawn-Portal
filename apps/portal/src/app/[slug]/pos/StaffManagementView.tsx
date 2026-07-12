@@ -21,6 +21,7 @@ export default function StaffManagementView({ slug }: Props) {
 
   const [createEmail, setCreateEmail] = useState('');
   const [createPassword, setCreatePassword] = useState('');
+  const [createRole, setCreateRole] = useState<'staff' | 'owner'>('staff');
   const [creating, setCreating] = useState(false);
   const [createMsg, setCreateMsg] = useState('');
   const [createError, setCreateError] = useState('');
@@ -77,12 +78,12 @@ export default function StaffManagementView({ slug }: Props) {
     setCreateMsg('');
     setCreateError('');
     setCreatedCredentials(null);
-    const result = await createStaffAccount(slug, email, password);
+    const result = await createStaffAccount(slug, email, createRole, password);
     if (result.success) {
       if (result.credentials) {
         setCreatedCredentials(result.credentials);
       }
-      setCreateMsg(result.credentials ? 'Account created' : 'Staff member added');
+      setCreateMsg(result.credentials ? 'Account created' : 'Team member added');
       setCreateEmail('');
       setCreatePassword('');
       fetchStaff();
@@ -145,16 +146,40 @@ export default function StaffManagementView({ slug }: Props) {
 
         {/* Create account form */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-700 mb-3">Create Staff Account</h2>
+          <h2 className="text-lg font-semibold text-gray-700 mb-3">Add Team Member</h2>
           <div className="flex flex-col gap-3">
             <input
               type="email"
-              placeholder="staff@example.com"
+              placeholder="team@example.com"
               value={createEmail}
               onChange={(e) => setCreateEmail(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
             />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setCreateRole('staff')}
+                className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                  createRole === 'staff'
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Staff
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreateRole('owner')}
+                className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                  createRole === 'owner'
+                    ? 'bg-purple-600 text-white border-purple-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Owner
+              </button>
+            </div>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -176,7 +201,7 @@ export default function StaffManagementView({ slug }: Props) {
               disabled={creating || !createEmail.trim()}
               className="w-full px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {creating ? 'Creating...' : '+ Create Staff Account'}
+              {creating ? 'Creating...' : `+ Add ${createRole === 'owner' ? 'Owner' : 'Staff'}`}
             </button>
           </div>
           {createMsg && <p className="mt-2 text-sm text-green-600">{createMsg}</p>}
@@ -186,7 +211,7 @@ export default function StaffManagementView({ slug }: Props) {
               <p className="text-sm font-semibold text-green-800 mb-1">Account Created — Share these credentials:</p>
               <p className="text-sm text-green-700 font-mono">Email: {createdCredentials.email}</p>
               <p className="text-sm text-green-700 font-mono">Password: {createdCredentials.password}</p>
-              <p className="text-xs text-green-600 mt-1">The staff member can sign in at the login page with these credentials.</p>
+              <p className="text-xs text-green-600 mt-1">The team member can sign in at the login page with these credentials.</p>
             </div>
           )}
         </div>
@@ -194,7 +219,7 @@ export default function StaffManagementView({ slug }: Props) {
         {/* Staff list */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <div className="px-4 md:px-6 py-4 border-b border-gray-200 bg-gray-50">
-            <h2 className="text-lg font-semibold text-gray-700">Staff Members ({allMembers.length})</h2>
+            <h2 className="text-lg font-semibold text-gray-700">Team Members ({allMembers.length})</h2>
           </div>
 
           {loading ? (
@@ -240,7 +265,7 @@ export default function StaffManagementView({ slug }: Props) {
                         {member.createdAt ? new Date(member.createdAt).toLocaleDateString() : '—'}
                       </td>
                       <td className="px-4 md:px-6 py-3 text-right">
-                        {member.role === 'owner' ? (
+                        {member.clerkUserId === currentUser?.id ? (
                           <span className="text-xs text-gray-300 italic">You</span>
                         ) : confirmRemove === member.clerkUserId ? (
                           <div className="flex items-center justify-end gap-2">
@@ -277,8 +302,8 @@ export default function StaffManagementView({ slug }: Props) {
         </div>
 
         <p className="mt-4 text-xs text-gray-400">
-          Staff accounts are created directly with email + password. Share credentials securely with the staff member.
-          For owner accounts, use the set-user-tenant.ts script.
+          Accounts are created directly with email + password. Owners have full access (staff management, menu editing, reports).
+          At least one owner must always remain.
         </p>
       </div>
     </div>

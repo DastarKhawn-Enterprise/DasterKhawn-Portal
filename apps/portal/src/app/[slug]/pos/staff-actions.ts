@@ -88,9 +88,15 @@ export async function getStaffList(slug: string): Promise<StaffListResult> {
   }
 }
 
+const PERMISSIONS_BY_ROLE = {
+  staff: [...PERMISSIONS.staff],
+  owner: [...PERMISSIONS.owner],
+} as const;
+
 export async function createStaffAccount(
   slug: string,
   email: string,
+  role: 'staff' | 'owner' = 'staff',
   password?: string,
 ): Promise<{ success: boolean; error?: string; credentials?: { email: string; password: string } }> {
   try {
@@ -103,7 +109,7 @@ export async function createStaffAccount(
     const client = await clerkClient();
     const existing = await client.users.getUserList({ emailAddress: [email] });
 
-    const staffPermissions = [...PERMISSIONS.staff];
+    const permissions = [...PERMISSIONS_BY_ROLE[role]];
     const finalPassword = password || generatePassword();
 
     if (existing.data.length > 0) {
@@ -111,28 +117,26 @@ export async function createStaffAccount(
       await client.users.updateUser(targetUserId, {
         publicMetadata: {
           tenant_id: tenant.id,
-          role: 'staff',
-          permissions: staffPermissions,
+          role,
+          permissions,
         },
       });
-      const result = await addStaffRole(targetUserId, tenant.id, 'staff', staffPermissions);
+      const result = await addStaffRole(targetUserId, tenant.id, role, permissions);
       if (!result.success) return { success: false, error: result.error };
       return { success: true };
     }
 
-    // NOTE: This same direct-creation pattern should be used for owner accounts
-    // (Path B, ARCHITECTURE.md §6 — new business signup) when that feature is built.
     const created = await client.users.createUser({
       emailAddress: [email],
       password: finalPassword,
       publicMetadata: {
         tenant_id: tenant.id,
-        role: 'staff',
-        permissions: staffPermissions,
+        role,
+        permissions,
       },
     });
 
-    const result = await addStaffRole(created.id, tenant.id, 'staff', staffPermissions);
+    const result = await addStaffRole(created.id, tenant.id, role, permissions);
     if (!result.success) return { success: false, error: result.error };
 
     return {
@@ -155,13 +159,23 @@ export async function removeStaff(
     const tenant = await getTenantBySlug(slug);
     if (!tenant) return { success: false, error: 'Tenant not found' };
 
+    // Prevent removing the last owner
+    const allRows = await getStaffByTenant(tenant.id);
+    const target = allRows.find((r) => r.clerk_user_id === clerkUserId);
+    if (target?.role === 'owner') {
+      const ownerCount = allRows.filter((r) => r.role === 'owner').length;
+      if (ownerCount <= 1) {
+        return { success: false, error: 'Cannot remove the last owner. At least one owner must remain.' };
+      }
+    }
+
     const client = await clerkClient();
     try {
       await client.users.updateUser(clerkUserId, {
         publicMetadata: { tenant_id: null, role: null, permissions: null },
       });
     } catch {
-      // User might not exist (invite not accepted yet) — ignore
+      // User might not exist — ignore
     }
 
     return await removeStaffRole(clerkUserId, tenant.id);
