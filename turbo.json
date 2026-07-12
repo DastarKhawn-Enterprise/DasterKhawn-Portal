@@ -3,6 +3,13 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": [
+        "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+        "CLERK_SECRET_KEY",
+        "GATEWAY_SUPABASE_URL",
+        "GATEWAY_SUPABASE_ANON_KEY",
+        "GATEWAY_SUPABASE_SERVICE_KEY"
+      ],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"],
       "inputs": ["$TURBO_DEFAULT$", "**/.env.example"]
     },
