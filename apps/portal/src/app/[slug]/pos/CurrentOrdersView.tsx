@@ -162,11 +162,27 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme 
       const client = await getSupabaseClient();
       const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
       const { data: order, error: orderError } = await client
-        .from('orders').insert({ status: 'pending', source: 'pos', total }).select('id, order_number').single();
+        .from('orders').insert({ status: 'pending', source: 'pos', total }).select('id, order_number, created_at').single();
       if (orderError || !order) { console.error('[Checkout]', orderError); setCheckingOut(false); return; }
       const items = cart.map((item) => ({ order_id: order.id, menu_item_id: item.id, quantity: item.quantity, price_at_order: item.price }));
       const { error: itemsError } = await client.from('order_items').insert(items);
       if (itemsError) { console.error('[Checkout items]', itemsError); setCheckingOut(false); return; }
+
+      // Add the new order to the active list immediately (avoids Realtime race with order_items)
+      const newOrder: Order = {
+        id: order.id,
+        order_number: order.order_number,
+        status: 'pending',
+        total,
+        created_at: order.created_at,
+        order_items: cart.map((item) => ({
+          quantity: item.quantity,
+          price_at_order: item.price,
+          menu_items: { name: item.name },
+        })),
+      };
+      setOrders((prev) => [newOrder, ...prev]);
+
       setCart([]);
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
