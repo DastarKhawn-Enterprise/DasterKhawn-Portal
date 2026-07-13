@@ -8,6 +8,7 @@ import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
 import type { SupabaseClient, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import ReceiptView from './ReceiptView';
 import { deductInventory } from './inventory-utils';
+import { updateCustomerLoyalty, searchCustomers } from './customer-utils';
 
 interface TableRecord {
   id: string;
@@ -32,6 +33,7 @@ interface Order {
   total: number;
   tax_amount?: number;
   created_at: string;
+  customer_id?: string | null;
   order_items: OrderItem[];
 }
 
@@ -87,6 +89,12 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
 
   // Settings (tax, currency, footer)
   const [settings, setSettings] = useState<{ taxEnabled: boolean; taxRate: number; currencySymbol: string; footerText: string } | null>(null);
+
+  // Customer linking for new orders
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customerResults, setCustomerResults] = useState<{ id: string; name: string; phone: string | null }[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string; phone: string | null } | null>(null);
+  const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
 
   const getSupabaseClient = useCallback(async () => {
     const token = await getToken({ template: 'supabase' });
@@ -208,6 +216,22 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
     return () => { cancelled = true; };
   }, [authReady, getSupabaseClient]);
 
+  // Customer search debounce
+  useEffect(() => {
+    if (!authReady) return;
+    const timer = setTimeout(async () => {
+      if (!customerSearch.trim()) { setCustomerResults([]); return; }
+      setCustomerSearchLoading(true);
+      try {
+        const client = await getSupabaseClient();
+        const results = await searchCustomers(client, customerSearch);
+        setCustomerResults(results);
+      } catch (e) {}
+      setCustomerSearchLoading(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [customerSearch, authReady, getSupabaseClient]);
+
   const handleSelectTable = useCallback((table: TableRecord) => {
     setCart([]);
     setTableOrder(null);
@@ -269,7 +293,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
       const total = subtotal + taxAmount;
       const { data: order, error: orderError } = await client
         .from('orders')
-        .insert({ status: 'pending', source: 'pos', total, tax_amount: taxAmount, table_id: selectedTable.id })
+        .insert({ status: 'pending', source: 'pos', total, tax_amount: taxAmount, table_id: selectedTable.id, customer_id: selectedCustomer?.id || null })
         .select('id, order_number, created_at')
         .single();
       if (orderError || !order) { console.error('[DineIn Checkout]', orderError); setCheckingOut(false); return; }
@@ -295,6 +319,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
         total,
         tax_amount: taxAmount,
         created_at: order.created_at,
+        customer_id: selectedCustomer?.id || null,
         order_items: cart.map((item) => ({
           menu_item_id: item.id,
           quantity: item.quantity,
@@ -304,9 +329,12 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
       };
       setTableOrder(newOrder);
       setCart([]);
+      setSelectedCustomer(null);
+      setCustomerSearch('');
+      setCustomerResults([]);
     } catch (e) { console.error('[DineIn Checkout]', e); }
     setCheckingOut(false);
-  }, [cart, selectedTable, settings, getSupabaseClient]);
+  }, [cart, selectedTable, selectedCustomer, settings, getSupabaseClient]);
 
   // Status update for occupied table — also reverts table on completed/cancelled
   const handleUpdateStatus = useCallback(async (orderId: string, newStatus: string) => {
@@ -316,6 +344,18 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
       const client = await getSupabaseClient();
       const { error } = await client.from('orders').update({ status: newStatus }).eq('id', orderId);
       if (error) { console.error('[DineIn Status]', error.message); setUpdating(null); return; }
+
+      // Award loyalty points when order is completed and linked to a customer
+      if (newStatus === 'completed') {
+        const { data: completedOrder } = await client
+          .from('orders')
+          .select('customer_id, total')
+          .eq('id', orderId)
+          .single();
+        if (completedOrder?.customer_id) {
+          await updateCustomerLoyalty(client, completedOrder.customer_id, Number(completedOrder.total));
+        }
+      }
 
       if (newStatus === 'completed' || newStatus === 'cancelled') {
         await client.from('tables').update({ status: 'available', current_order_id: null }).eq('id', selectedTable.id);
@@ -492,6 +532,45 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
                   >
                     Reserve Table
                   </button>
+                </div>
+                {/* Customer linking */}
+                <div className="px-4 py-3 border-b border-gray-200">
+                  {selectedCustomer ? (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs text-gray-400">Customer</span>
+                        <p className="text-sm font-medium text-gray-800">{selectedCustomer.name}</p>
+                        {selectedCustomer.phone && <p className="text-xs text-gray-500">{selectedCustomer.phone}</p>}
+                      </div>
+                      <button onClick={() => { setSelectedCustomer(null); setCustomerSearch(''); setCustomerResults([]); }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Link Customer (optional)</label>
+                      <input
+                        type="text"
+                        value={customerSearch}
+                        onChange={(e) => setCustomerSearch(e.target.value)}
+                        placeholder="Search by name or phone..."
+                        className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                      />
+                      {customerSearchLoading && <p className="text-xs text-gray-400 mt-1">Searching...</p>}
+                      {customerResults.length > 0 && (
+                        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-40 overflow-y-auto">
+                          {customerResults.map((r) => (
+                            <button
+                              key={r.id}
+                              onClick={() => { setSelectedCustomer(r); setCustomerSearch(''); setCustomerResults([]); }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                            >
+                              <span className="font-medium text-gray-800">{r.name}</span>
+                              {r.phone && <span className="text-gray-400 ml-2">{r.phone}</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {menuItems.length > 0 ? (
                   <MenuGrid menuItems={menuItems} onAddToCart={handleAddToCart} theme={theme} />

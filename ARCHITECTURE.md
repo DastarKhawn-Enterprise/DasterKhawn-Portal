@@ -219,13 +219,42 @@ packages/
 3. ✅ One brand as test tenant — Bao-G connected end-to-end
 4. ✅ Build POS as packages/pos-ui — reusable, theme-driven
 5. ✅ Prove end-to-end with tenant #1 — order flow, staff login, admin view
-6. ✅ Add auth gating + role-based RLS + dashboard landing
-7. ⬜ Staff invite UI + full admin dashboard (tenant management, theme editor, revenue tab)
-8. ⬜ Add tenant #2 — config only, no new code
+6. ✅ Auth gating + role-based RLS + dashboard landing
+7. ✅ Staff management UI — create accounts with role selector, last-owner guard
+8. ✅ Admin dashboard — tenant listing, suspend/activate, theme editor, revenue tab
+9. ✅ Kitchen view — real-time status updates via subscriptions
+10. ✅ Dine In — floor plan, table management, real-time sync
+11. ✅ Take Away / Delivery / Drive Thru order types
+12. ✅ Menu Management — CRUD with ingredient linking
+13. ✅ Reports — date range, summary, breakdown, top items, CSS bar chart
+14. ✅ Print Bill — receipt modal with `@page` print styling
+15. ✅ Edit Order — delete+insert pattern with recalculated totals
+16. ✅ Mobile responsiveness
+17. ✅ Settings — tax toggle/rate, currency symbol, receipt footer
+18. ✅ Inventory — full CRUD, stock adjustments, low-stock alerts, auto-deduct on checkout
+19. ✅ Customers — list, search, profile panel, add/edit, loyalty points
+20. ✅ Customer linking in checkout — search existing or save new walk-in
+21. ⬜ Onboard tenant #2 — config only, no new code
+
+## Key Decisions
+
+- Gateway SDK uses service key because RLS blocks anon on gateway `tenants`. Server-only import prevents exposure.
+- POS UI defines own `ThemeConfig` locally to avoid importing `server-only`-guarded gateway-sdk types.
+- `global.headers` (pre-fetched token) used instead of supabase-js `accessToken` callback.
+- Admin dashboard is client component + server actions.
+- Staff accounts created via direct `clerkClient.users.createUser()` (not invitations) — Clerk invitation flow discarded because `createInvitation({ publicMetadata })` never propagated metadata on signup.
+- Password: manual entry only. `skipPasswordChecks: true` bypasses zxcvbn + breach checks.
+- Custom Clerk JWT template "supabase" injects `tenant_role` and `permissions` claims.
+- Frontend permission gates use shared `hasPermission()` utility checking both `permissions.includes()` and `tenant_role === 'super_admin'`.
+- Reports use pure CSS bar chart (no recharts).
+- Inventory + Customers RLS reuse existing `has_permission(text)` PostgreSQL function (not raw JWT operators).
+- Loyalty points awarded client-side on order completion (status → 'completed'), not via DB trigger.
 
 ## Next Steps
 
 - **Multi-tenant** — Onboard a second brand tenant (config only, no new code).
+- Get console output for receipt tax line, fix, remove debug code.
+- Possibly add "Skip to POS" link on dashboard for super_admin users.
 
 ## 12. Hosting & Cost (Free-Tier Plan)
 

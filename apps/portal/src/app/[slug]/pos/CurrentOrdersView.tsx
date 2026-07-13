@@ -8,6 +8,7 @@ import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
 import type { SupabaseClient, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import ReceiptView from './ReceiptView';
 import { deductInventory } from './inventory-utils';
+import { updateCustomerLoyalty, searchCustomers } from './customer-utils';
 
 interface OrderItem {
   menu_item_id: string;
@@ -27,6 +28,7 @@ interface Order {
   customer_name?: string | null;
   customer_phone?: string | null;
   pickup_time?: string | null;
+  customer_id?: string | null;
   order_items: OrderItem[];
 }
 
@@ -74,7 +76,7 @@ const statusColor: Record<string, string> = {
   cancelled: 'bg-red-100 text-red-800 border-red-300',
 };
 
-const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, created_at, order_type, customer_name, customer_phone, pickup_time, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
+const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
 
 export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme, brandName, viewConfig }: Props) {
   const cfg: ViewConfig = { title: 'Active Orders', orderType: null, showCustomerFields: false, ...viewConfig };
@@ -110,6 +112,13 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
 
   // Settings (tax, currency, footer)
   const [settings, setSettings] = useState<{ taxEnabled: boolean; taxRate: number; currencySymbol: string; footerText: string } | null>(null);
+
+  // Customer linking for new orders
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customerResults, setCustomerResults] = useState<{ id: string; name: string; phone: string | null }[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string; phone: string | null } | null>(null);
+  const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
 
   const isScoped = cfg.orderType !== null;
   const effectiveOrderType: string = cfg.orderType || selectedOrderType;
@@ -177,6 +186,22 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
     })();
     return () => { cancelled = true; };
   }, [authReady, getSupabaseClient]);
+
+  // Customer search debounce
+  useEffect(() => {
+    if (!authReady) return;
+    const timer = setTimeout(async () => {
+      if (!customerSearch.trim()) { setCustomerResults([]); return; }
+      setCustomerSearchLoading(true);
+      try {
+        const client = await getSupabaseClient();
+        const results = await searchCustomers(client, customerSearch);
+        setCustomerResults(results);
+      } catch (e) {}
+      setCustomerSearchLoading(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [customerSearch, authReady, getSupabaseClient]);
 
   // Fetch orders + realtime
   const fetchOrderWithItems = useCallback(async (client: SupabaseClient, orderId: string) => {
@@ -302,7 +327,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
         ? cfg.showCustomerFields
         : effectiveOrderType !== 'dine_in';
 
-      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total, tax_amount: taxAmount, order_type: effectiveOrderType };
+      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total, tax_amount: taxAmount, order_type: effectiveOrderType, customer_id: selectedCustomer?.id || null };
       if (shouldCaptureCustomer) {
         if (customerName) orderPayload.customer_name = customerName;
         if (customerPhone) orderPayload.customer_phone = customerPhone;
@@ -337,6 +362,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
         tax_amount: taxAmount,
         created_at: order.created_at,
         order_type: effectiveOrderType,
+        customer_id: selectedCustomer?.id || null,
         customer_name: shouldCaptureCustomer ? (customerName || null) : undefined,
         customer_phone: shouldCaptureCustomer ? (customerPhone || null) : undefined,
         pickup_time: shouldCaptureCustomer && effectiveOrderType === 'takeaway' ? pickupTime : undefined,
@@ -350,10 +376,13 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
       setOrders((prev) => [newOrder, ...prev]);
       setCart([]);
       setSelectedTableId(null);
+      setSelectedCustomer(null);
+      setCustomerSearch('');
+      setCustomerResults([]);
       resetCustomerFields();
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
-  }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, settings, getSupabaseClient, resetCustomerFields]);
+  }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, getSupabaseClient, resetCustomerFields]);
 
   // Status update
   const updateStatus = useCallback(async (orderId: string, newStatus: string) => {
@@ -362,6 +391,19 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
       const client = await getSupabaseClient();
       const { error } = await client.from('orders').update({ status: newStatus }).eq('id', orderId);
       if (error) { console.error('[Status]', error.message); setUpdating(null); return; }
+
+      // Award loyalty points when order is completed and linked to a customer
+      if (newStatus === 'completed') {
+        const { data: completedOrder } = await client
+          .from('orders')
+          .select('customer_id, total')
+          .eq('id', orderId)
+          .single();
+        if (completedOrder?.customer_id) {
+          await updateCustomerLoyalty(client, completedOrder.customer_id, Number(completedOrder.total));
+        }
+      }
+
       if (newStatus === 'completed' || newStatus === 'cancelled') {
         setOrders((prev) => prev.filter((o) => o.id !== orderId));
         setSelectedId((prev) => (prev === orderId ? null : prev));
@@ -786,6 +828,76 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
               </div>
             </div>
           )}
+          {/* Customer linking */}
+          <div className="px-4 py-3 border-b border-gray-200">
+            {selectedCustomer ? (
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-gray-400">Customer</span>
+                  <p className="text-sm font-medium text-gray-800">{selectedCustomer.name}</p>
+                  {selectedCustomer.phone && <p className="text-xs text-gray-500">{selectedCustomer.phone}</p>}
+                </div>
+                <button onClick={() => { setSelectedCustomer(null); setCustomerSearch(''); setCustomerResults([]); }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+              </div>
+            ) : (
+              <div className="relative">
+                <label className="block text-xs font-medium text-gray-600 mb-1">Link Customer (optional)</label>
+                <input
+                  type="text"
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  placeholder="Search by name or phone..."
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                />
+                {customerSearchLoading && <p className="text-xs text-gray-400 mt-1">Searching...</p>}
+                {customerResults.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-40 overflow-y-auto">
+                    {customerResults.map((r) => (
+                      <button
+                        key={r.id}
+                        onClick={() => { setSelectedCustomer(r); setCustomerSearch(''); setCustomerResults([]); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                      >
+                        <span className="font-medium text-gray-800">{r.name}</span>
+                        {r.phone && <span className="text-gray-400 ml-2">{r.phone}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Save as customer suggestion for walk-in name/phone */}
+            {!selectedCustomer && customerName.trim() && (
+              <button
+                onClick={async () => {
+                  try {
+                    const client = await getSupabaseClient();
+                    const { data: existing } = await client
+                      .from('customers')
+                      .select('id')
+                      .or(`name.eq.${customerName.replace(/'/g, "''")}${customerPhone ? `,phone.eq.${customerPhone.replace(/'/g, "''")}` : ''}`)
+                      .limit(1);
+                    let custId: string;
+                    if (existing && existing.length > 0) {
+                      custId = existing[0].id;
+                    } else {
+                      const { data: newCust } = await client
+                        .from('customers')
+                        .insert({ name: customerName, phone: customerPhone || null })
+                        .select('id')
+                        .single();
+                      if (!newCust) return;
+                      custId = newCust.id;
+                    }
+                    setSelectedCustomer({ id: custId, name: customerName, phone: customerPhone || null });
+                  } catch (e) { console.error('Save customer error', e); }
+                }}
+                className="w-full mt-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium text-left"
+              >
+                + Save "{customerName}" as customer
+              </button>
+            )}
+          </div>
           {menuItems.length > 0 ? (
             <MenuGrid menuItems={menuItems} onAddToCart={handleAddToCart} theme={theme} />
           ) : (

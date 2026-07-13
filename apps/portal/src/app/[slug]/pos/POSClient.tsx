@@ -13,6 +13,7 @@ import ReportsView from './ReportsView';
 import StaffManagementView from './StaffManagementView';
 import SettingsView from './SettingsView';
 import InventoryView from './InventoryView';
+import CustomersView from './CustomersView';
 import type { ViewId as StaffViewId } from './Sidebar';
 
 interface POSClientProps {
@@ -91,7 +92,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
       case 'inventory':
         return <InventoryView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
       case 'customers':
-        return placeholder('Customers');
+        return <CustomersView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
       case 'reports':
         return <ReportsView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
       case 'expenses':
