@@ -90,6 +90,11 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
   // Settings (tax, currency, footer)
   const [settings, setSettings] = useState<{ taxEnabled: boolean; taxRate: number; currencySymbol: string; footerText: string } | null>(null);
 
+  // Menu search
+  const [menuSearch, setMenuSearch] = useState('');
+  const [mostOrderedItems, setMostOrderedItems] = useState<MenuItem[]>([]);
+  const [mostOrderedLoading, setMostOrderedLoading] = useState(false);
+
   // Customer linking for new orders
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerResults, setCustomerResults] = useState<{ id: string; name: string; phone: string | null }[]>([]);
@@ -212,6 +217,40 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
           footerText: data.receipt_footer_text,
         });
       } catch (e) {}
+    })();
+    return () => { cancelled = true; };
+  }, [authReady, getSupabaseClient]);
+
+  // Fetch most ordered items
+  useEffect(() => {
+    if (!authReady) return;
+    let cancelled = false;
+    (async () => {
+      setMostOrderedLoading(true);
+      try {
+        const client = await getSupabaseClient();
+        const { data } = await client
+          .from('order_items')
+          .select('menu_item_id, quantity, menu_items!inner(id, name, description, price, category, available)')
+          .limit(5000);
+        if (cancelled || !data) return;
+        const grouped = new Map<string, { item: MenuItem; qty: number }>();
+        for (const row of data) {
+          const mi = (row.menu_items as any);
+          if (mi?.available === false) continue;
+          const key = mi.id;
+          const prev = grouped.get(key) || { item: mi as unknown as MenuItem, qty: 0 };
+          prev.qty += row.quantity;
+          grouped.set(key, prev);
+        }
+        setMostOrderedItems(
+          Array.from(grouped.values())
+            .sort((a, b) => b.qty - a.qty)
+            .slice(0, 10)
+            .map((entry) => ({ id: entry.item.id, name: entry.item.name, description: entry.item.description, price: entry.item.price, category: entry.item.category, available: entry.item.available }))
+        );
+      } catch (e) { console.error('[MostOrdered]', e); }
+      setMostOrderedLoading(false);
     })();
     return () => { cancelled = true; };
   }, [authReady, getSupabaseClient]);
@@ -573,7 +612,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
                   )}
                 </div>
                 {menuItems.length > 0 ? (
-                  <MenuGrid menuItems={menuItems} onAddToCart={handleAddToCart} theme={theme} />
+                  <MenuGrid menuItems={menuItems} onAddToCart={handleAddToCart} theme={theme} currencySymbol={settings?.currencySymbol} searchQuery={menuSearch} onSearchChange={setMenuSearch} mostOrderedItems={mostOrderedItems} />
                 ) : (
                   <div className="flex-1 flex items-center justify-center"><p className="text-gray-400">Loading menu...</p></div>
                 )}
@@ -584,6 +623,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
                   onCheckout={handleCheckout}
                   disabled={cart.length === 0 || checkingOut}
                   theme={theme}
+                  currencySymbol={settings?.currencySymbol}
                 />
               </>
             )}

@@ -10,6 +10,7 @@ interface CartSidebarProps {
   onCheckout: () => void;
   disabled: boolean;
   theme: ThemeConfig;
+  currencySymbol?: string;
 }
 
 export default function CartSidebar({
@@ -19,6 +20,7 @@ export default function CartSidebar({
   onCheckout,
   disabled,
   theme,
+  currencySymbol,
 }: CartSidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopOpen, setDesktopOpen] = useState(true);
@@ -47,7 +49,7 @@ export default function CartSidebar({
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate">{item.name}</div>
               <div className="text-xs" style={{ color: theme.primaryColor }}>
-                ${(item.price * item.quantity).toFixed(2)}
+                {currencySymbol || '$'}{(item.price * item.quantity).toFixed(2)}
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -77,7 +79,7 @@ export default function CartSidebar({
       <div className="p-4 border-t" style={{ borderColor: theme.secondaryColor + '20' }}>
         <div className="flex justify-between font-bold mb-3">
           <span>Total</span>
-          <span>${total.toFixed(2)}</span>
+          <span>{currencySymbol || '$'}{total.toFixed(2)}</span>
         </div>
         <CheckoutButton onCheckout={onCheckout} disabled={disabled} theme={theme} />
       </div>
@@ -115,7 +117,7 @@ export default function CartSidebar({
           className="md:hidden fixed bottom-4 right-4 z-30 flex items-center gap-2 px-4 py-3 rounded-full text-white text-sm font-bold shadow-lg"
           style={{ backgroundColor: theme.primaryColor }}
         >
-          🛒 {itemCount} item{itemCount !== 1 ? 's' : ''} · ${total.toFixed(2)}
+          🛒 {itemCount} item{itemCount !== 1 ? 's' : ''} · {currencySymbol || '$'}{total.toFixed(2)}
         </button>
       )}
 
