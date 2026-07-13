@@ -12,6 +12,7 @@ import MenuManagementView from './MenuManagementView';
 import ReportsView from './ReportsView';
 import StaffManagementView from './StaffManagementView';
 import SettingsView from './SettingsView';
+import InventoryView from './InventoryView';
 import type { ViewId as StaffViewId } from './Sidebar';
 
 interface POSClientProps {
@@ -48,7 +49,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
     if (role === 'super_admin') return [];
     const hidden: ViewId[] = [];
     if (!perms.includes('staff:manage')) hidden.push('staff');
-    if (!perms.includes('menu:edit')) hidden.push('menu');
+    if (!perms.includes('menu:edit')) { hidden.push('menu'); hidden.push('inventory'); }
     if (!perms.includes('reports:view')) hidden.push('reports');
     if (!perms.includes('settings:edit')) hidden.push('settings');
     return hidden;
@@ -88,7 +89,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
       case 'menu':
         return <MenuManagementView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
       case 'inventory':
-        return placeholder('Inventory');
+        return <InventoryView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
       case 'customers':
         return placeholder('Customers');
       case 'reports':

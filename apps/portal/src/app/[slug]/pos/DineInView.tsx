@@ -7,6 +7,7 @@ import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
 import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
 import type { SupabaseClient, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import ReceiptView from './ReceiptView';
+import { deductInventory } from './inventory-utils';
 
 interface TableRecord {
   id: string;
@@ -276,6 +277,9 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
       const items = cart.map((item) => ({ order_id: order.id, menu_item_id: item.id, quantity: item.quantity, price_at_order: item.price }));
       const { error: itemsError } = await client.from('order_items').insert(items);
       if (itemsError) { console.error('[DineIn Items]', itemsError); setCheckingOut(false); return; }
+
+      // Deduct inventory for linked ingredients
+      await deductInventory(client, cart).catch((e) => console.error('[DineIn Inventory deduct]', e));
 
       // Update table to occupied
       await client.from('tables').update({ status: 'occupied', current_order_id: order.id }).eq('id', selectedTable.id);

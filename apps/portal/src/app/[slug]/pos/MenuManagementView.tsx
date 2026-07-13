@@ -48,6 +48,11 @@ export default function MenuManagementView({ supabaseUrl, supabaseAnonKey, theme
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<MenuItemRecord | null>(null);
 
+  // Ingredients (edit only)
+  const [ingredients, setIngredients] = useState<{ inventory_item_id: string; inventory_name: string; quantity_used: number }[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<{ id: string; name: string; unit: string }[]>([]);
+  const [ingLoadError, setIngLoadError] = useState('');
+
   const getSupabaseClient = useCallback(async () => {
     const token = await getToken({ template: 'supabase' });
     if (!token) throw new Error('No auth token');
@@ -96,12 +101,41 @@ export default function MenuManagementView({ supabaseUrl, supabaseAnonKey, theme
   // Group by category
   const categories = [...new Set(items.map((i) => i.category ?? 'Uncategorized'))].sort();
 
+  // Fetch inventory items for ingredient dropdown
+  const fetchInventoryItems = useCallback(async () => {
+    try {
+      const client = await getSupabaseClient();
+      const { data } = await client.from('inventory_items').select('id, name, unit').order('name');
+      if (data) setInventoryItems(data as { id: string; name: string; unit: string }[]);
+    } catch (e) {}
+  }, [getSupabaseClient]);
+
+  // Fetch ingredients for a menu item
+  const fetchIngredients = useCallback(async (menuItemId: string) => {
+    try {
+      const client = await getSupabaseClient();
+      const { data } = await client
+        .from('menu_item_ingredients')
+        .select('inventory_item_id, quantity_used, inventory_items!inner(name)')
+        .eq('menu_item_id', menuItemId);
+      if (data) {
+        setIngredients(data.map((r: any) => ({
+          inventory_item_id: r.inventory_item_id,
+          inventory_name: r.inventory_items?.name || 'Unknown',
+          quantity_used: Number(r.quantity_used),
+        })));
+      }
+    } catch (e) { setIngLoadError('Failed to load ingredients'); }
+  }, [getSupabaseClient]);
+
   // Open add form
   const handleAdd = useCallback(() => {
     setEditId(null);
     setForm({ ...defaultForm });
     setNewCategory('');
     setUseNewCategory(false);
+    setIngredients([]);
+    setIngLoadError('');
     setShowForm(true);
   }, []);
 
@@ -111,8 +145,12 @@ export default function MenuManagementView({ supabaseUrl, supabaseAnonKey, theme
     setForm({ name: item.name, description: item.description, price: item.price, category: item.category, available: item.available });
     setNewCategory('');
     setUseNewCategory(false);
+    setIngLoadError('');
+    setIngredients([]);
     setShowForm(true);
-  }, []);
+    fetchInventoryItems();
+    fetchIngredients(item.id);
+  }, [fetchInventoryItems, fetchIngredients]);
 
   // Save item
   const handleSave = useCallback(async () => {
@@ -131,16 +169,38 @@ export default function MenuManagementView({ supabaseUrl, supabaseAnonKey, theme
       if (editId) {
         const { error } = await client.from('menu_items').update(payload).eq('id', editId);
         if (error) { console.error('[Menu] update error', error); setSaving(false); return; }
+
+        // Save ingredients: delete all then re-insert
+        await client.from('menu_item_ingredients').delete().eq('menu_item_id', editId);
+        if (ingredients.length > 0) {
+          const ingRows = ingredients.map((ing) => ({
+            menu_item_id: editId,
+            inventory_item_id: ing.inventory_item_id,
+            quantity_used: ing.quantity_used,
+          }));
+          const { error: ingErr } = await client.from('menu_item_ingredients').insert(ingRows);
+          if (ingErr) console.error('[Menu] ingredient save error', ingErr);
+        }
       } else {
-        const { error } = await client.from('menu_items').insert(payload);
+        const { data: inserted, error } = await client.from('menu_items').insert(payload).select('id').single();
         if (error) { console.error('[Menu] insert error', error); setSaving(false); return; }
+
+        // Save ingredients for new item
+        if (inserted && ingredients.length > 0) {
+          const ingRows = ingredients.map((ing) => ({
+            menu_item_id: inserted.id,
+            inventory_item_id: ing.inventory_item_id,
+            quantity_used: ing.quantity_used,
+          }));
+          await client.from('menu_item_ingredients').insert(ingRows);
+        }
       }
 
       setShowForm(false);
       fetchItems();
     } catch (e) { console.error('[Menu] save error', e); }
     setSaving(false);
-  }, [form, editId, useNewCategory, newCategory, getSupabaseClient, fetchItems]);
+  }, [form, editId, useNewCategory, newCategory, ingredients, getSupabaseClient, fetchItems]);
 
   // Delete item
   const handleDelete = useCallback(async () => {
@@ -350,6 +410,67 @@ export default function MenuManagementView({ supabaseUrl, supabaseAnonKey, theme
                 <label htmlFor="avail-check" className="text-sm text-gray-700">Available</label>
               </div>
             </div>
+            {/* Ingredients section */}
+            <div className="mt-5 pt-4 border-t border-gray-200">
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">Ingredients</h4>
+              {inventoryItems.length === 0 ? (
+                <p className="text-xs text-gray-400">Add inventory items first in the Inventory section</p>
+              ) : ingredients.length === 0 ? (
+                <p className="text-xs text-gray-400">No ingredients linked yet</p>
+              ) : (
+                <div className="space-y-1.5 mb-3">
+                  {ingredients.map((ing, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-sm">
+                      <span className="flex-1 text-gray-700">{ing.inventory_name}</span>
+                      <span className="text-gray-500">×</span>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={ing.quantity_used}
+                        onChange={(e) => {
+                          const qty = parseFloat(e.target.value) || 0;
+                          setIngredients((prev) => prev.map((x, i) => (i === idx ? { ...x, quantity_used: qty } : x)));
+                        }}
+                        className="w-16 px-2 py-1 border border-gray-300 rounded text-xs text-right"
+                      />
+                      {canEdit && (
+                        <button
+                          onClick={() => setIngredients((prev) => prev.filter((_, i) => i !== idx))}
+                          className="text-red-500 hover:text-red-700 text-xs px-1"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {canEdit && inventoryItems.length > 0 && (
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!val) return;
+                    const inv = inventoryItems.find((iv) => iv.id === val);
+                    if (inv && !ingredients.some((x) => x.inventory_item_id === val)) {
+                      setIngredients((prev) => [...prev, { inventory_item_id: inv.id, inventory_name: inv.name, quantity_used: 1 }]);
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                >
+                  <option value="">+ Add ingredient...</option>
+                  {inventoryItems
+                    .filter((inv) => !ingredients.some((x) => x.inventory_item_id === inv.id))
+                    .map((inv) => (
+                      <option key={inv.id} value={inv.id}>{inv.name} ({inv.unit})</option>
+                    ))}
+                </select>
+              )}
+            </div>
+
+            {ingLoadError && <p className="text-red-600 text-xs mt-1">{ingLoadError}</p>}
+
             <div className="flex justify-end gap-2 mt-6">
               <button
                 onClick={() => setShowForm(false)}
