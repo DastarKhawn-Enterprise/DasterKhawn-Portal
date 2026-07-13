@@ -42,6 +42,12 @@ export default function ReceiptView({ data, brandName, theme, onClose, footerTex
   }, []);
 
   const subtotal = data.items.reduce((s, i) => s + i.price * i.quantity, 0);
+
+  // DEBUG: log the exact values driving the tax conditional
+  console.log('[ReceiptView DEBUG] data.taxAmount:', data.taxAmount, 'typeof:', typeof data.taxAmount);
+  console.log('[ReceiptView DEBUG] subtotal:', subtotal, 'total:', data.total);
+  console.log('[ReceiptView DEBUG] full data object:', JSON.stringify(data, null, 2));
+
   const content = receiptContent(brandName, theme, data, subtotal, footerText, currencySymbol);
 
   return (
@@ -173,12 +179,10 @@ function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData
           <span>Subtotal</span>
           <span>{curr}{subtotal.toFixed(2)}</span>
         </div>
-        {tax > 0 && (
-          <div className="flex justify-between text-gray-500">
-            <span>Tax</span>
-            <span>{curr}{tax.toFixed(2)}</span>
-          </div>
-        )}
+        <div className="flex justify-between text-gray-500">
+          <span>Tax</span>
+          <span>{curr}{tax.toFixed(2)} (raw: {JSON.stringify(data.taxAmount)} / {JSON.stringify(tax)})</span>
+        </div>
         <div className="flex justify-between font-bold text-sm border-t border-gray-300 pt-1">
           <span>Total</span>
           <span>{curr}{data.total.toFixed(2)}</span>
