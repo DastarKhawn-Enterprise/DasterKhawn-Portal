@@ -18,37 +18,15 @@ CREATE TABLE IF NOT EXISTS menu_item_ingredients (
 ALTER TABLE inventory_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE menu_item_ingredients ENABLE ROW LEVEL SECURITY;
 
--- RLS: SELECT for all authenticated users
-CREATE POLICY inventory_items_select ON inventory_items
-  FOR SELECT TO authenticated USING (true);
+-- Reuse existing has_permission() PostgreSQL function (defined in earlier migration)
+-- which checks auth.jwt() -> 'permissions' and tenant_role = 'super_admin'
 
--- RLS: INSERT/UPDATE/DELETE for users with menu:edit permission
-CREATE POLICY inventory_items_insert ON inventory_items
-  FOR INSERT TO authenticated
-  WITH CHECK ((auth.jwt() -> 'permissions') ? 'menu:edit');
+CREATE POLICY "inv_select" ON inventory_items FOR SELECT TO authenticated USING (true);
+CREATE POLICY "inv_insert" ON inventory_items FOR INSERT TO authenticated WITH CHECK (has_permission('menu:edit'));
+CREATE POLICY "inv_update" ON inventory_items FOR UPDATE TO authenticated USING (has_permission('menu:edit')) WITH CHECK (has_permission('menu:edit'));
+CREATE POLICY "inv_delete" ON inventory_items FOR DELETE TO authenticated USING (has_permission('menu:edit'));
 
-CREATE POLICY inventory_items_update ON inventory_items
-  FOR UPDATE TO authenticated
-  USING ((auth.jwt() -> 'permissions') ? 'menu:edit')
-  WITH CHECK ((auth.jwt() -> 'permissions') ? 'menu:edit');
-
-CREATE POLICY inventory_items_delete ON inventory_items
-  FOR DELETE TO authenticated
-  USING ((auth.jwt() -> 'permissions') ? 'menu:edit');
-
--- menu_item_ingredients RLS
-CREATE POLICY menu_ingredients_select ON menu_item_ingredients
-  FOR SELECT TO authenticated USING (true);
-
-CREATE POLICY menu_ingredients_insert ON menu_item_ingredients
-  FOR INSERT TO authenticated
-  WITH CHECK ((auth.jwt() -> 'permissions') ? 'menu:edit');
-
-CREATE POLICY menu_ingredients_update ON menu_item_ingredients
-  FOR UPDATE TO authenticated
-  USING ((auth.jwt() -> 'permissions') ? 'menu:edit')
-  WITH CHECK ((auth.jwt() -> 'permissions') ? 'menu:edit');
-
-CREATE POLICY menu_ingredients_delete ON menu_item_ingredients
-  FOR DELETE TO authenticated
-  USING ((auth.jwt() -> 'permissions') ? 'menu:edit');
+CREATE POLICY "ing_select" ON menu_item_ingredients FOR SELECT TO authenticated USING (true);
+CREATE POLICY "ing_insert" ON menu_item_ingredients FOR INSERT TO authenticated WITH CHECK (has_permission('menu:edit'));
+CREATE POLICY "ing_update" ON menu_item_ingredients FOR UPDATE TO authenticated USING (has_permission('menu:edit')) WITH CHECK (has_permission('menu:edit'));
+CREATE POLICY "ing_delete" ON menu_item_ingredients FOR DELETE TO authenticated USING (has_permission('menu:edit'));
