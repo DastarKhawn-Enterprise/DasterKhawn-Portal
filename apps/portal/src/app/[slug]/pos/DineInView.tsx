@@ -29,6 +29,7 @@ interface Order {
   order_number: number;
   status: string;
   total: number;
+  tax_amount?: number;
   created_at: string;
   order_items: OrderItem[];
 }
@@ -82,6 +83,9 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
   const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
   const [editingOrder, setEditingOrder] = useState(false);
   const [editCart, setEditCart] = useState<CartItem[]>([]);
+
+  // Settings (tax, currency, footer)
+  const [settings, setSettings] = useState<{ taxEnabled: boolean; taxRate: number; currencySymbol: string; footerText: string } | null>(null);
 
   const getSupabaseClient = useCallback(async () => {
     const token = await getToken({ template: 'supabase' });
@@ -170,7 +174,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
     getSupabaseClient()
       .then((client) => client
         .from('orders')
-        .select('id, order_number, status, total, created_at, order_items (menu_item_id, quantity, price_at_order, menu_items (name))')
+        .select('id, order_number, status, total, tax_amount, created_at, order_items (menu_item_id, quantity, price_at_order, menu_items (name))')
         .eq('id', selectedTable.current_order_id)
         .single()
       )
@@ -182,6 +186,26 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
 
     return () => { cancelled = true; };
   }, [selectedTable, getSupabaseClient]);
+
+  // Fetch settings
+  useEffect(() => {
+    if (!authReady) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const client = await getSupabaseClient();
+        const { data } = await client.from('settings').select('tax_enabled, tax_rate, currency_symbol, receipt_footer_text').limit(1).single();
+        if (cancelled || !data) return;
+        setSettings({
+          taxEnabled: data.tax_enabled,
+          taxRate: Number(data.tax_rate),
+          currencySymbol: data.currency_symbol,
+          footerText: data.receipt_footer_text,
+        });
+      } catch (e) {}
+    })();
+    return () => { cancelled = true; };
+  }, [authReady, getSupabaseClient]);
 
   const handleSelectTable = useCallback((table: TableRecord) => {
     setCart([]);
@@ -236,10 +260,15 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
     setCheckingOut(true);
     try {
       const client = await getSupabaseClient();
-      const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      let taxAmount = 0;
+      if (settings?.taxEnabled && settings.taxRate > 0) {
+        taxAmount = subtotal * (settings.taxRate / 100);
+      }
+      const total = subtotal + taxAmount;
       const { data: order, error: orderError } = await client
         .from('orders')
-        .insert({ status: 'pending', source: 'pos', total, table_id: selectedTable.id })
+        .insert({ status: 'pending', source: 'pos', total, tax_amount: taxAmount, table_id: selectedTable.id })
         .select('id, order_number, created_at')
         .single();
       if (orderError || !order) { console.error('[DineIn Checkout]', orderError); setCheckingOut(false); return; }
@@ -260,6 +289,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
         order_number: order.order_number,
         status: 'pending',
         total,
+        tax_amount: taxAmount,
         created_at: order.created_at,
         order_items: cart.map((item) => ({
           menu_item_id: item.id,
@@ -272,7 +302,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
       setCart([]);
     } catch (e) { console.error('[DineIn Checkout]', e); }
     setCheckingOut(false);
-  }, [cart, selectedTable, getSupabaseClient]);
+  }, [cart, selectedTable, settings, getSupabaseClient]);
 
   // Status update for occupied table — also reverts table on completed/cancelled
   const handleUpdateStatus = useCallback(async (orderId: string, newStatus: string) => {
@@ -334,7 +364,12 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
     setUpdating(tableOrder.id);
     try {
       const client = await getSupabaseClient();
-      const total = editCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const subtotal = editCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      let taxAmount = 0;
+      if (settings?.taxEnabled && settings.taxRate > 0) {
+        taxAmount = subtotal * (settings.taxRate / 100);
+      }
+      const total = subtotal + taxAmount;
 
       await client.from('order_items').delete().eq('order_id', tableOrder.id);
       if (editCart.length > 0) {
@@ -346,15 +381,15 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
         }));
         await client.from('order_items').insert(items);
       }
-      await client.from('orders').update({ total }).eq('id', tableOrder.id);
+      await client.from('orders').update({ total, tax_amount: taxAmount }).eq('id', tableOrder.id);
 
       setTableOrder((prev) =>
-        prev ? { ...prev, total, order_items: editCart.map((ci) => ({ menu_item_id: ci.id, quantity: ci.quantity, price_at_order: ci.price, menu_items: { name: ci.name } })) } : prev
+        prev ? { ...prev, total, tax_amount: taxAmount, order_items: editCart.map((ci) => ({ menu_item_id: ci.id, quantity: ci.quantity, price_at_order: ci.price, menu_items: { name: ci.name } })) } : prev
       );
       setEditingOrder(false);
     } catch (e) { console.error('[DineIn Edit Order]', e); }
     setUpdating(null);
-  }, [tableOrder, editCart, getSupabaseClient]);
+  }, [tableOrder, editCart, settings, getSupabaseClient]);
 
   const handleCancelEdit = useCallback(() => {
     setEditingOrder(false);
@@ -590,6 +625,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
           orderNumber: receiptOrder.order_number,
           status: receiptOrder.status,
           total: Number(receiptOrder.total),
+          taxAmount: Number(receiptOrder.tax_amount ?? 0),
           createdAt: receiptOrder.created_at,
           orderType: 'dine_in',
           customerName: null,
@@ -604,6 +640,8 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
         }}
         brandName={brandName}
         theme={theme}
+        footerText={settings?.footerText}
+        currencySymbol={settings?.currencySymbol}
         onClose={() => setReceiptOrder(null)}
       />
     )}

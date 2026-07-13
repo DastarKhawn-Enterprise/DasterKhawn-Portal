@@ -20,6 +20,7 @@ interface ReceiptData {
   pickupTime?: string | null;
   tableNumber?: string | null;
   items: ReceiptItem[];
+  taxAmount?: number;
 }
 
 interface Props {
@@ -27,9 +28,11 @@ interface Props {
   brandName: string;
   theme: ThemeConfig;
   onClose: () => void;
+  footerText?: string;
+  currencySymbol?: string;
 }
 
-export default function ReceiptView({ data, brandName, theme, onClose }: Props) {
+export default function ReceiptView({ data, brandName, theme, onClose, footerText, currencySymbol }: Props) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -39,7 +42,7 @@ export default function ReceiptView({ data, brandName, theme, onClose }: Props) 
   }, []);
 
   const subtotal = data.items.reduce((s, i) => s + i.price * i.quantity, 0);
-  const content = receiptContent(brandName, theme, data, subtotal);
+  const content = receiptContent(brandName, theme, data, subtotal, footerText, currencySymbol);
 
   return (
     <>
@@ -91,7 +94,9 @@ export default function ReceiptView({ data, brandName, theme, onClose }: Props) 
   );
 }
 
-function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData, subtotal: number) {
+function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData, subtotal: number, footerText?: string, currencySymbol?: string) {
+  const curr = currencySymbol || '$';
+  const tax = data.taxAmount ?? 0;
   const orderTypeLabel = data.orderType
     ? ({ dine_in: 'Dine In', takeaway: 'Take Away', delivery: 'Delivery', drive_thru: 'Drive Thru' } as Record<string, string>)[data.orderType] || data.orderType
     : '';
@@ -156,8 +161,8 @@ function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData
             <tr key={i}>
               <td className="py-1">{item.name}</td>
               <td className="text-center py-1">{item.quantity}</td>
-              <td className="text-right py-1">${item.price.toFixed(2)}</td>
-              <td className="text-right py-1 font-medium">${(item.price * item.quantity).toFixed(2)}</td>
+              <td className="text-right py-1">{curr}{item.price.toFixed(2)}</td>
+              <td className="text-right py-1 font-medium">{curr}{(item.price * item.quantity).toFixed(2)}</td>
             </tr>
           ))}
         </tbody>
@@ -166,16 +171,22 @@ function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData
       <div className="border-t border-gray-300 pt-2 space-y-0.5 text-xs">
         <div className="flex justify-between text-gray-500">
           <span>Subtotal</span>
-          <span>${subtotal.toFixed(2)}</span>
+          <span>{curr}{subtotal.toFixed(2)}</span>
         </div>
+        {tax > 0 && (
+          <div className="flex justify-between text-gray-500">
+            <span>Tax</span>
+            <span>{curr}{tax.toFixed(2)}</span>
+          </div>
+        )}
         <div className="flex justify-between font-bold text-sm border-t border-gray-300 pt-1">
           <span>Total</span>
-          <span>${data.total.toFixed(2)}</span>
+          <span>{curr}{data.total.toFixed(2)}</span>
         </div>
       </div>
 
       <div className="text-center mt-4 pt-3 border-t-2 border-dashed border-gray-300 text-xs text-gray-400">
-        <p>Thank you for your order!</p>
+        <p>{footerText || 'Thank you for your order!'}</p>
       </div>
     </div>
   );

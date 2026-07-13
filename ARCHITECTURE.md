@@ -157,7 +157,26 @@ Owner's POS UI has a "Staff" panel:
 - Mirrors assignment into gateway `staff_roles` table.
 - Tenant's Supabase RLS policies check JWT claims.
 
-## 8. Theme Configuration
+## 8. Settings Module
+
+The `settings` table (single-row per tenant) stores:
+
+| Column | Type | Default | Purpose |
+|---|---|---|---|
+| `tax_enabled` | boolean | false | Toggle tax calculation on/off |
+| `tax_rate` | numeric | 0 | Tax percentage (e.g. 10 = 10%) |
+| `currency_symbol` | text | `$` | Display symbol on receipt |
+| `receipt_footer_text` | text | "Thank you for your order!" | Printed at the bottom of receipts |
+
+Tax flow:
+- Checkout computes `subtotal` from cart items, then `taxAmount = subtotal * (taxRate / 100)`, then `total = subtotal + taxAmount`.
+- `total` and `tax_amount` are stored on the `orders` row.
+- Recalculation on edit order also factors in tax.
+- Receipt shows subtotal, tax line (if > 0), and total — all using `currency_symbol`.
+- Receipt footer uses `receipt_footer_text`.
+- Permission gate: `settings:edit` required (owner). Users without it see a read-only view.
+
+## 9. Theme Configuration
 
 `theme_config` uses a constrained token set (no free-form CSS):
 
@@ -206,8 +225,6 @@ packages/
 
 ## Next Steps
 
-- **Staff invite UI** — Owner panel to invite staff via email, set permissions from the fixed whitelist.
-- **Admin dashboard** — Super admin dashboard with tenant list, power switch (suspend/activate), theme editor (constrained token set), and cross-tenant revenue view.
 - **Multi-tenant** — Onboard a second brand tenant (config only, no new code).
 
 ## 12. Hosting & Cost (Free-Tier Plan)

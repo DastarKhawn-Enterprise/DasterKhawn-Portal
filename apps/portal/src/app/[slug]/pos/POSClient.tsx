@@ -11,6 +11,7 @@ import DineInView from './DineInView';
 import MenuManagementView from './MenuManagementView';
 import ReportsView from './ReportsView';
 import StaffManagementView from './StaffManagementView';
+import SettingsView from './SettingsView';
 import type { ViewId as StaffViewId } from './Sidebar';
 
 interface POSClientProps {
@@ -49,6 +50,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
     if (!perms.includes('staff:manage')) hidden.push('staff');
     if (!perms.includes('menu:edit')) hidden.push('menu');
     if (!perms.includes('reports:view')) hidden.push('reports');
+    if (!perms.includes('settings:edit')) hidden.push('settings');
     return hidden;
   }, [user]);
 
@@ -96,7 +98,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
       case 'staff':
         return <StaffManagementView slug={slug} />;
       case 'settings':
-        return placeholder('Settings');
+        return <SettingsView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
       default:
         return placeholder('Unknown');
     }

@@ -20,6 +20,7 @@ interface Order {
   order_number: number;
   status: string;
   total: number;
+  tax_amount?: number;
   created_at: string;
   order_type?: string;
   customer_name?: string | null;
@@ -72,7 +73,7 @@ const statusColor: Record<string, string> = {
   cancelled: 'bg-red-100 text-red-800 border-red-300',
 };
 
-const SELECT_ORDER_FIELDS = 'id, order_number, status, total, created_at, order_type, customer_name, customer_phone, pickup_time, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
+const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, created_at, order_type, customer_name, customer_phone, pickup_time, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
 
 export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme, brandName, viewConfig }: Props) {
   const cfg: ViewConfig = { title: 'Active Orders', orderType: null, showCustomerFields: false, ...viewConfig };
@@ -105,6 +106,9 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
   // Edit order
   const [editingOrder, setEditingOrder] = useState(false);
   const [editCart, setEditCart] = useState<CartItem[]>([]);
+
+  // Settings (tax, currency, footer)
+  const [settings, setSettings] = useState<{ taxEnabled: boolean; taxRate: number; currencySymbol: string; footerText: string } | null>(null);
 
   const isScoped = cfg.orderType !== null;
   const effectiveOrderType: string = cfg.orderType || selectedOrderType;
@@ -150,6 +154,26 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
       })
       .then((r: any) => { if (!cancelled && r && !r.error) setOrderedTables(r.data ?? []); })
       .catch(() => {});
+    return () => { cancelled = true; };
+  }, [authReady, getSupabaseClient]);
+
+  // Fetch settings
+  useEffect(() => {
+    if (!authReady) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const client = await getSupabaseClient();
+        const { data } = await client.from('settings').select('tax_enabled, tax_rate, currency_symbol, receipt_footer_text').limit(1).single();
+        if (cancelled || !data) return;
+        setSettings({
+          taxEnabled: data.tax_enabled,
+          taxRate: Number(data.tax_rate),
+          currencySymbol: data.currency_symbol,
+          footerText: data.receipt_footer_text,
+        });
+      } catch (e) {}
+    })();
     return () => { cancelled = true; };
   }, [authReady, getSupabaseClient]);
 
@@ -256,7 +280,12 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
     setCheckingOut(true);
     try {
       const client = await getSupabaseClient();
-      const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      let taxAmount = 0;
+      if (settings?.taxEnabled && settings.taxRate > 0) {
+        taxAmount = subtotal * (settings.taxRate / 100);
+      }
+      const total = subtotal + taxAmount;
 
       // Build pickup_time (takeaway only)
       let pickupTime: string | null = null;
@@ -272,7 +301,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
         ? cfg.showCustomerFields
         : effectiveOrderType !== 'dine_in';
 
-      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total, order_type: effectiveOrderType };
+      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total, tax_amount: taxAmount, order_type: effectiveOrderType };
       if (shouldCaptureCustomer) {
         if (customerName) orderPayload.customer_name = customerName;
         if (customerPhone) orderPayload.customer_phone = customerPhone;
@@ -319,7 +348,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
       resetCustomerFields();
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
-  }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, getSupabaseClient, resetCustomerFields]);
+  }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, settings, getSupabaseClient, resetCustomerFields]);
 
   // Status update
   const updateStatus = useCallback(async (orderId: string, newStatus: string) => {
@@ -384,7 +413,12 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
     setUpdating(selectedId);
     try {
       const client = await getSupabaseClient();
-      const total = editCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const subtotal = editCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      let taxAmount = 0;
+      if (settings?.taxEnabled && settings.taxRate > 0) {
+        taxAmount = subtotal * (settings.taxRate / 100);
+      }
+      const total = subtotal + taxAmount;
 
       await client.from('order_items').delete().eq('order_id', selectedId);
       if (editCart.length > 0) {
@@ -396,19 +430,19 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
         }));
         await client.from('order_items').insert(items);
       }
-      await client.from('orders').update({ total }).eq('id', selectedId);
+      await client.from('orders').update({ total, tax_amount: taxAmount }).eq('id', selectedId);
 
       setOrders((prev) =>
         prev.map((o) =>
           o.id === selectedId
-            ? { ...o, total, order_items: editCart.map((ci) => ({ menu_item_id: ci.id, quantity: ci.quantity, price_at_order: ci.price, menu_items: { name: ci.name } })) }
+            ? { ...o, total, tax_amount: taxAmount, order_items: editCart.map((ci) => ({ menu_item_id: ci.id, quantity: ci.quantity, price_at_order: ci.price, menu_items: { name: ci.name } })) }
             : o
         )
       );
       setEditingOrder(false);
     } catch (e) { console.error('[Edit Order]', e); }
     setUpdating(null);
-  }, [selectedOrder, selectedId, editCart, getSupabaseClient]);
+  }, [selectedOrder, selectedId, editCart, settings, getSupabaseClient]);
 
   const handleCancelEdit = useCallback(() => {
     setEditingOrder(false);
@@ -769,6 +803,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
           orderNumber: receiptOrder.order_number,
           status: receiptOrder.status,
           total: Number(receiptOrder.total),
+          taxAmount: Number(receiptOrder.tax_amount ?? 0),
           createdAt: receiptOrder.created_at,
           orderType: receiptOrder.order_type,
           customerName: receiptOrder.customer_name,
@@ -783,6 +818,8 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
         }}
         brandName={brandName}
         theme={theme}
+        footerText={settings?.footerText}
+        currencySymbol={settings?.currencySymbol}
         onClose={() => setReceiptOrder(null)}
       />
     )}
