@@ -212,53 +212,82 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
                 <p className="text-gray-400 text-sm">{search ? 'No customers match your search.' : 'No customers yet. Click "+ Add Customer" to create one.'}</p>
               </div>
             ) : (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
-                      <th className="text-left px-4 py-3 font-medium">Name</th>
-                      <th className="text-left px-4 py-3 font-medium">Phone</th>
-                      <th className="text-right px-4 py-3 font-medium">Orders</th>
-                      <th className="text-right px-4 py-3 font-medium">Spent</th>
-                      <th className="text-right px-4 py-3 font-medium">Points</th>
-                      {canEdit && <th className="text-right px-4 py-3 font-medium"></th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {customers.map((c) => (
-                      <tr key={c.id} className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${selectedCustomer?.id === c.id ? 'bg-blue-50' : ''}`} onClick={() => openProfile(c)}>
-                        <td className="px-4 py-3 font-medium text-gray-800">{c.name}</td>
-                        <td className="px-4 py-3 text-gray-500">{c.phone || '-'}</td>
-                        <td className="px-4 py-3 text-right text-gray-700">{c.total_orders}</td>
-                        <td className="px-4 py-3 text-right text-gray-700">${Number(c.total_spent).toFixed(2)}</td>
-                        <td className="px-4 py-3 text-right font-medium" style={{ color: theme.primaryColor }}>{c.loyalty_points}</td>
-                        {canEdit && (
-                          <td className="px-4 py-3 text-right">
-                            <button onClick={(e) => { e.stopPropagation(); openEditForm(c); }} className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100">Edit</button>
-                          </td>
-                        )}
+              <>
+                {/* Mobile cards */}
+                <div className="md:hidden space-y-3">
+                  {customers.map((c) => (
+                    <div
+                      key={c.id}
+                      className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 cursor-pointer hover:bg-gray-50"
+                      onClick={() => openProfile(c)}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="font-semibold text-gray-800">{c.name}</div>
+                        <div className="text-sm font-bold" style={{ color: theme.primaryColor }}>{c.loyalty_points} pts</div>
+                      </div>
+                      <div className="text-sm text-gray-500 mb-2">{c.phone || 'No phone'}</div>
+                      <div className="flex gap-4 text-sm text-gray-600">
+                        <div><span className="text-gray-400">Orders:</span> {c.total_orders}</div>
+                        <div><span className="text-gray-400">Spent:</span> ${Number(c.total_spent).toFixed(2)}</div>
+                      </div>
+                      {canEdit && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openEditForm(c); }}
+                          className="mt-2 px-3 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100"
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {/* Desktop table */}
+                <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+                        <th className="text-left px-4 py-3 font-medium">Name</th>
+                        <th className="text-left px-4 py-3 font-medium">Phone</th>
+                        <th className="text-right px-4 py-3 font-medium">Orders</th>
+                        <th className="text-right px-4 py-3 font-medium">Spent</th>
+                        <th className="text-right px-4 py-3 font-medium">Points</th>
+                        {canEdit && <th className="text-right px-4 py-3 font-medium"></th>}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {customers.map((c) => (
+                        <tr key={c.id} className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${selectedCustomer?.id === c.id ? 'bg-blue-50' : ''}`} onClick={() => openProfile(c)}>
+                          <td className="px-4 py-3 font-medium text-gray-800">{c.name}</td>
+                          <td className="px-4 py-3 text-gray-500">{c.phone || '-'}</td>
+                          <td className="px-4 py-3 text-right text-gray-700">{c.total_orders}</td>
+                          <td className="px-4 py-3 text-right text-gray-700">${Number(c.total_spent).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right font-medium" style={{ color: theme.primaryColor }}>{c.loyalty_points}</td>
+                          {canEdit && (
+                            <td className="px-4 py-3 text-right">
+                              <button onClick={(e) => { e.stopPropagation(); openEditForm(c); }} className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100">Edit</button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
 
-          {/* Profile side panel */}
+          {/* Profile side panel - desktop */}
           {selectedCustomer && (
-            <div className="w-80 flex-shrink-0 bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+            <div className="hidden md:block w-80 flex-shrink-0 bg-white rounded-lg shadow-sm border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-800">{selectedCustomer.name}</h2>
                 <button onClick={() => setSelectedCustomer(null)} className="text-gray-400 hover:text-gray-600 text-sm">✕</button>
               </div>
-
               <div className="space-y-2 text-sm text-gray-600 mb-4">
                 {selectedCustomer.phone && <p><span className="text-gray-400">Phone:</span> {selectedCustomer.phone}</p>}
                 {selectedCustomer.email && <p><span className="text-gray-400">Email:</span> {selectedCustomer.email}</p>}
                 {selectedCustomer.notes && <p><span className="text-gray-400">Notes:</span> {selectedCustomer.notes}</p>}
               </div>
-
               <div className="grid grid-cols-3 gap-2 mb-4 text-center">
                 <div className="bg-gray-50 rounded p-2">
                   <div className="text-lg font-bold text-gray-800">{selectedCustomer.total_orders}</div>
@@ -273,7 +302,6 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
                   <div className="text-xs text-gray-400">Points</div>
                 </div>
               </div>
-
               <h3 className="text-sm font-semibold text-gray-700 mb-2">Order History</h3>
               {historyLoading ? (
                 <p className="text-xs text-gray-400">Loading...</p>
@@ -298,13 +326,70 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
             </div>
           )}
         </div>
+
+        {/* Profile mobile overlay */}
+        {selectedCustomer && (
+          <div className="fixed inset-0 z-50 md:hidden bg-gray-50 overflow-y-auto" onClick={() => setSelectedCustomer(null)}>
+            <div className="min-h-full p-4" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-800">{selectedCustomer.name}</h2>
+                <button onClick={() => setSelectedCustomer(null)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+              </div>
+              <div className="space-y-2 text-sm text-gray-600 mb-4">
+                {selectedCustomer.phone && <p><span className="text-gray-400">Phone:</span> {selectedCustomer.phone}</p>}
+                {selectedCustomer.email && <p><span className="text-gray-400">Email:</span> {selectedCustomer.email}</p>}
+                {selectedCustomer.notes && <p><span className="text-gray-400">Notes:</span> {selectedCustomer.notes}</p>}
+              </div>
+              <div className="grid grid-cols-3 gap-2 mb-4 text-center">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+                  <div className="text-lg font-bold text-gray-800">{selectedCustomer.total_orders}</div>
+                  <div className="text-xs text-gray-400">Orders</div>
+                </div>
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+                  <div className="text-lg font-bold text-gray-800">${Number(selectedCustomer.total_spent).toFixed(2)}</div>
+                  <div className="text-xs text-gray-400">Spent</div>
+                </div>
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+                  <div className="text-lg font-bold" style={{ color: theme.primaryColor }}>{selectedCustomer.loyalty_points}</div>
+                  <div className="text-xs text-gray-400">Points</div>
+                </div>
+              </div>
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Order History</h3>
+                {historyLoading ? (
+                  <p className="text-xs text-gray-400">Loading...</p>
+                ) : orderHistory.length === 0 ? (
+                  <p className="text-xs text-gray-400">No orders yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {orderHistory.map((o) => (
+                      <div key={o.id} className="flex items-center justify-between text-sm py-2 border-b border-gray-100 last:border-0">
+                        <div>
+                          <span className="font-medium text-gray-700">#{o.order_number}</span>
+                          <span className="text-gray-400 ml-2">{new Date(o.created_at).toLocaleDateString()}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={statusColor[o.status] || 'text-gray-500'}>{o.status}</span>
+                          <span className="font-medium text-gray-700">${Number(o.total).toFixed(2)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add/Edit modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowForm(false)}>
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">{editingCustomer ? 'Edit Customer' : 'Add Customer'}</h2>
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setShowForm(false)}>
+          <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-md md:mx-4 p-6 rounded-t-xl md:max-h-[90vh] md:overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-800">{editingCustomer ? 'Edit Customer' : 'Add Customer'}</h2>
+              <button onClick={() => setShowForm(false)} className="md:hidden text-gray-400 text-xl">✕</button>
+            </div>
             <div className="space-y-3">
               <div>
                 <label className="block text-sm text-gray-600 mb-1">Name *</label>

@@ -216,7 +216,7 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm mb-4">{error}</div>
         )}
 
-        {/* Inventory table */}
+        {/* Inventory list - cards on mobile, table on desktop */}
         {loading ? (
           <p className="text-gray-400 text-sm">Loading inventory...</p>
         ) : items.length === 0 ? (
@@ -224,74 +224,127 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
             <p className="text-gray-400 text-sm">{'No inventory items yet. Click "+ Add Item" to begin.'}</p>
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
-                  <th className="text-left px-4 py-3 font-medium">Name</th>
-                  <th className="text-left px-4 py-3 font-medium">Unit</th>
-                  <th className="text-right px-4 py-3 font-medium">Stock</th>
-                  <th className="text-right px-4 py-3 font-medium">Threshold</th>
-                  <th className="text-right px-4 py-3 font-medium">Status</th>
-                  {canEdit && <th className="text-right px-4 py-3 font-medium">Actions</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => {
-                  const stock = Number(item.current_stock);
-                  const threshold = Number(item.low_stock_threshold);
-                  const isLow = stock <= threshold;
-                  return (
-                    <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium text-gray-800">{item.name}</td>
-                      <td className="px-4 py-3 text-gray-500">{item.unit}</td>
-                      <td className="px-4 py-3 text-right font-medium text-gray-800">{stock}</td>
-                      <td className="px-4 py-3 text-right text-gray-500">{threshold}</td>
-                      <td className="px-4 py-3 text-right">
-                        {isLow ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Low</span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">OK</span>
-                        )}
-                      </td>
-                      {canEdit && (
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => { setAdjustItem(item); setAdjustDelta(''); setAdjustNote(''); setError(''); }}
-                              className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100"
-                            >
-                              Adjust
-                            </button>
-                            <button
-                              onClick={() => openEditForm(item)}
-                              className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => { setDeleteId(item.id); setError(''); }}
-                              className="px-2 py-1 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50"
-                            >
-                              Del
-                            </button>
-                          </div>
-                        </td>
+          <>
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-3">
+              {items.map((item) => {
+                const stock = Number(item.current_stock);
+                const threshold = Number(item.low_stock_threshold);
+                const isLow = stock <= threshold;
+                return (
+                  <div key={item.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="font-semibold text-gray-800">{item.name}</div>
+                      {isLow ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Low</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">OK</span>
                       )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-y-1 gap-x-4 text-sm text-gray-600 mb-3">
+                      <div><span className="text-gray-400">Unit:</span> {item.unit}</div>
+                      <div><span className="text-gray-400">Stock:</span> {stock}</div>
+                      <div><span className="text-gray-400">Threshold:</span> {threshold}</div>
+                    </div>
+                    {canEdit && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => { setAdjustItem(item); setAdjustDelta(''); setAdjustNote(''); setError(''); }}
+                          className="flex-1 px-3 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100"
+                        >
+                          Adjust
+                        </button>
+                        <button
+                          onClick={() => openEditForm(item)}
+                          className="flex-1 px-3 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => { setDeleteId(item.id); setError(''); }}
+                          className="flex-1 px-3 py-1.5 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+                    <th className="text-left px-4 py-3 font-medium">Name</th>
+                    <th className="text-left px-4 py-3 font-medium">Unit</th>
+                    <th className="text-right px-4 py-3 font-medium">Stock</th>
+                    <th className="text-right px-4 py-3 font-medium">Threshold</th>
+                    <th className="text-right px-4 py-3 font-medium">Status</th>
+                    {canEdit && <th className="text-right px-4 py-3 font-medium">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => {
+                    const stock = Number(item.current_stock);
+                    const threshold = Number(item.low_stock_threshold);
+                    const isLow = stock <= threshold;
+                    return (
+                      <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-800">{item.name}</td>
+                        <td className="px-4 py-3 text-gray-500">{item.unit}</td>
+                        <td className="px-4 py-3 text-right font-medium text-gray-800">{stock}</td>
+                        <td className="px-4 py-3 text-right text-gray-500">{threshold}</td>
+                        <td className="px-4 py-3 text-right">
+                          {isLow ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Low</span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">OK</span>
+                          )}
+                        </td>
+                        {canEdit && (
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => { setAdjustItem(item); setAdjustDelta(''); setAdjustNote(''); setError(''); }}
+                                className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100"
+                              >
+                                Adjust
+                              </button>
+                              <button
+                                onClick={() => openEditForm(item)}
+                                className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => { setDeleteId(item.id); setError(''); }}
+                                className="px-2 py-1 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50"
+                              >
+                                Del
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
       {/* Add/Edit modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowForm(false)}>
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">{editingId ? 'Edit Item' : 'Add Item'}</h2>
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setShowForm(false)}>
+          <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-md md:mx-4 p-6 md:max-h-[90vh] md:overflow-y-auto rounded-t-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-800">{editingId ? 'Edit Item' : 'Add Item'}</h2>
+              <button onClick={() => setShowForm(false)} className="md:hidden text-gray-400 text-xl">✕</button>
+            </div>
             <div className="space-y-3">
               <div>
                 <label className="block text-sm text-gray-600 mb-1">Name</label>
@@ -325,9 +378,12 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
 
       {/* Stock adjustment modal */}
       {adjustItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setAdjustItem(null)}>
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-gray-800 mb-1">Adjust Stock</h2>
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setAdjustItem(null)}>
+          <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-sm md:mx-4 p-6 md:max-h-[90vh] md:overflow-y-auto rounded-t-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-semibold text-gray-800">Adjust Stock</h2>
+              <button onClick={() => setAdjustItem(null)} className="md:hidden text-gray-400 text-xl">✕</button>
+            </div>
             <p className="text-sm text-gray-500 mb-4">{adjustItem.name} (current: {Number(adjustItem.current_stock)} {adjustItem.unit})</p>
             <div className="space-y-3">
               <div>
@@ -352,9 +408,12 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
 
       {/* Delete confirmation modal */}
       {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteId(null)}>
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-gray-800 mb-2">Delete Item?</h2>
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setDeleteId(null)}>
+          <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-sm md:mx-4 p-6 rounded-t-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold text-gray-800">Delete Item?</h2>
+              <button onClick={() => setDeleteId(null)} className="md:hidden text-gray-400 text-xl">✕</button>
+            </div>
             <p className="text-sm text-gray-600 mb-1">This action cannot be undone.</p>
             <p className="text-sm text-gray-500 mb-4">Any menu items linked to this ingredient will have their references removed.</p>
             {error && <p className="text-red-600 text-sm mb-2">{error}</p>}

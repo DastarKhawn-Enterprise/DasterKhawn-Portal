@@ -331,8 +331,8 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme }: P
                       <span className="text-xs text-gray-400 font-mono">#{order.order_number}</span>
                       <span className="text-xs text-gray-500">{ORDER_TYPE_LABELS[order.order_type] || order.order_type}</span>
                     </div>
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${STATUS_COLORS[order.status] || ''}`}>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold border ${STATUS_COLORS[order.status] || ''}`}>
                         {STATUS_LABELS[order.status] || order.status}
                       </span>
                       <span className="text-xs font-medium text-gray-700 w-14 text-right">${Number(order.total).toFixed(2)}</span>
