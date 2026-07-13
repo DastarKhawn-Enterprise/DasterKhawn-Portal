@@ -894,7 +894,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
                 }}
                 className="w-full mt-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium text-left"
               >
-                + Save "{customerName}" as customer
+                + Save &ldquo;{customerName}&rdquo; as customer
               </button>
             )}
           </div>
