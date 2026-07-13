@@ -21,13 +21,22 @@ export default function CartSidebar({
   theme,
 }: CartSidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopOpen, setDesktopOpen] = useState(true);
   const total = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const itemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
   const cartContent = (
     <>
-      <div className="p-4 font-bold text-lg border-b" style={{ borderColor: theme.secondaryColor + '20' }}>
-        Cart {itemCount > 0 && `(${itemCount})`}
+      <div className="p-4 font-bold text-lg border-b flex items-center justify-between" style={{ borderColor: theme.secondaryColor + '20' }}>
+        <span>Cart {itemCount > 0 && `(${itemCount})`}</span>
+        {/* Desktop collapse toggle */}
+        <button
+          onClick={() => setDesktopOpen(false)}
+          className="hidden md:block text-gray-400 hover:text-gray-600 text-xs px-1"
+          title="Collapse cart"
+        >
+          ▸
+        </button>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {cartItems.length === 0 && (
@@ -77,10 +86,27 @@ export default function CartSidebar({
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <div className="hidden md:flex w-80 flex-col border-l bg-white" style={{ borderColor: theme.secondaryColor + '20' }}>
-        {cartContent}
-      </div>
+      {/* Desktop sidebar — expanded */}
+      {desktopOpen && (
+        <div className="hidden md:flex w-80 flex-col border-l bg-white" style={{ borderColor: theme.secondaryColor + '20' }}>
+          {cartContent}
+        </div>
+      )}
+
+      {/* Desktop collapsed tab — shown when sidebar is hidden */}
+      {!desktopOpen && (
+        <button
+          onClick={() => setDesktopOpen(true)}
+          className="hidden md:flex flex-col items-center justify-center w-10 border-l bg-white hover:bg-gray-50 cursor-pointer"
+          style={{ borderColor: theme.secondaryColor + '20' }}
+          title="Expand cart"
+        >
+          <span className="text-gray-400 text-xs rotate-90 whitespace-nowrap select-none">
+            Cart {itemCount > 0 && `(${itemCount})`}
+          </span>
+          <span className="text-gray-400 text-xs mt-2">◂</span>
+        </button>
+      )}
 
       {/* Mobile floating cart button */}
       {itemCount > 0 && (
@@ -96,9 +122,7 @@ export default function CartSidebar({
       {/* Mobile cart drawer */}
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-50 flex flex-col">
-          {/* Overlay */}
           <div className="absolute inset-0 bg-black/40" onClick={() => setMobileOpen(false)} />
-          {/* Drawer */}
           <div className="relative mt-auto bg-white rounded-t-2xl shadow-xl max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-center pt-2 pb-1">
               <div className="w-8 h-1 rounded-full bg-gray-300" />
