@@ -54,6 +54,9 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
   const [formNotes, setFormNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const getSupabaseClient = useCallback(async () => {
     const token = await getToken({ template: 'supabase' });
@@ -161,6 +164,24 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
       setShowForm(false);
     } catch (e: any) { setError(e.message || 'Save failed'); }
     setSaving(false);
+  };
+
+  const handleDelete = async (customer: Customer) => {
+    setDeleteError('');
+    try {
+      const client = await getSupabaseClient();
+      if (customer.total_orders > 0) {
+        setDeleteError('Cannot delete — has order history');
+        return;
+      }
+      setDeleting(true);
+      const { error: err } = await client.from('customers').delete().eq('id', customer.id);
+      if (err) { setDeleteError(err.message); setDeleting(false); return; }
+      setCustomers((prev) => prev.filter((c) => c.id !== customer.id));
+      if (selectedCustomer?.id === customer.id) setSelectedCustomer(null);
+      setDeleteTarget(null);
+    } catch (e: any) { setDeleteError(e.message || 'Delete failed'); }
+    setDeleting(false);
   };
 
   const openProfile = (c: Customer) => {
@@ -281,7 +302,12 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
             <div className="hidden md:block w-80 flex-shrink-0 bg-white rounded-lg shadow-sm border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-800">{selectedCustomer.name}</h2>
-                <button onClick={() => setSelectedCustomer(null)} className="text-gray-400 hover:text-gray-600 text-sm">✕</button>
+                <div className="flex items-center gap-2">
+                  {canEdit && (
+                    <button onClick={() => setDeleteTarget(selectedCustomer)} className="text-red-400 hover:text-red-600 text-xs font-medium">Delete</button>
+                  )}
+                  <button onClick={() => setSelectedCustomer(null)} className="text-gray-400 hover:text-gray-600 text-sm">✕</button>
+                </div>
               </div>
               <div className="space-y-2 text-sm text-gray-600 mb-4">
                 {selectedCustomer.phone && <p><span className="text-gray-400">Phone:</span> {selectedCustomer.phone}</p>}
@@ -333,7 +359,12 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
             <div className="min-h-full p-4" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-800">{selectedCustomer.name}</h2>
-                <button onClick={() => setSelectedCustomer(null)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+                <div className="flex items-center gap-2">
+                  {canEdit && (
+                    <button onClick={() => setDeleteTarget(selectedCustomer)} className="text-red-400 hover:text-red-600 text-xs font-medium">Delete</button>
+                  )}
+                  <button onClick={() => setSelectedCustomer(null)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+                </div>
               </div>
               <div className="space-y-2 text-sm text-gray-600 mb-4">
                 {selectedCustomer.phone && <p><span className="text-gray-400">Phone:</span> {selectedCustomer.phone}</p>}
@@ -381,6 +412,25 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
           </div>
         )}
       </div>
+
+      {/* Delete confirmation */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => { if (!deleting) setDeleteTarget(null); }}>
+          <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-sm md:mx-4 p-6 rounded-t-xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-gray-800 mb-2">Delete Customer</h2>
+            <p className="text-sm text-gray-600 mb-1">Are you sure you want to delete <strong>{deleteTarget.name}</strong>?</p>
+            {deleteError && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 mt-3">{deleteError}</p>
+            )}
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => { setDeleteTarget(null); setDeleteError(''); }} disabled={deleting} className="px-4 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+              <button onClick={() => handleDelete(deleteTarget)} disabled={deleting} className="px-4 py-2 text-sm rounded text-white font-medium disabled:opacity-50" style={{ backgroundColor: '#dc2626' }}>
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit modal */}
       {showForm && (
