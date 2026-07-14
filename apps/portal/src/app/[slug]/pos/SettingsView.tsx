@@ -110,7 +110,7 @@ export default function SettingsView({ supabaseUrl, supabaseAnonKey, theme }: Pr
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
+    <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-6">
       <div className="max-w-2xl mx-auto">
         <h1 className="text-2xl font-bold text-gray-800 mb-6">Settings</h1>
 

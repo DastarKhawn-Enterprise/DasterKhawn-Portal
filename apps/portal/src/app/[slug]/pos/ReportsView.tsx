@@ -239,7 +239,7 @@ export default function ReportsView({ supabaseUrl, supabaseAnonKey, theme }: Pro
   const barCount = dailyRevenue.length;
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-6">
+    <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
       <div className="max-w-6xl mx-auto">
         {/* Header + Date range selector */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">

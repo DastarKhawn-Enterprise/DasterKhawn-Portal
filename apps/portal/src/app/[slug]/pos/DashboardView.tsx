@@ -222,7 +222,7 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme }: P
   const cardStyle = { borderLeftColor: theme.primaryColor };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-6">
+    <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
       <div className="max-w-6xl mx-auto">
         <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider mb-5">Today&apos;s Dashboard</h2>
 

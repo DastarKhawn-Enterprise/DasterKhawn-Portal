@@ -178,7 +178,7 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
+    <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-6">
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Customers</h1>

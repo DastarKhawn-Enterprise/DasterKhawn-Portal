@@ -223,7 +223,7 @@ export default function ExpensesView({ supabaseUrl, supabaseAnonKey, theme }: Pr
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-6">
+    <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
       <div className="max-w-5xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Expenses</h1>

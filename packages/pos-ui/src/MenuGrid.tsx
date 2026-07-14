@@ -47,7 +47,7 @@ export default function MenuGrid({ menuItems, onAddToCart, theme, currencySymbol
   );
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 pb-14 md:pb-4">
+    <div className="flex-1 overflow-y-auto scrollbar-hide p-4 pb-14 md:pb-4">
       {/* Search input */}
       <div className="relative mb-4">
         <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">

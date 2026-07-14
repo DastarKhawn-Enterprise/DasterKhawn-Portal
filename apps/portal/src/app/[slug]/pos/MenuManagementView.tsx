@@ -239,7 +239,7 @@ export default function MenuManagementView({ supabaseUrl, supabaseAnonKey, theme
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-6">
+    <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider">Menu Management</h2>

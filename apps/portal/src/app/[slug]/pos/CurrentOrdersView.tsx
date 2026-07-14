@@ -572,7 +572,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
             + New Order
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        <div className="flex-1 overflow-y-auto scrollbar-hide p-3 space-y-2">
           {orders.length === 0 && (
             <p className="text-gray-400 text-sm text-center pt-8">No active orders</p>
           )}
@@ -630,7 +630,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
           ← Orders
         </button>
         {selectedOrder ? (
-          <div className="flex-1 overflow-y-auto p-4 md:p-6">
+          <div className="flex-1 overflow-y-auto scrollbar-hide p-4 md:p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-xl font-bold">Order #{selectedOrder.order_number}</h2>
@@ -761,7 +761,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Order type selector (all-orders view only) */}
           {!isScoped && (
-            <div className="flex border-b border-gray-200">
+            <div className="flex overflow-x-auto scrollbar-hide border-b border-gray-200">
               {(Object.keys(ORDER_TYPE_LABELS) as OrderTypeOption[]).map((type) => (
                 <button
                   key={type}

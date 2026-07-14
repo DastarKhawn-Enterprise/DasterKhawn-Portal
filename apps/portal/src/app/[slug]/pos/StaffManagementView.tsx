@@ -127,7 +127,7 @@ export default function StaffManagementView({ slug }: Props) {
     : staff;
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-50 overflow-y-auto">
+    <div className="flex-1 flex flex-col bg-gray-50 overflow-y-auto scrollbar-hide">
       <div className="max-w-4xl w-full mx-auto p-4 md:p-6">
         <h1 className="text-2xl font-bold text-gray-800 mb-6">Staff Management</h1>
 

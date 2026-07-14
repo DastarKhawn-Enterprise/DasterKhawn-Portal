@@ -489,7 +489,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
   return (
     <><div className="flex-1 flex overflow-hidden min-w-0">
       {/* ── FLOOR PLAN ── */}
-      <div className={`${mobilePanelOpen ? 'hidden md:flex' : 'flex'} flex-1 overflow-y-auto bg-gray-50 p-4 md:p-6`}>
+      <div className={`${mobilePanelOpen ? 'hidden md:flex' : 'flex'} flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6`}>
         <h2 className="text-lg font-bold text-gray-700 mb-4 uppercase tracking-wider">Floor Plan</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
           {tables.map((table) => (
@@ -641,7 +641,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
             )}
 
             {selectedTable.status === 'occupied' && (
-              <div className="flex-1 overflow-y-auto p-4">
+              <div className="flex-1 overflow-y-auto scrollbar-hide p-4">
                 {tableOrderLoading ? (
                   <div className="flex items-center justify-center h-full"><p className="text-gray-400">Loading order...</p></div>
                 ) : tableOrder ? (
