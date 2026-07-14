@@ -116,9 +116,9 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
   }
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen h-dvh flex flex-col overflow-hidden">
       {/* Top bar */}
-      <header className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-gray-200 shadow-sm">
+      <header className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-gray-200 shadow-sm flex-shrink-0">
         <div className="flex items-center gap-3" style={{ color: theme.secondaryColor }}>
           {/* Hamburger — mobile only */}
           <button
@@ -142,15 +142,16 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
           <input
             type="text"
             placeholder="Search menu, orders..."
-            className="w-64 px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-500 placeholder-gray-400"
+            className="hidden md:block w-64 px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-500 placeholder-gray-400"
             disabled
           />
+          <button className="md:hidden text-gray-400 text-lg p-1">🔍</button>
           <UserButton afterSignOutUrl="/" />
         </div>
       </header>
 
       {/* Body: sidebar + content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-w-0">
         <Sidebar
           activeView={activeView}
           onNavigate={setActiveView}

@@ -487,7 +487,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
   const selectedIsReserved = selectedTable?.status === 'reserved';
 
   return (
-    <><div className="flex-1 flex overflow-hidden">
+    <><div className="flex-1 flex overflow-hidden min-w-0">
       {/* ── FLOOR PLAN ── */}
       <div className={`${mobilePanelOpen ? 'hidden md:flex' : 'flex'} flex-1 overflow-y-auto bg-gray-50 p-4 md:p-6`}>
         <h2 className="text-lg font-bold text-gray-700 mb-4 uppercase tracking-wider">Floor Plan</h2>

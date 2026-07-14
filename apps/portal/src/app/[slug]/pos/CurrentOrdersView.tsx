@@ -153,7 +153,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
         if (cancelled) return null;
         return client.from('menu_items').select('id, name, description, price, category, available').order('name').not('available', 'eq', false);
       })
-      .then((r: any) => { if (!cancelled && r && !r.error) setMenuItems(r.data ?? []); })
+      .then((r: any) => { console.log('[MenuFetch] response:', JSON.stringify(r, null, 2)); console.log('[MenuFetch] count:', r?.data?.length); if (!cancelled && r && !r.error) setMenuItems(r.data ?? []); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [authReady, getSupabaseClient]);
@@ -559,7 +559,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
     `${mobilePanel === panel ? 'flex' : 'hidden md:flex'} ${base}`;
 
   return (
-    <><div className="flex-1 flex overflow-hidden">
+    <><div className="flex-1 flex overflow-hidden min-w-0">
       {/* ── LEFT PANEL: Order list ── */}
       <div className={`${pc('list', 'w-full md:w-72 flex-shrink-0 bg-white border-r border-gray-200 flex-col overflow-hidden')}`}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">

@@ -110,14 +110,15 @@ export default function CartSidebar({
         </button>
       )}
 
-      {/* Mobile floating cart button */}
+      {/* Mobile cart summary bar */}
       {itemCount > 0 && (
         <button
           onClick={() => setMobileOpen(true)}
-          className="md:hidden fixed bottom-4 right-4 z-30 flex items-center gap-2 px-4 py-3 rounded-full text-white text-sm font-bold shadow-lg"
+          className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex items-center justify-between px-4 py-3 text-white text-sm font-bold shadow-lg"
           style={{ backgroundColor: theme.primaryColor }}
         >
-          🛒 {itemCount} item{itemCount !== 1 ? 's' : ''} · {currencySymbol || '$'}{total.toFixed(2)}
+          <span>View Cart ({itemCount} item{itemCount !== 1 ? 's' : ''})</span>
+          <span>{currencySymbol || '$'}{total.toFixed(2)}</span>
         </button>
       )}
 
