@@ -88,6 +88,7 @@ export default function ReportsView({ supabaseUrl, supabaseAnonKey, theme }: Pro
   const [topItems, setTopItems] = useState<TopItem[]>([]);
   const [dailyRevenue, setDailyRevenue] = useState<DailyRevenue[]>([]);
   const [loading, setLoading] = useState(false);
+  const [currencySymbol, setCurrencySymbol] = useState('$');
 
   const getSupabaseClient = useCallback(async () => {
     const token = await getToken({ template: 'supabase' });
@@ -219,6 +220,15 @@ export default function ReportsView({ supabaseUrl, supabaseAnonKey, theme }: Pro
     fetchReports();
   }, [authReady, hasReportsView, fetchReports]);
 
+  useEffect(() => {
+    if (!authReady) return;
+    getSupabaseClient().then((client) => {
+      client.from('settings').select('currency_symbol').single().then(({ data, error }) => {
+        if (!error && data?.currency_symbol) setCurrencySymbol(data.currency_symbol);
+      });
+    });
+  }, [authReady, getSupabaseClient]);
+
   if (!isLoaded || !authReady || !permissionChecked) {
     return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
   }
@@ -291,9 +301,9 @@ export default function ReportsView({ supabaseUrl, supabaseAnonKey, theme }: Pro
           <>
             {/* Summary cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-              <SummaryCard label="Total Orders" value={summary?.totalOrders ?? 0} format="number" theme={theme} />
-              <SummaryCard label="Total Revenue" value={summary?.totalRevenue ?? 0} format="currency" theme={theme} />
-              <SummaryCard label="Avg Order Value" value={summary?.avgOrderValue ?? 0} format="currency" theme={theme} />
+              <SummaryCard label="Total Orders" value={summary?.totalOrders ?? 0} format="number" currencySymbol={currencySymbol} theme={theme} />
+              <SummaryCard label="Total Revenue" value={summary?.totalRevenue ?? 0} format="currency" currencySymbol={currencySymbol} theme={theme} />
+              <SummaryCard label="Avg Order Value" value={summary?.avgOrderValue ?? 0} format="currency" currencySymbol={currencySymbol} theme={theme} />
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
@@ -316,13 +326,13 @@ export default function ReportsView({ supabaseUrl, supabaseAnonKey, theme }: Pro
                         <tr key={row.order_type} className="border-b border-gray-100">
                           <td className="py-2 font-medium">{ORDER_TYPE_LABELS[row.order_type] || row.order_type}</td>
                           <td className="py-2 text-right">{row.count}</td>
-                          <td className="py-2 text-right font-semibold">${row.revenue.toFixed(2)}</td>
+                          <td className="py-2 text-right font-semibold">{currencySymbol}{row.revenue.toFixed(2)}</td>
                         </tr>
                       ))}
                       <tr className="font-semibold text-sm">
                         <td className="py-2 text-gray-700">Total</td>
                         <td className="py-2 text-right">{orderTypeBreakdown.reduce((s, r) => s + r.count, 0)}</td>
-                        <td className="py-2 text-right">${orderTypeBreakdown.reduce((s, r) => s + r.revenue, 0).toFixed(2)}</td>
+                        <td className="py-2 text-right">{currencySymbol}{orderTypeBreakdown.reduce((s, r) => s + r.revenue, 0).toFixed(2)}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -357,7 +367,7 @@ export default function ReportsView({ supabaseUrl, supabaseAnonKey, theme }: Pro
                             </div>
                           </td>
                           <td className="py-1.5 text-right">{item.quantity_sold}</td>
-                          <td className="py-1.5 text-right font-semibold">${item.revenue.toFixed(2)}</td>
+                          <td className="py-1.5 text-right font-semibold">{currencySymbol}{item.revenue.toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -377,17 +387,17 @@ export default function ReportsView({ supabaseUrl, supabaseAnonKey, theme }: Pro
                   <div className="flex mb-1">
                     <div className="w-12 flex-shrink-0" />
                     <div className="flex-1 flex justify-between text-[10px] text-gray-400">
-                      <span>${Math.round(maxDailyRevenue)}</span>
-                      <span>${Math.round(maxDailyRevenue / 2)}</span>
-                      <span>$0</span>
+                      <span>{currencySymbol}{Math.round(maxDailyRevenue)}</span>
+                      <span>{currencySymbol}{Math.round(maxDailyRevenue / 2)}</span>
+                      <span>{currencySymbol}0</span>
                     </div>
                   </div>
                   {/* Bars */}
                   <div className="flex items-end gap-1" style={{ height: '160px' }}>
                     <div className="w-12 flex-shrink-0 text-right text-[10px] text-gray-400 self-stretch flex flex-col justify-between pb-0.5">
-                      <span>{maxDailyRevenue > 0 ? '$' + Math.round(maxDailyRevenue) : ''}</span>
-                      <span>{maxDailyRevenue > 0 ? '$' + Math.round(maxDailyRevenue / 2) : ''}</span>
-                      <span>$0</span>
+                      <span>{maxDailyRevenue > 0 ? currencySymbol + Math.round(maxDailyRevenue) : ''}</span>
+                      <span>{maxDailyRevenue > 0 ? currencySymbol + Math.round(maxDailyRevenue / 2) : ''}</span>
+                      <span>{currencySymbol}0</span>
                     </div>
                     {dailyRevenue.map((day) => {
                       const pct = (day.revenue / maxDailyRevenue) * 100;
@@ -402,7 +412,7 @@ export default function ReportsView({ supabaseUrl, supabaseAnonKey, theme }: Pro
                                 backgroundColor: theme.primaryColor,
                                 opacity: 0.7 + (pct / 100) * 0.3,
                               }}
-                              title={`${day.date}: $${day.revenue.toFixed(2)}`}
+                              title={`${day.date}: ${currencySymbol}${day.revenue.toFixed(2)}`}
                             />
                           </div>
                           <span className="text-[9px] text-gray-400 mt-1 truncate w-full text-center">
@@ -422,12 +432,12 @@ export default function ReportsView({ supabaseUrl, supabaseAnonKey, theme }: Pro
   );
 }
 
-function SummaryCard({ label, value, format, theme }: { label: string; value: number; format: 'number' | 'currency'; theme: ThemeConfig }) {
+function SummaryCard({ label, value, format, currencySymbol, theme }: { label: string; value: number; format: 'number' | 'currency'; currencySymbol: string; theme: ThemeConfig }) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4">
       <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{label}</div>
       <div className="text-2xl font-bold" style={{ color: theme.primaryColor }}>
-        {format === 'currency' ? `$${value.toFixed(2)}` : value}
+        {format === 'currency' ? `${currencySymbol}${value.toFixed(2)}` : value}
       </div>
     </div>
   );

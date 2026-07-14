@@ -663,7 +663,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
                             <div key={ci.id} className="flex items-center gap-2 p-1.5 rounded border border-gray-200">
                               <div className="flex-1 min-w-0">
                                 <div className="text-sm font-medium truncate">{ci.name}</div>
-                                <div className="text-xs text-gray-400">${ci.price.toFixed(2)} each</div>
+                                <div className="text-xs text-gray-400">{settings?.currencySymbol}{ci.price.toFixed(2)} each</div>
                               </div>
                               <div className="flex items-center gap-1">
                                 <button onClick={() => handleEditUpdateQty(ci.id, ci.quantity - 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">−</button>
@@ -675,7 +675,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
                           ))}
                         </div>
                         <div className="px-4 py-2 border-b border-gray-100 text-right text-sm font-bold">
-                          Total: ${editCart.reduce((s, ci) => s + ci.price * ci.quantity, 0).toFixed(2)}
+                          Total: {settings?.currencySymbol}{editCart.reduce((s, ci) => s + ci.price * ci.quantity, 0).toFixed(2)}
                         </div>
                         {menuItems.length > 0 ? (
                           <MenuGrid menuItems={menuItems} onAddToCart={handleEditAdd} theme={theme} />
@@ -699,15 +699,15 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
                               <tr key={i} className="border-b border-gray-100">
                                 <td className="py-1.5">{item.menu_items?.name || 'Unknown'}</td>
                                 <td className="text-right py-1.5">{item.quantity}</td>
-                                <td className="text-right py-1.5">${Number(item.price_at_order).toFixed(2)}</td>
-                                <td className="text-right py-1.5 font-medium">${(item.quantity * Number(item.price_at_order)).toFixed(2)}</td>
+                                <td className="text-right py-1.5">{settings?.currencySymbol}{Number(item.price_at_order).toFixed(2)}</td>
+                                <td className="text-right py-1.5 font-medium">{settings?.currencySymbol}{(item.quantity * Number(item.price_at_order)).toFixed(2)}</td>
                               </tr>
                             ))}
                           </tbody>
                           <tfoot>
                             <tr className="font-semibold text-base">
                               <td colSpan={3} className="text-right py-1.5">Total</td>
-                              <td className="text-right py-1.5">${Number(tableOrder.total).toFixed(2)}</td>
+                              <td className="text-right py-1.5">{settings?.currencySymbol}{Number(tableOrder.total).toFixed(2)}</td>
                             </tr>
                           </tfoot>
                         </table>

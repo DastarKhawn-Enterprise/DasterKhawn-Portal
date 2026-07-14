@@ -60,6 +60,7 @@ export default function ExpensesView({ supabaseUrl, supabaseAnonKey, theme }: Pr
   // Delete confirmation
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [currencySymbol, setCurrencySymbol] = useState('$');
 
   const getSupabaseClient = useCallback(async () => {
     const token = await getToken({ template: 'supabase' });
@@ -86,6 +87,15 @@ export default function ExpensesView({ supabaseUrl, supabaseAnonKey, theme }: Pr
       } catch (e) {}
     })();
   }, [authReady, getToken]);
+
+  useEffect(() => {
+    if (!authReady) return;
+    getSupabaseClient().then((client) => {
+      client.from('settings').select('currency_symbol').single().then(({ data, error }) => {
+        if (!error && data?.currency_symbol) setCurrencySymbol(data.currency_symbol);
+      });
+    });
+  }, [authReady, getSupabaseClient]);
 
   const getDateRange = useCallback(() => {
     const now = new Date();
@@ -287,7 +297,7 @@ export default function ExpensesView({ supabaseUrl, supabaseAnonKey, theme }: Pr
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Total Expenses</p>
-            <p className="text-2xl font-bold" style={{ color: theme.primaryColor }}>${totalExpenses.toFixed(2)}</p>
+            <p className="text-2xl font-bold" style={{ color: theme.primaryColor }}>{currencySymbol}{totalExpenses.toFixed(2)}</p>
           </div>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <h3 className="text-xs text-gray-500 uppercase tracking-wider mb-3">Category Breakdown</h3>
@@ -299,7 +309,7 @@ export default function ExpensesView({ supabaseUrl, supabaseAnonKey, theme }: Pr
                   <div key={cat}>
                     <div className="flex justify-between text-sm mb-0.5">
                       <span className="text-gray-600">{CATEGORY_LABELS[cat] || cat}</span>
-                      <span className="text-gray-800 font-medium">${total.toFixed(2)}</span>
+                      <span className="text-gray-800 font-medium">{currencySymbol}{total.toFixed(2)}</span>
                     </div>
                     <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                       <div className="h-full rounded-full transition-all" style={{ width: `${(total / maxCategoryTotal) * 100}%`, backgroundColor: theme.primaryColor }} />
@@ -331,7 +341,7 @@ export default function ExpensesView({ supabaseUrl, supabaseAnonKey, theme }: Pr
                       </span>
                       <div className="text-sm text-gray-500">{exp.expense_date}</div>
                     </div>
-                    <div className="text-lg font-bold" style={{ color: theme.primaryColor }}>${Number(exp.amount).toFixed(2)}</div>
+                    <div className="text-lg font-bold" style={{ color: theme.primaryColor }}>{currencySymbol}{Number(exp.amount).toFixed(2)}</div>
                   </div>
                   {exp.description && <p className="text-sm text-gray-600 mb-2">{exp.description}</p>}
                   <div className="flex gap-2">
@@ -363,7 +373,7 @@ export default function ExpensesView({ supabaseUrl, supabaseAnonKey, theme }: Pr
                         </span>
                       </td>
                       <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate">{exp.description || '—'}</td>
-                      <td className="px-4 py-3 text-right font-semibold">${Number(exp.amount).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right font-semibold">{currencySymbol}{Number(exp.amount).toFixed(2)}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={() => openEditForm(exp)} className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100">Edit</button>

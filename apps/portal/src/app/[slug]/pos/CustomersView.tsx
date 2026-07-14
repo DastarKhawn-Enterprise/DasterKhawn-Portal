@@ -57,6 +57,7 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
   const [deleteError, setDeleteError] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [currencySymbol, setCurrencySymbol] = useState('$');
 
   const getSupabaseClient = useCallback(async () => {
     const token = await getToken({ template: 'supabase' });
@@ -83,6 +84,15 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
       } catch (e) {}
     })();
   }, [authReady, getToken]);
+
+  useEffect(() => {
+    if (!authReady) return;
+    getSupabaseClient().then((client) => {
+      client.from('settings').select('currency_symbol').single().then(({ data, error }) => {
+        if (!error && data?.currency_symbol) setCurrencySymbol(data.currency_symbol);
+      });
+    });
+  }, [authReady, getSupabaseClient]);
 
   const fetchCustomers = useCallback(async () => {
     if (!authReady) return;
@@ -249,7 +259,7 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
                       <div className="text-sm text-gray-500 mb-2">{c.phone || 'No phone'}</div>
                       <div className="flex gap-4 text-sm text-gray-600">
                         <div><span className="text-gray-400">Orders:</span> {c.total_orders}</div>
-                        <div><span className="text-gray-400">Spent:</span> ${Number(c.total_spent).toFixed(2)}</div>
+                        <div><span className="text-gray-400">Spent:</span> {currencySymbol}{Number(c.total_spent).toFixed(2)}</div>
                       </div>
                       {canEdit && (
                         <button
@@ -281,7 +291,7 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
                           <td className="px-4 py-3 font-medium text-gray-800">{c.name}</td>
                           <td className="px-4 py-3 text-gray-500">{c.phone || '-'}</td>
                           <td className="px-4 py-3 text-right text-gray-700">{c.total_orders}</td>
-                          <td className="px-4 py-3 text-right text-gray-700">${Number(c.total_spent).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right text-gray-700">{currencySymbol}{Number(c.total_spent).toFixed(2)}</td>
                           <td className="px-4 py-3 text-right font-medium" style={{ color: theme.primaryColor }}>{c.loyalty_points}</td>
                           {canEdit && (
                             <td className="px-4 py-3 text-right">
@@ -320,7 +330,7 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
                   <div className="text-xs text-gray-400">Orders</div>
                 </div>
                 <div className="bg-gray-50 rounded p-2">
-                  <div className="text-lg font-bold text-gray-800">${Number(selectedCustomer.total_spent).toFixed(2)}</div>
+                  <div className="text-lg font-bold text-gray-800">{currencySymbol}{Number(selectedCustomer.total_spent).toFixed(2)}</div>
                   <div className="text-xs text-gray-400">Spent</div>
                 </div>
                 <div className="bg-gray-50 rounded p-2">
@@ -343,7 +353,7 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
                       </div>
                       <div className="flex items-center gap-2">
                         <span className={statusColor[o.status] || 'text-gray-500'}>{o.status}</span>
-                        <span className="font-medium text-gray-700">${Number(o.total).toFixed(2)}</span>
+                        <span className="font-medium text-gray-700">{currencySymbol}{Number(o.total).toFixed(2)}</span>
                       </div>
                     </div>
                   ))}
@@ -377,7 +387,7 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
                   <div className="text-xs text-gray-400">Orders</div>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
-                  <div className="text-lg font-bold text-gray-800">${Number(selectedCustomer.total_spent).toFixed(2)}</div>
+                  <div className="text-lg font-bold text-gray-800">{currencySymbol}{Number(selectedCustomer.total_spent).toFixed(2)}</div>
                   <div className="text-xs text-gray-400">Spent</div>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
@@ -401,7 +411,7 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
                         </div>
                         <div className="flex items-center gap-2">
                           <span className={statusColor[o.status] || 'text-gray-500'}>{o.status}</span>
-                          <span className="font-medium text-gray-700">${Number(o.total).toFixed(2)}</span>
+                          <span className="font-medium text-gray-700">{currencySymbol}{Number(o.total).toFixed(2)}</span>
                         </div>
                       </div>
                     ))}

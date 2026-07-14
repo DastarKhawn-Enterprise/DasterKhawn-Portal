@@ -77,6 +77,7 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme }: P
   const [orderTypes, setOrderTypes] = useState<OrderTypeRow[]>([]);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [currencySymbol, setCurrencySymbol] = useState('$');
 
   const getSupabaseClient = useCallback(async () => {
     const token = await getToken({ template: 'supabase' });
@@ -198,6 +199,17 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme }: P
     fetchAll();
   }, [authReady, fetchAll]);
 
+  useEffect(() => {
+    if (!authReady) return;
+    (async () => {
+      try {
+        const client = await getSupabaseClient();
+        const { data } = await client.from('settings').select('currency_symbol').limit(1).single();
+        if (data?.currency_symbol) setCurrencySymbol(data.currency_symbol);
+      } catch (e) {}
+    })();
+  }, [authReady, getSupabaseClient]);
+
   // Realtime subscriptions
   useEffect(() => {
     if (!authReady) return;
@@ -235,7 +247,7 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme }: P
           </div>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 border-l-4 p-4" style={cardStyle}>
             <p className="text-xs text-gray-500 uppercase tracking-wide">Revenue</p>
-            <p className="text-2xl font-bold text-gray-800 mt-1">${summary.totalRevenue.toFixed(2)}</p>
+            <p className="text-2xl font-bold text-gray-800 mt-1">{currencySymbol}{summary.totalRevenue.toFixed(2)}</p>
             <p className="text-xs text-gray-400 mt-1">earned today</p>
           </div>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 border-l-4 p-4" style={cardStyle}>
@@ -245,7 +257,7 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme }: P
           </div>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 border-l-4 p-4" style={cardStyle}>
             <p className="text-xs text-gray-500 uppercase tracking-wide">Avg Order</p>
-            <p className="text-2xl font-bold text-gray-800 mt-1">${summary.avgOrderValue.toFixed(2)}</p>
+            <p className="text-2xl font-bold text-gray-800 mt-1">{currencySymbol}{summary.avgOrderValue.toFixed(2)}</p>
             <p className="text-xs text-gray-400 mt-1">per completed order</p>
           </div>
         </div>
@@ -304,7 +316,7 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme }: P
                   <div key={row.order_type}>
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-gray-600">{ORDER_TYPE_LABELS[row.order_type] || row.order_type}</span>
-                      <span className="text-gray-800 font-medium">${row.revenue.toFixed(2)}</span>
+                      <span className="text-gray-800 font-medium">{currencySymbol}{row.revenue.toFixed(2)}</span>
                     </div>
                     <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div
@@ -335,7 +347,7 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme }: P
                       <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold border ${STATUS_COLORS[order.status] || ''}`}>
                         {STATUS_LABELS[order.status] || order.status}
                       </span>
-                      <span className="text-xs font-medium text-gray-700 w-14 text-right">${Number(order.total).toFixed(2)}</span>
+                      <span className="text-xs font-medium text-gray-700 w-14 text-right">{currencySymbol}{Number(order.total).toFixed(2)}</span>
                     </div>
                   </div>
                 ))}

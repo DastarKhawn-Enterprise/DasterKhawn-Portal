@@ -52,6 +52,7 @@ export default function MenuManagementView({ supabaseUrl, supabaseAnonKey, theme
   const [ingredients, setIngredients] = useState<{ inventory_item_id: string; inventory_name: string; quantity_used: number }[]>([]);
   const [inventoryItems, setInventoryItems] = useState<{ id: string; name: string; unit: string }[]>([]);
   const [ingLoadError, setIngLoadError] = useState('');
+  const [currencySymbol, setCurrencySymbol] = useState('$');
 
   const getSupabaseClient = useCallback(async () => {
     const token = await getToken({ template: 'supabase' });
@@ -92,6 +93,15 @@ export default function MenuManagementView({ supabaseUrl, supabaseAnonKey, theme
     } catch (e) { console.error('[Menu] fetch error', e); }
     setLoading(false);
   }, [getSupabaseClient]);
+
+  useEffect(() => {
+    if (!authReady) return;
+    getSupabaseClient().then((client) => {
+      client.from('settings').select('currency_symbol').single().then(({ data, error }) => {
+        if (!error && data?.currency_symbol) setCurrencySymbol(data.currency_symbol);
+      });
+    });
+  }, [authReady, getSupabaseClient]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -281,7 +291,7 @@ export default function MenuManagementView({ supabaseUrl, supabaseAnonKey, theme
                         )}
                       </div>
                       <div className={`text-sm font-semibold tabular-nums w-20 text-right ${isAvailable ? 'text-gray-700' : 'text-gray-400'}`}>
-                        ${Number(item.price).toFixed(2)}
+                        {currencySymbol}{Number(item.price).toFixed(2)}
                       </div>
                       {/* Available toggle */}
                       {canEdit ? (
