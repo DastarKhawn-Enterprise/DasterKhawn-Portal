@@ -25,6 +25,7 @@ interface POSClientProps {
   brandName: string;
   theme: ThemeConfig;
   slug: string;
+  enabledModules: Record<string, boolean>;
 }
 
 function PlaceholderPage({ title }: { title: string }) {
@@ -38,7 +39,7 @@ function PlaceholderPage({ title }: { title: string }) {
   );
 }
 
-export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, theme, slug }: POSClientProps) {
+export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, theme, slug, enabledModules }: POSClientProps) {
   const { isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
   const [authReady, setAuthReady] = useState(false);
@@ -52,12 +53,41 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
     const role: string = meta?.role ?? '';
     if (role === 'super_admin') return [];
     const hidden: ViewId[] = [];
+
+    // Permission-based hiding
     if (!perms.includes('staff:manage')) hidden.push('staff');
     if (!perms.includes('menu:edit')) { hidden.push('menu'); hidden.push('inventory'); }
     if (!perms.includes('reports:view')) hidden.push('reports');
     if (!perms.includes('settings:edit')) { hidden.push('settings'); hidden.push('expenses'); }
+
+    // Per-tenant module toggle hiding (applies to ALL users regardless of permissions)
+    const moduleToViews: Record<string, ViewId[]> = {
+      orders: ['current-orders', 'orders-completed', 'orders-cancelled', 'orders-draft'],
+      dine_in: ['dine-in'],
+      take_away: ['take-away'],
+      delivery: ['delivery'],
+      drive_thru: ['drive-thru'],
+      third_party: ['third-party'],
+      reservations: ['reservations'],
+      menu: ['menu'],
+      inventory: ['inventory'],
+      customers: ['customers'],
+      reports: ['reports'],
+      expenses: ['expenses'],
+      staff: ['staff'],
+      settings: ['settings'],
+    };
+
+    for (const [moduleKey, views] of Object.entries(moduleToViews)) {
+      if (enabledModules[moduleKey] === false) {
+        for (const v of views) {
+          if (!hidden.includes(v)) hidden.push(v);
+        }
+      }
+    }
+
     return hidden;
-  }, [user]);
+  }, [user, enabledModules]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -95,7 +125,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
       case 'inventory':
         return <InventoryView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
       case 'customers':
-        return <CustomersView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
+        return <CustomersView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} loyaltyPointsEnabled={enabledModules.loyalty_points !== false} />;
       case 'reports':
         return <ReportsView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
       case 'expenses':

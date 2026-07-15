@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { toggleTenantStatus, saveTenantTheme, getRevenueStats } from './actions';
+import { toggleTenantStatus, saveTenantTheme, saveTenantModules, getRevenueStats } from './actions';
 import type { ThemeConfig } from '@sat-sys/gateway-sdk';
 
 interface TenantRow {
@@ -11,6 +11,7 @@ interface TenantRow {
   brand_name: string;
   status: 'active' | 'suspended';
   theme_config: ThemeConfig;
+  enabled_modules?: Record<string, boolean>;
   created_at: string;
   billing: {
     payment_status: string;
@@ -33,6 +34,7 @@ export default function AdminDashboard({ tenants }: AdminDashboardProps) {
   const [suspendTarget, setSuspendTarget] = useState<TenantRow | null>(null);
   const [themeTarget, setThemeTarget] = useState<TenantRow | null>(null);
   const [revenueTarget, setRevenueTarget] = useState<TenantRow | null>(null);
+  const [modulesTarget, setModulesTarget] = useState<TenantRow | null>(null);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
@@ -134,6 +136,12 @@ export default function AdminDashboard({ tenants }: AdminDashboardProps) {
                   >
                     Revenue
                   </button>
+                  <button
+                    onClick={() => setModulesTarget(t)}
+                    className="text-sm px-3 py-1.5 bg-teal-100 text-teal-700 rounded hover:bg-teal-200"
+                  >
+                    Modules
+                  </button>
                 </div>
               </div>
             ))}
@@ -217,6 +225,12 @@ export default function AdminDashboard({ tenants }: AdminDashboardProps) {
                         >
                           Revenue
                         </button>
+                        <button
+                          onClick={() => setModulesTarget(t)}
+                          className="text-sm px-3 py-1 bg-teal-100 text-teal-700 rounded hover:bg-teal-200"
+                        >
+                          Modules
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -256,6 +270,25 @@ export default function AdminDashboard({ tenants }: AdminDashboardProps) {
 
       {revenueTarget && (
         <RevenueModal tenant={revenueTarget} onClose={() => setRevenueTarget(null)} />
+      )}
+
+      {modulesTarget && (
+        <ModulesModal
+          tenant={modulesTarget}
+          onSave={async (modules) => {
+            const r = await saveTenantModules(modulesTarget.id, modules);
+            if (r.success) {
+              setLocalTenants((prev) =>
+                prev.map((x) => (x.id === modulesTarget.id ? { ...x, enabled_modules: modules } : x)),
+              );
+              showMsg('success', `${modulesTarget.brand_name} modules updated`);
+              setModulesTarget(null);
+            } else {
+              showMsg('error', r.error ?? 'Failed');
+            }
+          }}
+          onClose={() => setModulesTarget(null)}
+        />
       )}
     </>
   );
@@ -507,6 +540,120 @@ function RevenueModal({
             className="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
           >
             Close
+          </button>
+        </div>
+      </div>
+    </ModalOverlay>
+  );
+}
+
+/* ─── Modules Modal ─── */
+
+const MODULE_GROUPS = [
+  {
+    label: 'Core',
+    keys: ['dashboard', 'orders'],
+    locked: true,
+  },
+  {
+    label: 'Order Types',
+    keys: ['dine_in', 'take_away', 'delivery', 'drive_thru', 'third_party'],
+  },
+  {
+    label: 'Management',
+    keys: ['menu', 'inventory', 'customers', 'staff', 'settings', 'expenses'],
+  },
+  {
+    label: 'Features',
+    keys: ['reservations', 'loyalty_points'],
+  },
+];
+
+const MODULE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  orders: 'Orders',
+  dine_in: 'Dine In',
+  take_away: 'Take Away',
+  delivery: 'Delivery',
+  drive_thru: 'Drive Thru',
+  third_party: 'Third Party',
+  menu: 'Menu',
+  inventory: 'Inventory',
+  customers: 'Customers',
+  staff: 'Staff',
+  settings: 'Settings',
+  expenses: 'Expenses',
+  reservations: 'Reservations',
+  loyalty_points: 'Loyalty Points',
+};
+
+function ModulesModal({
+  tenant,
+  onSave,
+  onClose,
+}: {
+  tenant: TenantRow;
+  onSave: (modules: Record<string, boolean>) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [modules, setModules] = useState<Record<string, boolean>>(
+    () => tenant.enabled_modules || {},
+  );
+  const [saving, setSaving] = useState(false);
+
+  const toggle = (key: string) => {
+    setModules((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onSave(modules);
+    setSaving(false);
+  };
+
+  return (
+    <ModalOverlay onClose={onClose}>
+      <div className="bg-white rounded-lg p-6 max-w-lg mx-auto shadow-xl w-full max-h-[90vh] overflow-y-auto">
+        <h2 className="text-xl font-bold mb-1">Modules — {tenant.brand_name}</h2>
+        <p className="text-xs text-gray-400 mb-4">Enable or disable POS modules for this tenant.</p>
+
+        {MODULE_GROUPS.map((group) => (
+          <div key={group.label} className="mb-4">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{group.label}</h3>
+            <div className="space-y-2">
+              {group.keys.map((key) => {
+                const enabled = modules[key] !== false;
+                const locked = group.locked;
+                return (
+                  <div key={key} className="flex items-center justify-between">
+                    <span className={`text-sm ${locked ? 'text-gray-400' : 'text-gray-700'}`}>
+                      {MODULE_LABELS[key] || key}
+                      {locked && <span className="text-[10px] text-gray-400 ml-1">(always on)</span>}
+                    </span>
+                    <button
+                      onClick={() => { if (!locked) toggle(key); }}
+                      disabled={locked}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${enabled ? 'bg-green-400' : 'bg-gray-300'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+
+        <div className="flex gap-3 justify-end mt-6">
+          <button onClick={onClose} className="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-50">
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 rounded text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : 'Save Modules'}
           </button>
         </div>
       </div>

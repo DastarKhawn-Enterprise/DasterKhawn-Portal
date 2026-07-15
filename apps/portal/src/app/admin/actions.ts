@@ -4,6 +4,7 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import {
   updateTenantStatus,
   updateTenantTheme,
+  updateTenantModules,
   getTenantBySlug,
   getTenantServiceCredentials,
   type ThemeConfig,
@@ -42,6 +43,18 @@ export async function saveTenantTheme(
   try {
     await requireSuperAdmin();
     return await updateTenantTheme(tenantId, theme);
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
+export async function saveTenantModules(
+  tenantId: string,
+  enabledModules: Record<string, boolean>,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireSuperAdmin();
+    return await updateTenantModules(tenantId, enabledModules);
   } catch (e: any) {
     return { success: false, error: e.message };
   }

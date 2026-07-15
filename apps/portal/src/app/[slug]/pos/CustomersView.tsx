@@ -10,6 +10,7 @@ interface Props {
   supabaseUrl: string;
   supabaseAnonKey: string;
   theme: ThemeConfig;
+  loyaltyPointsEnabled?: boolean;
 }
 
 interface Customer {
@@ -32,7 +33,7 @@ interface PastOrder {
   created_at: string;
 }
 
-export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: Props) {
+export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme, loyaltyPointsEnabled = true }: Props) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [authReady, setAuthReady] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
@@ -254,7 +255,7 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div className="font-semibold text-gray-800">{c.name}</div>
-                        <div className="text-sm font-bold" style={{ color: theme.primaryColor }}>{c.loyalty_points} pts</div>
+                        {loyaltyPointsEnabled && <div className="text-sm font-bold" style={{ color: theme.primaryColor }}>{c.loyalty_points} pts</div>}
                       </div>
                       <div className="text-sm text-gray-500 mb-2">{c.phone || 'No phone'}</div>
                       <div className="flex gap-4 text-sm text-gray-600">
@@ -281,7 +282,7 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
                         <th className="text-left px-4 py-3 font-medium">Phone</th>
                         <th className="text-right px-4 py-3 font-medium">Orders</th>
                         <th className="text-right px-4 py-3 font-medium">Spent</th>
-                        <th className="text-right px-4 py-3 font-medium">Points</th>
+                        {loyaltyPointsEnabled && <th className="text-right px-4 py-3 font-medium">Points</th>}
                         {canEdit && <th className="text-right px-4 py-3 font-medium"></th>}
                       </tr>
                     </thead>
@@ -292,7 +293,7 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
                           <td className="px-4 py-3 text-gray-500">{c.phone || '-'}</td>
                           <td className="px-4 py-3 text-right text-gray-700">{c.total_orders}</td>
                           <td className="px-4 py-3 text-right text-gray-700">{currencySymbol}{Number(c.total_spent).toFixed(2)}</td>
-                          <td className="px-4 py-3 text-right font-medium" style={{ color: theme.primaryColor }}>{c.loyalty_points}</td>
+                          {loyaltyPointsEnabled && <td className="px-4 py-3 text-right font-medium" style={{ color: theme.primaryColor }}>{c.loyalty_points}</td>}
                           {canEdit && (
                             <td className="px-4 py-3 text-right">
                               <button onClick={(e) => { e.stopPropagation(); openEditForm(c); }} className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100">Edit</button>
@@ -324,7 +325,7 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
                 {selectedCustomer.email && <p><span className="text-gray-400">Email:</span> {selectedCustomer.email}</p>}
                 {selectedCustomer.notes && <p><span className="text-gray-400">Notes:</span> {selectedCustomer.notes}</p>}
               </div>
-              <div className="grid grid-cols-3 gap-2 mb-4 text-center">
+              <div className={`grid ${loyaltyPointsEnabled ? 'grid-cols-3' : 'grid-cols-2'} gap-2 mb-4 text-center`}>
                 <div className="bg-gray-50 rounded p-2">
                   <div className="text-lg font-bold text-gray-800">{selectedCustomer.total_orders}</div>
                   <div className="text-xs text-gray-400">Orders</div>
@@ -333,10 +334,10 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
                   <div className="text-lg font-bold text-gray-800">{currencySymbol}{Number(selectedCustomer.total_spent).toFixed(2)}</div>
                   <div className="text-xs text-gray-400">Spent</div>
                 </div>
-                <div className="bg-gray-50 rounded p-2">
+                {loyaltyPointsEnabled && <div className="bg-gray-50 rounded p-2">
                   <div className="text-lg font-bold" style={{ color: theme.primaryColor }}>{selectedCustomer.loyalty_points}</div>
                   <div className="text-xs text-gray-400">Points</div>
-                </div>
+                </div>}
               </div>
               <h3 className="text-sm font-semibold text-gray-700 mb-2">Order History</h3>
               {historyLoading ? (
@@ -381,7 +382,7 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
                 {selectedCustomer.email && <p><span className="text-gray-400">Email:</span> {selectedCustomer.email}</p>}
                 {selectedCustomer.notes && <p><span className="text-gray-400">Notes:</span> {selectedCustomer.notes}</p>}
               </div>
-              <div className="grid grid-cols-3 gap-2 mb-4 text-center">
+              <div className={`grid ${loyaltyPointsEnabled ? 'grid-cols-3' : 'grid-cols-2'} gap-2 mb-4 text-center`}>
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
                   <div className="text-lg font-bold text-gray-800">{selectedCustomer.total_orders}</div>
                   <div className="text-xs text-gray-400">Orders</div>
@@ -390,10 +391,10 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme }: P
                   <div className="text-lg font-bold text-gray-800">{currencySymbol}{Number(selectedCustomer.total_spent).toFixed(2)}</div>
                   <div className="text-xs text-gray-400">Spent</div>
                 </div>
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+                {loyaltyPointsEnabled && <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
                   <div className="text-lg font-bold" style={{ color: theme.primaryColor }}>{selectedCustomer.loyalty_points}</div>
                   <div className="text-xs text-gray-400">Points</div>
-                </div>
+                </div>}
               </div>
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
                 <h3 className="text-sm font-semibold text-gray-700 mb-2">Order History</h3>
