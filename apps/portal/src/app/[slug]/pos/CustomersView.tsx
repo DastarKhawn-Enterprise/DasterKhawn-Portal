@@ -182,7 +182,7 @@ export default function CustomersView({ supabaseUrl, supabaseAnonKey, theme, loy
     try {
       const client = await getSupabaseClient();
       if (customer.total_orders > 0) {
-        setDeleteError('Cannot delete — has order history');
+        setDeleteError(`Cannot delete — has order history, ${customer.total_orders} order${customer.total_orders === 1 ? '' : 's'} on record`);
         return;
       }
       setDeleting(true);

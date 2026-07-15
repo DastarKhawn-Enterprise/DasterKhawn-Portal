@@ -43,11 +43,6 @@ export default function ReceiptView({ data, brandName, theme, onClose, footerTex
 
   const subtotal = data.items.reduce((s, i) => s + i.price * i.quantity, 0);
 
-  // DEBUG: log the exact values driving the tax conditional
-  console.log('[ReceiptView DEBUG] data.taxAmount:', data.taxAmount, 'typeof:', typeof data.taxAmount);
-  console.log('[ReceiptView DEBUG] subtotal:', subtotal, 'total:', data.total);
-  console.log('[ReceiptView DEBUG] full data object:', JSON.stringify(data, null, 2));
-
   const content = receiptContent(brandName, theme, data, subtotal, footerText, currencySymbol);
 
   return (
@@ -69,26 +64,26 @@ export default function ReceiptView({ data, brandName, theme, onClose, footerTex
       {mounted && createPortal(
         <style>{`
           @page { size: 80mm auto; margin: 0; }
-          .receipt-print-area { display: none; }
           @media print {
-            #__next { display: none !important; }
-            html, body { margin: 0 !important; padding: 0 !important; }
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              min-height: auto !important;
+            }
+            body > *:not(.receipt-print-area) {
+              display: none !important;
+            }
             .no-print { display: none !important; }
             .receipt-print-area {
               display: block !important;
-              position: absolute;
-              top: 0;
-              left: 0;
-              width: 80mm;
-              padding: 4mm 6mm;
+              width: 100%;
+              max-width: 80mm;
+              padding: 3mm 4mm;
               background: white;
-              font-size: 12px;
               font-family: 'Courier New', Courier, monospace;
               box-sizing: border-box;
             }
           }
-          /* Browser print header/footer (date, URL) controlled via print dialog settings, not CSS.
-             Uncheck "Headers and footers" in Chrome print dialog -> More settings. */
         `}</style>,
         document.head
       )}
@@ -181,7 +176,7 @@ function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData
         </div>
         <div className="flex justify-between text-gray-500">
           <span>Tax</span>
-          <span>{curr}{tax.toFixed(2)} (raw: {JSON.stringify(data.taxAmount)} / {JSON.stringify(tax)})</span>
+          <span>{curr}{tax.toFixed(2)}</span>
         </div>
         <div className="flex justify-between font-bold text-sm border-t border-gray-300 pt-1">
           <span>Total</span>
