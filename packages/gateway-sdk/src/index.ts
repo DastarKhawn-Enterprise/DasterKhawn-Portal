@@ -58,7 +58,7 @@ export async function getTenantBySlug(slug: string): Promise<TenantResult | null
   const client = getGatewayClient();
   const { data, error } = await client
     .from('tenants')
-    .select('id, slug, brand_name, supabase_url, supabase_anon_key, status, theme_config')
+    .select('id, slug, brand_name, supabase_url, supabase_anon_key, status, theme_config, enabled_modules')
     .eq('slug', slug)
     .single();
 
@@ -70,7 +70,7 @@ export async function getTenantById(id: string): Promise<TenantResult | null> {
   const client = getGatewayClient();
   const { data, error } = await client
     .from('tenants')
-    .select('id, slug, brand_name, supabase_url, supabase_anon_key, status, theme_config')
+    .select('id, slug, brand_name, supabase_url, supabase_anon_key, status, theme_config, enabled_modules')
     .eq('id', id)
     .single();
 
@@ -82,7 +82,7 @@ export async function getAllTenants(): Promise<TenantResult[]> {
   const client = getGatewayClient();
   const { data, error } = await client
     .from('tenants')
-    .select('id, slug, brand_name, supabase_url, supabase_anon_key, status, theme_config');
+    .select('id, slug, brand_name, supabase_url, supabase_anon_key, status, theme_config, enabled_modules');
 
   if (error) return [];
   return data as TenantResult[];
@@ -102,7 +102,7 @@ export async function getAllTenantsWithBilling(): Promise<TenantWithBilling[]> {
   const client = getGatewayClient();
   const { data, error } = await client
     .from('tenants')
-    .select('id, slug, brand_name, supabase_url, supabase_anon_key, status, theme_config, created_at, billing(id, payment_status, last_paid_at, due_date, amount_due)');
+    .select('id, slug, brand_name, supabase_url, supabase_anon_key, status, theme_config, enabled_modules, created_at, billing(id, payment_status, last_paid_at, due_date, amount_due)');
 
   if (error) return [];
   return (data as any[]).map((t) => ({
