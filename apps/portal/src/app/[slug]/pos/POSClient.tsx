@@ -16,6 +16,7 @@ import InventoryView from './InventoryView';
 import CustomersView from './CustomersView';
 import ExpensesView from './ExpensesView';
 import ReservationsView from './ReservationsView';
+import ThirdPartyView from './ThirdPartyView';
 import type { ViewId as StaffViewId } from './Sidebar';
 
 interface POSClientProps {
@@ -86,7 +87,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
       case 'drive-thru':
         return placeholder('Drive Thru');
       case 'third-party':
-        return placeholder('Third Party');
+        return <ThirdPartyView />;
       case 'reservations':
         return <ReservationsView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
       case 'menu':
