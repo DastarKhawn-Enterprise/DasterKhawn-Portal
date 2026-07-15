@@ -1,5 +1,5 @@
 import { auth, currentUser } from '@clerk/nextjs/server';
-import { getTenantBySlug } from '@sat-sys/gateway-sdk';
+import { getTenantBySlug, getTenantEnabledModules } from '@sat-sys/gateway-sdk';
 import { notFound, redirect } from 'next/navigation';
 import POSClient from './POSClient';
 
@@ -65,6 +65,8 @@ export default async function POSPage({
     return <AccessDeniedScreen brandName={tenant.brand_name} />;
   }
 
+  const enabledModules = await getTenantEnabledModules(tenant.id);
+
   return (
     <POSClient
       supabaseUrl={tenant.supabase_url}
@@ -72,7 +74,7 @@ export default async function POSPage({
       brandName={tenant.brand_name}
       theme={tenant.theme_config}
       slug={params.slug}
-      enabledModules={tenant.enabled_modules}
+      enabledModules={enabledModules}
     />
   );
 }

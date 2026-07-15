@@ -51,14 +51,14 @@ export interface TenantResult {
   supabase_anon_key: string;
   status: 'active' | 'suspended';
   theme_config: ThemeConfig;
-  enabled_modules: Record<string, boolean>;
+  enabled_modules?: Record<string, boolean>;
 }
 
 export async function getTenantBySlug(slug: string): Promise<TenantResult | null> {
   const client = getGatewayClient();
   const { data, error } = await client
     .from('tenants')
-    .select('id, slug, brand_name, supabase_url, supabase_anon_key, status, theme_config, enabled_modules')
+    .select('id, slug, brand_name, supabase_url, supabase_anon_key, status, theme_config')
     .eq('slug', slug)
     .single();
 
@@ -70,7 +70,7 @@ export async function getTenantById(id: string): Promise<TenantResult | null> {
   const client = getGatewayClient();
   const { data, error } = await client
     .from('tenants')
-    .select('id, slug, brand_name, supabase_url, supabase_anon_key, status, theme_config, enabled_modules')
+    .select('id, slug, brand_name, supabase_url, supabase_anon_key, status, theme_config')
     .eq('id', id)
     .single();
 
@@ -82,7 +82,7 @@ export async function getAllTenants(): Promise<TenantResult[]> {
   const client = getGatewayClient();
   const { data, error } = await client
     .from('tenants')
-    .select('id, slug, brand_name, supabase_url, supabase_anon_key, status, theme_config, enabled_modules');
+    .select('id, slug, brand_name, supabase_url, supabase_anon_key, status, theme_config');
 
   if (error) return [];
   return data as TenantResult[];
@@ -102,7 +102,7 @@ export async function getAllTenantsWithBilling(): Promise<TenantWithBilling[]> {
   const client = getGatewayClient();
   const { data, error } = await client
     .from('tenants')
-    .select('id, slug, brand_name, supabase_url, supabase_anon_key, status, theme_config, enabled_modules, created_at, billing(id, payment_status, last_paid_at, due_date, amount_due)');
+    .select('id, slug, brand_name, supabase_url, supabase_anon_key, status, theme_config, created_at, billing(id, payment_status, last_paid_at, due_date, amount_due)');
 
   if (error) return [];
   return (data as any[]).map((t) => ({
@@ -113,10 +113,33 @@ export async function getAllTenantsWithBilling(): Promise<TenantWithBilling[]> {
     supabase_anon_key: t.supabase_anon_key,
     status: t.status,
     theme_config: t.theme_config,
-    enabled_modules: t.enabled_modules,
     created_at: t.created_at,
     billing: t.billing?.[0] ?? null,
   }));
+}
+
+export const DEFAULT_ENABLED_MODULES: Record<string, boolean> = {
+  dashboard: true, orders: true, dine_in: true, take_away: true,
+  delivery: true, drive_thru: true, third_party: true,
+  reservations: true, menu: true, inventory: true,
+  customers: true, reports: true, expenses: true, staff: true,
+  settings: true, loyalty_points: true,
+};
+
+export async function getTenantEnabledModules(tenantId: string): Promise<Record<string, boolean>> {
+  try {
+    const client = getGatewayClient();
+    const { data, error } = await client
+      .from('tenants')
+      .select('enabled_modules')
+      .eq('id', tenantId)
+      .single();
+    if (error || !data) return { ...DEFAULT_ENABLED_MODULES };
+    const modules = (data as any).enabled_modules;
+    return modules && typeof modules === 'object' ? { ...DEFAULT_ENABLED_MODULES, ...modules } : { ...DEFAULT_ENABLED_MODULES };
+  } catch {
+    return { ...DEFAULT_ENABLED_MODULES };
+  }
 }
 
 export async function updateTenantStatus(
