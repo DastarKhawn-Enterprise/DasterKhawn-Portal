@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 
@@ -32,13 +32,34 @@ interface Props {
   currencySymbol?: string;
 }
 
-export default function ReceiptView({ data, brandName, theme, onClose, footerText, currencySymbol }: Props) {
-  const [mounted, setMounted] = useState(false);
+const PRINT_STYLE = `
+  @page { size: 80mm auto; margin: 0; }
+  @media print {
+    html, body {
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 80mm !important;
+      min-height: auto !important;
+    }
+    body > * {
+      display: none !important;
+    }
+    .no-print { display: none !important; }
+    .receipt-print-area {
+      display: block !important;
+      width: 80mm !important;
+      padding: 3mm 4mm;
+      background: white;
+      font-family: 'Courier New', Courier, monospace;
+      box-sizing: border-box;
+      overflow-y: auto;
+    }
+  }
+`;
 
+export default function ReceiptView({ data, brandName, theme, onClose, footerText, currencySymbol }: Props) {
   useEffect(() => {
-    setMounted(true);
-    const timer = setTimeout(() => window.print(), 300);
-    return () => clearTimeout(timer);
+    requestAnimationFrame(() => window.print());
   }, []);
 
   const subtotal = data.items.reduce((s, i) => s + i.price * i.quantity, 0);
@@ -47,7 +68,7 @@ export default function ReceiptView({ data, brandName, theme, onClose, footerTex
 
   return (
     <>
-      {/* Screen modal — shown on screen, hidden during print via #__next { display:none } */}
+      {/* Screen modal */}
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
         <div className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
           {content}
@@ -60,37 +81,9 @@ export default function ReceiptView({ data, brandName, theme, onClose, footerTex
         </div>
       </div>
 
-      {/* Print-only: styles in <head> + receipt at end of <body>, both outside #__next */}
-      {mounted && createPortal(
-        <style>{`
-          @page { size: 80mm auto; margin: 0; }
-          @media print {
-            html, body {
-              margin: 0 !important;
-              padding: 0 !important;
-              min-height: auto !important;
-            }
-            body > *:not(.receipt-print-area) {
-              display: none !important;
-            }
-            .no-print { display: none !important; }
-            .receipt-print-area {
-              display: block !important;
-              width: 100%;
-              max-width: 80mm;
-              padding: 3mm 4mm;
-              background: white;
-              font-family: 'Courier New', Courier, monospace;
-              box-sizing: border-box;
-            }
-          }
-        `}</style>,
-        document.head
-      )}
-      {mounted && createPortal(
-        <div className="receipt-print-area">{content}</div>,
-        document.body
-      )}
+      {/* Print style and receipt — rendered immediately via portal, outside app root */}
+      {typeof document !== 'undefined' && createPortal(<style>{PRINT_STYLE}</style>, document.head)}
+      {typeof document !== 'undefined' && createPortal(<div className="receipt-print-area">{content}</div>, document.body)}
     </>
   );
 }
