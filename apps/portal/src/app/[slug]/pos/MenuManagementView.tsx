@@ -2,9 +2,20 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import { createClient } from '@supabase/supabase-js';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
-import { hasPermission, decodeJwt } from './permissions';
+import type { MenuItemPayload } from './menu-actions';
+import {
+  getMenuItems,
+  addMenuItem,
+  updateMenuItem,
+  deleteMenuItem as deleteMenuItemAction,
+  toggleMenuItem as toggleMenuItemAction,
+  getMenuItemIngredients,
+  getInventoryItems,
+  getSettingsCurrency,
+  saveIngredients,
+  checkMenuEditPermission,
+} from './menu-actions';
 
 interface MenuItemRecord {
   id: string;
@@ -16,8 +27,7 @@ interface MenuItemRecord {
 }
 
 interface Props {
-  supabaseUrl: string;
-  supabaseAnonKey: string;
+  slug: string;
   theme: ThemeConfig;
 }
 
@@ -29,8 +39,8 @@ const defaultForm: Omit<MenuItemRecord, 'id'> = {
   available: true,
 };
 
-export default function MenuManagementView({ supabaseUrl, supabaseAnonKey, theme }: Props) {
-  const { getToken, isLoaded, isSignedIn } = useAuth();
+export default function MenuManagementView({ slug, theme }: Props) {
+  const { isLoaded, isSignedIn } = useAuth();
   const [authReady, setAuthReady] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
   const [items, setItems] = useState<MenuItemRecord[]>([]);
@@ -54,54 +64,27 @@ export default function MenuManagementView({ supabaseUrl, supabaseAnonKey, theme
   const [ingLoadError, setIngLoadError] = useState('');
   const [currencySymbol, setCurrencySymbol] = useState('$');
 
-  const getSupabaseClient = useCallback(async () => {
-    const token = await getToken({ template: 'supabase' });
-    if (!token) throw new Error('No auth token');
-    return createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-      auth: { persistSession: false },
-    });
-  }, [getToken, supabaseUrl, supabaseAnonKey]);
-
+  // Check edit permission via server action (reads staff_roles)
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
     setAuthReady(true);
-  }, [isLoaded, isSignedIn]);
-
-  // Decode permissions from Supabase JWT
-  useEffect(() => {
-    if (!authReady) return;
-    getToken({ template: 'supabase' })
-      .then((token) => {
-        if (!token) return;
-        const decoded = decodeJwt(token);
-        if (decoded) setCanEdit(hasPermission(decoded.permissions, decoded.tenant_role, 'menu:edit'));
-      })
-      .catch(() => {});
-  }, [authReady, getToken]);
+    checkMenuEditPermission(slug).then(setCanEdit);
+  }, [isLoaded, isSignedIn, slug]);
 
   // Fetch all menu items
   const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
-      const client = await getSupabaseClient();
-      const { data, error } = await client
-        .from('menu_items')
-        .select('*')
-        .order('name');
-      if (!error && data) setItems(data as MenuItemRecord[]);
+      const data = await getMenuItems(slug);
+      if (data) setItems(data as MenuItemRecord[]);
     } catch (e) { console.error('[Menu] fetch error', e); }
     setLoading(false);
-  }, [getSupabaseClient]);
+  }, [slug]);
 
   useEffect(() => {
     if (!authReady) return;
-    getSupabaseClient().then((client) => {
-      client.from('settings').select('currency_symbol').single().then(({ data, error }) => {
-        if (!error && data?.currency_symbol) setCurrencySymbol(data.currency_symbol);
-      });
-    });
-  }, [authReady, getSupabaseClient]);
+    getSettingsCurrency(slug).then(setCurrencySymbol);
+  }, [authReady, slug]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -113,30 +96,17 @@ export default function MenuManagementView({ supabaseUrl, supabaseAnonKey, theme
 
   // Fetch inventory items for ingredient dropdown
   const fetchInventoryItems = useCallback(async () => {
-    try {
-      const client = await getSupabaseClient();
-      const { data } = await client.from('inventory_items').select('id, name, unit').order('name');
-      if (data) setInventoryItems(data as { id: string; name: string; unit: string }[]);
-    } catch (e) {}
-  }, [getSupabaseClient]);
+    const data = await getInventoryItems(slug);
+    if (data) setInventoryItems(data);
+  }, [slug]);
 
   // Fetch ingredients for a menu item
   const fetchIngredients = useCallback(async (menuItemId: string) => {
     try {
-      const client = await getSupabaseClient();
-      const { data } = await client
-        .from('menu_item_ingredients')
-        .select('inventory_item_id, quantity_used, inventory_items!inner(name)')
-        .eq('menu_item_id', menuItemId);
-      if (data) {
-        setIngredients(data.map((r: any) => ({
-          inventory_item_id: r.inventory_item_id,
-          inventory_name: r.inventory_items?.name || 'Unknown',
-          quantity_used: Number(r.quantity_used),
-        })));
-      }
+      const data = await getMenuItemIngredients(slug, menuItemId);
+      setIngredients(data || []);
     } catch (e) { setIngLoadError('Failed to load ingredients'); }
-  }, [getSupabaseClient]);
+  }, [slug]);
 
   // Open add form
   const handleAdd = useCallback(() => {
@@ -167,8 +137,7 @@ export default function MenuManagementView({ supabaseUrl, supabaseAnonKey, theme
     if (!form.name.trim()) return;
     setSaving(true);
     try {
-      const client = await getSupabaseClient();
-      const payload = {
+      const payload: MenuItemPayload = {
         name: form.name.trim(),
         description: form.description?.trim() || null,
         price: form.price,
@@ -177,72 +146,43 @@ export default function MenuManagementView({ supabaseUrl, supabaseAnonKey, theme
       };
 
       if (editId) {
-        const { error } = await client.from('menu_items').update(payload).eq('id', editId);
-        if (error) { console.error('[Menu] update error', error); setSaving(false); return; }
-
-        // Save ingredients: delete all then re-insert
-        await client.from('menu_item_ingredients').delete().eq('menu_item_id', editId);
-        if (ingredients.length > 0) {
-          const ingRows = ingredients.map((ing) => ({
-            menu_item_id: editId,
-            inventory_item_id: ing.inventory_item_id,
-            quantity_used: ing.quantity_used,
-          }));
-          const { error: ingErr } = await client.from('menu_item_ingredients').insert(ingRows);
-          if (ingErr) console.error('[Menu] ingredient save error', ingErr);
-        }
+        await updateMenuItem(slug, editId, payload);
+        await saveIngredients(slug, editId, ingredients);
       } else {
-        const { data: inserted, error } = await client.from('menu_items').insert(payload).select('id').single();
-        if (error) { console.error('[Menu] insert error', error); setSaving(false); return; }
-
-        // Save ingredients for new item
+        const inserted = await addMenuItem(slug, payload);
         if (inserted && ingredients.length > 0) {
-          const ingRows = ingredients.map((ing) => ({
-            menu_item_id: inserted.id,
-            inventory_item_id: ing.inventory_item_id,
-            quantity_used: ing.quantity_used,
-          }));
-          await client.from('menu_item_ingredients').insert(ingRows);
+          await saveIngredients(slug, inserted.id, ingredients);
         }
       }
 
       setShowForm(false);
       fetchItems();
-    } catch (e) { console.error('[Menu] save error', e); }
+    } catch (e: any) { console.error('[Menu] save error', e.message); }
     setSaving(false);
-  }, [form, editId, useNewCategory, newCategory, ingredients, getSupabaseClient, fetchItems]);
+  }, [form, editId, useNewCategory, newCategory, ingredients, slug, fetchItems]);
 
   // Delete item
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) return;
     setDeleting(deleteTarget.id);
     try {
-      const client = await getSupabaseClient();
-      const { error } = await client.from('menu_items').delete().eq('id', deleteTarget.id);
-      if (error) { console.error('[Menu] delete error', error); setDeleting(null); return; }
-      // Hard delete — known limitation: breaks historical order_items references
+      await deleteMenuItemAction(slug, deleteTarget.id);
       setDeleteTarget(null);
       fetchItems();
-    } catch (e) { console.error('[Menu] delete error', e); }
+    } catch (e: any) { console.error('[Menu] delete error', e.message); }
     setDeleting(null);
-  }, [deleteTarget, getSupabaseClient, fetchItems]);
+  }, [deleteTarget, slug, fetchItems]);
 
   // Toggle available
   const handleToggle = useCallback(async (item: MenuItemRecord) => {
     const newVal = !(item.available ?? true);
-    // Optimistic update
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, available: newVal } : i)));
     try {
-      const client = await getSupabaseClient();
-      const { error } = await client.from('menu_items').update({ available: newVal }).eq('id', item.id);
-      if (error) {
-        // Revert on error
-        setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, available: item.available } : i)));
-      }
+      await toggleMenuItemAction(slug, item.id, newVal);
     } catch {
       setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, available: item.available } : i)));
     }
-  }, [getSupabaseClient]);
+  }, [slug]);
 
   if (!isLoaded || !authReady) {
     return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;

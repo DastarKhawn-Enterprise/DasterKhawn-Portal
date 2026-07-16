@@ -121,7 +121,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
       case 'reservations':
         return <ReservationsView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
       case 'menu':
-        return <MenuManagementView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
+        return <MenuManagementView slug={slug} theme={theme} />;
       case 'inventory':
         return <InventoryView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
       case 'customers':
