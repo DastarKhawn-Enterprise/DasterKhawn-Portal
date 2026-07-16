@@ -263,7 +263,7 @@ export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, 
   const toggleReserve = useCallback(async (table: TableRecord) => {
     const newStatus = table.status === 'reserved' ? 'available' : 'reserved';
     try {
-      const r = await supa(slug, { table: 'tables', method: 'PATCH', body: { status: newStatus }, eq: ['id', table.id], select: 'id' });
+      const r = await supa(slug, { table: 'tables', method: 'update', body: { status: newStatus }, eq: ['id', table.id] });
       if (!r.ok) return;
       setTables((prev) => prev.map((t) => (t.id === table.id ? { ...t, status: newStatus as TableRecord['status'] } : t)));
     } catch (e) {}
@@ -306,7 +306,7 @@ export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, 
 
       const orderR = await supa(slug, {
         table: 'orders',
-        method: 'POST',
+        method: 'insert',
         body: { status: 'pending', source: 'pos', total, tax_amount: taxAmount, table_id: selectedTable.id, customer_id: selectedCustomer?.id || null },
         select: 'id, order_number, created_at',
       });
@@ -314,14 +314,14 @@ export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, 
       const order = orderR.data[0];
 
       const items = cart.map((item) => ({ order_id: order.id, menu_item_id: item.id, quantity: item.quantity, price_at_order: item.price }));
-      const itemsR = await supa(slug, { table: 'order_items', method: 'POST', body: items });
+      const itemsR = await supa(slug, { table: 'order_items', method: 'insert', body: items });
       if (!itemsR.ok) { console.error('[DineIn Items]', itemsR.error); setCheckingOut(false); return; }
 
       // Deduct inventory for linked ingredients
       await deductInventorySupa(slug, cart).catch((e) => console.error('[DineIn Inventory deduct]', e));
 
       // Update table to occupied
-      await supa(slug, { table: 'tables', method: 'PATCH', body: { status: 'occupied', current_order_id: order.id }, eq: ['id', selectedTable.id] });
+      await supa(slug, { table: 'tables', method: 'update', body: { status: 'occupied', current_order_id: order.id }, eq: ['id', selectedTable.id] });
 
       // Optimistic local updates
       setTables((prev) => prev.map((t) => (t.id === selectedTable.id ? { ...t, status: 'occupied' as const, current_order_id: order.id } : t)));
@@ -356,7 +356,7 @@ export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, 
     if (!selectedTable) return;
     setUpdating(orderId);
     try {
-      const orderR = await supa(slug, { table: 'orders', method: 'PATCH', body: { status: newStatus }, eq: ['id', orderId] });
+      const orderR = await supa(slug, { table: 'orders', method: 'update', body: { status: newStatus }, eq: ['id', orderId] });
       if (!orderR.ok) { console.error('[DineIn Status]', orderR.error); setUpdating(null); return; }
 
       // Award loyalty points when order is completed and linked to a customer
@@ -368,7 +368,7 @@ export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, 
       }
 
       if (newStatus === 'completed' || newStatus === 'cancelled') {
-        await supa(slug, { table: 'tables', method: 'PATCH', body: { status: 'available', current_order_id: null }, eq: ['id', selectedTable.id] });
+        await supa(slug, { table: 'tables', method: 'update', body: { status: 'available', current_order_id: null }, eq: ['id', selectedTable.id] });
         setTables((prev) => prev.map((t) => (t.id === selectedTable.id ? { ...t, status: 'available' as const, current_order_id: null } : t)));
         setSelectedTable(null);
         setTableOrder(null);
@@ -424,7 +424,7 @@ export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, 
       }
       const total = subtotal + taxAmount;
 
-      await supa(slug, { table: 'order_items', method: 'DELETE', eq: ['order_id', tableOrder.id] });
+      await supa(slug, { table: 'order_items', method: 'delete', eq: ['order_id', tableOrder.id] });
       if (editCart.length > 0) {
         const items = editCart.map((item) => ({
           order_id: tableOrder.id,
@@ -432,9 +432,9 @@ export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, 
           quantity: item.quantity,
           price_at_order: item.price,
         }));
-        await supa(slug, { table: 'order_items', method: 'POST', body: items });
+        await supa(slug, { table: 'order_items', method: 'insert', body: items });
       }
-      await supa(slug, { table: 'orders', method: 'PATCH', body: { total, tax_amount: taxAmount }, eq: ['id', tableOrder.id] });
+      await supa(slug, { table: 'orders', method: 'update', body: { total, tax_amount: taxAmount }, eq: ['id', tableOrder.id] });
 
       setTableOrder((prev) =>
         prev ? { ...prev, total, tax_amount: taxAmount, order_items: editCart.map((ci) => ({ menu_item_id: ci.id, quantity: ci.quantity, price_at_order: ci.price, menu_items: { name: ci.name } })) } : prev

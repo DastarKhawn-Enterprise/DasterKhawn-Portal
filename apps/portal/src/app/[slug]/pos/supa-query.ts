@@ -99,39 +99,40 @@ async function getSvcKey(slug: string) {
 }
 
 function buildUrl(baseUrl: string, table: string, opts: QueryOptions) {
-  const url = new URL(`${baseUrl}/rest/v1/${table}`);
+  const base = baseUrl.replace(/\/+$/, '');
+  const params: string[] = [];
 
   if (opts.select) {
-    url.searchParams.set('select', opts.select);
+    params.push(`select=${encodeURIComponent(opts.select)}`);
   }
 
   if (opts.eq) {
-    url.searchParams.set(`${opts.eq[0]}`, `eq.${opts.eq[1]}`);
+    params.push(`${encodeURIComponent(opts.eq[0])}=eq.${encodeURIComponent(String(opts.eq[1]))}`);
   }
 
   if (opts.neq) {
-    url.searchParams.set(`${opts.neq[0]}`, `neq.${opts.neq[1]}`);
+    params.push(`${encodeURIComponent(opts.neq[0])}=neq.${encodeURIComponent(String(opts.neq[1]))}`);
   }
 
   if (opts.isNull) {
-    url.searchParams.set(`${opts.isNull[0]}`, `is.null`);
+    params.push(`${encodeURIComponent(opts.isNull[0])}=is.null`);
   }
 
   if (opts.order) {
-    url.searchParams.set('order', opts.order);
+    params.push(`order=${encodeURIComponent(opts.order)}`);
   }
 
   if (opts.limit) {
-    url.searchParams.set('limit', String(opts.limit));
+    params.push(`limit=${opts.limit}`);
   }
 
   if (opts.filter) {
     for (const [key, val] of Object.entries(opts.filter)) {
-      url.searchParams.set(key, `eq.${val}`);
+      params.push(`${encodeURIComponent(key)}=eq.${encodeURIComponent(String(val))}`);
     }
   }
 
-  return url.toString();
+  return `${base}/rest/v1/${table}?${params.join('&')}`;
 }
 
 export async function supa(slug: string, opts: QueryOptions): Promise<QueryResult> {
