@@ -7,8 +7,9 @@ import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
 import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
 import type { SupabaseClient, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import ReceiptView from './ReceiptView';
-import { deductInventory } from './inventory-utils';
-import { updateCustomerLoyalty, searchCustomers } from './customer-utils';
+import { deductInventorySupa } from './inventory-utils';
+import { updateCustomerLoyaltySupa, searchCustomersSupa } from './customer-utils';
+import { supa } from './supa-query';
 
 interface OrderItem {
   menu_item_id: string;
@@ -45,6 +46,7 @@ export interface ViewConfig {
 }
 
 interface Props {
+  slug: string;
   supabaseUrl: string;
   supabaseAnonKey: string;
   theme: ThemeConfig;
@@ -78,7 +80,7 @@ const statusColor: Record<string, string> = {
 
 const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
 
-export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme, brandName, viewConfig }: Props) {
+export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, theme, brandName, viewConfig }: Props) {
   const cfg: ViewConfig = { title: 'Active Orders', orderType: null, showCustomerFields: false, ...viewConfig };
 
   const { getToken, isLoaded, isSignedIn } = useAuth();
@@ -148,65 +150,46 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
   useEffect(() => {
     if (!authReady) return;
     let cancelled = false;
-    getSupabaseClient()
-      .then((client) => {
-        if (cancelled) return null;
-        return client.from('menu_items').select('id, name, description, price, category, available').order('name').not('available', 'eq', false);
-      })
-      .then((r: any) => { console.log('[MenuFetch] response:', JSON.stringify(r, null, 2)); console.log('[MenuFetch] count:', r?.data?.length); if (!cancelled && r && !r.error) setMenuItems(r.data ?? []); })
+    supa(slug, { table: 'menu_items', select: 'id, name, description, price, category, available', order: 'name', limit: 500 })
+      .then((r) => { if (!cancelled && r.ok) setMenuItems(r.data ?? []); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [authReady, getSupabaseClient]);
+  }, [authReady, slug]);
 
   // Fetch tables (for dine_in table selector)
   useEffect(() => {
     if (!authReady) return;
     let cancelled = false;
-    getSupabaseClient()
-      .then((client) => {
-        if (cancelled) return null;
-        return client.from('tables').select('id, table_number, status').order('table_number');
-      })
-      .then((r: any) => { if (!cancelled && r && !r.error) setOrderedTables(r.data ?? []); })
+    supa(slug, { table: 'tables', select: 'id, table_number, status', order: 'table_number' })
+      .then((r) => { if (!cancelled && r.ok) setOrderedTables(r.data ?? []); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [authReady, getSupabaseClient]);
+  }, [authReady, slug]);
 
   // Fetch settings
   useEffect(() => {
     if (!authReady) return;
     let cancelled = false;
-    (async () => {
-      try {
-        const client = await getSupabaseClient();
-        const { data } = await client.from('settings').select('tax_enabled, tax_rate, currency_symbol, receipt_footer_text').limit(1).single();
-        if (cancelled || !data) return;
-        setSettings({
-          taxEnabled: data.tax_enabled,
-          taxRate: Number(data.tax_rate),
-          currencySymbol: data.currency_symbol,
-          footerText: data.receipt_footer_text,
-        });
-      } catch (e) {}
-    })();
+    supa(slug, { table: 'settings', select: 'tax_enabled, tax_rate, currency_symbol, receipt_footer_text', limit: 1 })
+      .then((r) => {
+        if (cancelled || !r.ok || !r.data?.[0]) return;
+        const d = r.data[0];
+        setSettings({ taxEnabled: d.tax_enabled, taxRate: Number(d.tax_rate), currencySymbol: d.currency_symbol, footerText: d.receipt_footer_text });
+      })
+      .catch(() => {});
     return () => { cancelled = true; };
-  }, [authReady, getSupabaseClient]);
+  }, [authReady, slug]);
 
   // Fetch most ordered items (top 10 by total quantity sold)
   useEffect(() => {
     if (!authReady) return;
     let cancelled = false;
-    (async () => {
-      setMostOrderedLoading(true);
-      try {
-        const client = await getSupabaseClient();
-        const { data } = await client
-          .from('order_items')
-          .select('menu_item_id, quantity, menu_items!inner(id, name, description, price, category, available)')
-          .limit(5000);
-        if (cancelled || !data) return;
+    setMostOrderedLoading(true);
+    supa(slug, { table: 'order_items', select: 'menu_item_id, quantity, menu_items!inner(id, name, description, price, category, available)', limit: 5000 })
+      .then((r) => {
+        if (cancelled || !r.ok || !r.data) return;
         const grouped = new Map<string, { item: MenuItem; qty: number }>();
-        for (const row of data) {
+        for (const row of r.data) {
           const mi = (row.menu_items as any);
           if (mi?.available === false) continue;
           const key = mi.id;
@@ -220,11 +203,11 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
             .slice(0, 10)
             .map((entry) => ({ id: entry.item.id, name: entry.item.name, description: entry.item.description, price: entry.item.price, category: entry.item.category, available: entry.item.available }))
         );
-      } catch (e) { console.error('[MostOrdered]', e); }
-      setMostOrderedLoading(false);
-    })();
+      })
+      .catch(() => {})
+      .finally(() => setMostOrderedLoading(false));
     return () => { cancelled = true; };
-  }, [authReady, getSupabaseClient]);
+  }, [authReady, slug]);
 
   // Customer search debounce
   useEffect(() => {
@@ -233,48 +216,29 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
       if (!customerSearch.trim()) { setCustomerResults([]); return; }
       setCustomerSearchLoading(true);
       try {
-        const client = await getSupabaseClient();
-        const results = await searchCustomers(client, customerSearch);
+        const results = await searchCustomersSupa(slug, customerSearch);
         setCustomerResults(results);
       } catch (e) {}
       setCustomerSearchLoading(false);
     }, 300);
     return () => clearTimeout(timer);
-  }, [customerSearch, authReady, getSupabaseClient]);
+  }, [customerSearch, authReady, slug]);
 
-  // Fetch orders + realtime
-  const fetchOrderWithItems = useCallback(async (client: SupabaseClient, orderId: string) => {
-    const { data } = await client
-      .from('orders')
-      .select(SELECT_ORDER_FIELDS)
-      .eq('id', orderId)
-      .single();
-    return data as unknown as Order | null;
-  }, []);
+  // Fetch orders (initial load via supa)
+  const fetchOrdersInitial = useCallback(async () => {
+    const result = await supa(slug, { table: 'orders', select: SELECT_ORDER_FIELDS });
+    if (result.ok && result.data) setOrders(result.data as unknown as Order[]);
+  }, [slug]);
 
+  // Realtime subscription (still uses Supabase client, falls back silently on tenants where JWT is invalid)
   useEffect(() => {
     if (!authReady) return;
-    let cancelled = false;
     let channel: ReturnType<SupabaseClient['channel']> | null = null;
 
     const init = async () => {
-      const client = await getSupabaseClient();
-      if (cancelled) return;
+      const client = await getSupabaseClient().catch(() => null);
+      if (!client) return;
 
-      // Build initial query
-      let query = client
-        .from('orders')
-        .select(SELECT_ORDER_FIELDS);
-      if (cfg.orderType) {
-        query = query.eq('order_type', cfg.orderType);
-      }
-      const { data, error } = await query
-        .not('status', 'in', '("completed","cancelled")')
-        .order('created_at', { ascending: true });
-
-      if (!cancelled && !error && data) setOrders(data as unknown as Order[]);
-
-      // Realtime — subscribe with optional order_type filter on INSERT
       const insertFilter = cfg.orderType
         ? `order_type=eq.${cfg.orderType}`
         : 'status=neq.completed';
@@ -285,7 +249,8 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
           async (payload: RealtimePostgresChangesPayload<{ id: string }>) => {
             const rec = payload.new as { id?: string } | null;
             if (!rec?.id) return;
-            const o = await fetchOrderWithItems(client, rec.id);
+            const oResult = await supa(slug, { table: 'orders', select: SELECT_ORDER_FIELDS, eq: ['id', rec.id], single: true });
+            const o = oResult.ok ? oResult.data as unknown as Order : null;
             if (o && o.status !== 'completed' && o.status !== 'cancelled') {
               setOrders((prev) => (prev.some((x) => x.id === o.id) ? prev : [...prev, o]));
             }
@@ -295,7 +260,6 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
             const rec = payload.new as { id?: string; status?: string; order_type?: string } | null;
             if (!rec?.id) return;
             const { id, status, order_type } = rec;
-            // Only process if this order matches our filter (or no filter)
             if (cfg.orderType && order_type !== cfg.orderType) {
               setOrders((prev) => prev.filter((o) => o.id !== id));
               return;
@@ -311,8 +275,13 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
     };
 
     init();
-    return () => { cancelled = true; if (channel) channel.unsubscribe(); };
-  }, [authReady, getSupabaseClient, fetchOrderWithItems, cfg.orderType]);
+    return () => { if (channel) channel.unsubscribe(); };
+  }, [authReady, getSupabaseClient, slug, cfg.orderType]);
+
+  useEffect(() => {
+    if (!authReady) return;
+    fetchOrdersInitial();
+  }, [authReady, fetchOrdersInitial]);
 
   // Cart handlers
   const handleAddToCart = useCallback((item: MenuItem) => {
@@ -344,7 +313,6 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
     if (cart.length === 0) return;
     setCheckingOut(true);
     try {
-      const client = await getSupabaseClient();
       const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
       let taxAmount = 0;
       if (settings?.taxEnabled && settings.taxRate > 0) {
@@ -352,7 +320,6 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
       }
       const total = subtotal + taxAmount;
 
-      // Build pickup_time (takeaway only)
       let pickupTime: string | null = null;
       if (!pickupASAP && pickupScheduledTime && effectiveOrderType === 'takeaway') {
         const [h, m] = pickupScheduledTime.split(':').map(Number);
@@ -361,7 +328,6 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
         pickupTime = d.toISOString();
       }
 
-      // Build order payload based on effective order type
       const shouldCaptureCustomer = isScoped
         ? cfg.showCustomerFields
         : effectiveOrderType !== 'dine_in';
@@ -376,20 +342,18 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
         orderPayload.table_id = selectedTableId;
       }
 
-      const { data: order, error: orderError } = await client
-        .from('orders').insert(orderPayload).select('id, order_number, created_at').single();
-      if (orderError || !order) { console.error('[Checkout]', orderError); setCheckingOut(false); return; }
+      const orderResult = await supa(slug, { table: 'orders', method: 'insert', select: 'id, order_number, created_at', single: true, body: orderPayload });
+      if (!orderResult.ok || !orderResult.data) { console.error('[Checkout]', orderResult.error); setCheckingOut(false); return; }
+      const order = orderResult.data;
 
       const items = cart.map((item) => ({ order_id: order.id, menu_item_id: item.id, quantity: item.quantity, price_at_order: item.price }));
-      const { error: itemsError } = await client.from('order_items').insert(items);
-      if (itemsError) { console.error('[Checkout items]', itemsError); setCheckingOut(false); return; }
+      const itemsResult = await supa(slug, { table: 'order_items', method: 'insert', body: items });
+      if (!itemsResult.ok) { console.error('[Checkout items]', itemsResult.error); setCheckingOut(false); return; }
 
-      // Deduct inventory for linked ingredients
-      await deductInventory(client, cart).catch((e) => console.error('[Inventory deduct]', e));
+      await deductInventorySupa(slug, cart).catch((e) => console.error('[Inventory deduct]', e));
 
-      // Update table to occupied for dine_in orders
       if (effectiveOrderType === 'dine_in' && selectedTableId) {
-        await client.from('tables').update({ status: 'occupied', current_order_id: order.id }).eq('id', selectedTableId);
+        await supa(slug, { table: 'tables', method: 'update', eq: ['id', selectedTableId], body: { status: 'occupied', current_order_id: order.id } });
         setOrderedTables((prev) => prev.map((t) => (t.id === selectedTableId ? { ...t, status: 'occupied' } : t)));
       }
 
@@ -421,25 +385,19 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
       resetCustomerFields();
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
-  }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, getSupabaseClient, resetCustomerFields]);
+  }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, slug, resetCustomerFields]);
 
   // Status update
   const updateStatus = useCallback(async (orderId: string, newStatus: string) => {
     setUpdating(orderId);
     try {
-      const client = await getSupabaseClient();
-      const { error } = await client.from('orders').update({ status: newStatus }).eq('id', orderId);
-      if (error) { console.error('[Status]', error.message); setUpdating(null); return; }
+      const updateResult = await supa(slug, { table: 'orders', method: 'update', eq: ['id', orderId], body: { status: newStatus } });
+      if (!updateResult.ok) { console.error('[Status]', updateResult.error); setUpdating(null); return; }
 
-      // Award loyalty points when order is completed and linked to a customer
       if (newStatus === 'completed') {
-        const { data: completedOrder } = await client
-          .from('orders')
-          .select('customer_id, total')
-          .eq('id', orderId)
-          .single();
-        if (completedOrder?.customer_id) {
-          await updateCustomerLoyalty(client, completedOrder.customer_id, Number(completedOrder.total));
+        const orderResult = await supa(slug, { table: 'orders', select: 'customer_id, total', eq: ['id', orderId], single: true });
+        if (orderResult.ok && orderResult.data?.customer_id) {
+          await updateCustomerLoyaltySupa(slug, orderResult.data.customer_id, Number(orderResult.data.total));
         }
       }
 
@@ -451,7 +409,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
       }
     } catch (e) { console.error('[Status]', e); }
     setUpdating(null);
-  }, [getSupabaseClient]);
+  }, [slug]);
 
   const handleNewOrder = useCallback(() => {
     setCart([]);
@@ -498,7 +456,6 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
     if (!selectedOrder || !selectedId) return;
     setUpdating(selectedId);
     try {
-      const client = await getSupabaseClient();
       const subtotal = editCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
       let taxAmount = 0;
       if (settings?.taxEnabled && settings.taxRate > 0) {
@@ -506,7 +463,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
       }
       const total = subtotal + taxAmount;
 
-      await client.from('order_items').delete().eq('order_id', selectedId);
+      await supa(slug, { table: 'order_items', method: 'delete', eq: ['order_id', selectedId] });
       if (editCart.length > 0) {
         const items = editCart.map((item) => ({
           order_id: selectedId,
@@ -514,9 +471,9 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
           quantity: item.quantity,
           price_at_order: item.price,
         }));
-        await client.from('order_items').insert(items);
+        await supa(slug, { table: 'order_items', method: 'insert', body: items });
       }
-      await client.from('orders').update({ total, tax_amount: taxAmount }).eq('id', selectedId);
+      await supa(slug, { table: 'orders', method: 'update', eq: ['id', selectedId], body: { total, tax_amount: taxAmount } });
 
       setOrders((prev) =>
         prev.map((o) =>
@@ -528,7 +485,7 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
       setEditingOrder(false);
     } catch (e) { console.error('[Edit Order]', e); }
     setUpdating(null);
-  }, [selectedOrder, selectedId, editCart, settings, getSupabaseClient]);
+  }, [selectedOrder, selectedId, editCart, settings, slug]);
 
   const handleCancelEdit = useCallback(() => {
     setEditingOrder(false);
@@ -910,23 +867,14 @@ export default function CurrentOrdersView({ supabaseUrl, supabaseAnonKey, theme,
               <button
                 onClick={async () => {
                   try {
-                    const client = await getSupabaseClient();
-                    const { data: existing } = await client
-                      .from('customers')
-                      .select('id')
-                      .or(`name.eq.${customerName.replace(/'/g, "''")}${customerPhone ? `,phone.eq.${customerPhone.replace(/'/g, "''")}` : ''}`)
-                      .limit(1);
+                    const result = await supa(slug, { table: 'customers', select: 'id', filter: { name: customerName }, limit: 1 });
                     let custId: string;
-                    if (existing && existing.length > 0) {
-                      custId = existing[0].id;
+                    if (result.ok && result.data?.length > 0) {
+                      custId = result.data[0].id;
                     } else {
-                      const { data: newCust } = await client
-                        .from('customers')
-                        .insert({ name: customerName, phone: customerPhone || null })
-                        .select('id')
-                        .single();
-                      if (!newCust) return;
-                      custId = newCust.id;
+                      const insertResult = await supa(slug, { table: 'customers', method: 'insert', select: 'id', single: true, body: { name: customerName, phone: customerPhone || null } });
+                      if (!insertResult.ok || !insertResult.data) return;
+                      custId = insertResult.data.id;
                     }
                     setSelectedCustomer({ id: custId, name: customerName, phone: customerPhone || null });
                   } catch (e) { console.error('Save customer error', e); }

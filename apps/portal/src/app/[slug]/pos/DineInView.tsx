@@ -7,8 +7,9 @@ import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
 import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
 import type { SupabaseClient, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import ReceiptView from './ReceiptView';
-import { deductInventory } from './inventory-utils';
-import { updateCustomerLoyalty, searchCustomers } from './customer-utils';
+import { deductInventorySupa } from './inventory-utils';
+import { updateCustomerLoyaltySupa, searchCustomersSupa } from './customer-utils';
+import { supa } from './supa-query';
 
 interface TableRecord {
   id: string;
@@ -38,6 +39,7 @@ interface Order {
 }
 
 interface Props {
+  slug: string;
   supabaseUrl: string;
   supabaseAnonKey: string;
   theme: ThemeConfig;
@@ -71,7 +73,7 @@ const tableBorder: Record<string, string> = {
   reserved: 'border-yellow-300 hover:border-yellow-500',
 };
 
-export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandName }: Props) {
+export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, brandName }: Props) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [authReady, setAuthReady] = useState(false);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -119,35 +121,25 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
   useEffect(() => {
     if (!authReady) return;
     let cancelled = false;
-    getSupabaseClient()
-      .then((client) => {
-        if (cancelled) return null;
-        return client.from('menu_items').select('id, name, description, price, category, available').order('name').not('available', 'eq', false);
-      })
-      .then((r: any) => { if (!cancelled && r && !r.error) setMenuItems(r.data ?? []); })
+    supa(slug, { table: 'menu_items', select: 'id, name, description, price, category, available', order: 'name', limit: 500 })
+      .then((r) => { if (!cancelled && r.ok) setMenuItems(r.data ?? []); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [authReady, getSupabaseClient]);
+  }, [authReady, slug]);
 
-  // Fetch tables + Realtime
+  // Fetch tables (initial load via supa) + Realtime (via client)
   useEffect(() => {
     if (!authReady) return;
     let cancelled = false;
+
+    supa(slug, { table: 'tables', select: '*', order: 'table_number' })
+      .then((r) => { if (!cancelled && r.ok) setTables(r.data as TableRecord[]); })
+      .catch(() => {});
+
+    // Realtime subscription
     let channel: ReturnType<SupabaseClient['channel']> | null = null;
-
-    const init = async () => {
-      const client = await getSupabaseClient();
-      if (cancelled) return;
-
-      const { data, error } = await client
-        .from('tables')
-        .select('*')
-        .order('table_number');
-
-      if (!cancelled && !error && data) {
-        setTables(data as TableRecord[]);
-      }
-
+    getSupabaseClient().then((client) => {
+      if (cancelled || !client) return;
       channel = client
         .channel('dine-in-tables')
         .on('postgres_changes',
@@ -164,17 +156,12 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
               }
               return [...prev, rec];
             });
-            setSelectedTable((prev) => {
-              if (prev && prev.id === rec.id) return rec;
-              return prev;
-            });
           })
         .subscribe();
-    };
+    }).catch(() => {});
 
-    init();
     return () => { cancelled = true; if (channel) channel.unsubscribe(); };
-  }, [authReady, getSupabaseClient]);
+  }, [authReady, getSupabaseClient, slug]);
 
   // When selectedTable changes to occupied, fetch its order
   useEffect(() => {
@@ -185,41 +172,34 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
     setTableOrderLoading(true);
     let cancelled = false;
 
-    getSupabaseClient()
-      .then((client) => client
-        .from('orders')
-        .select('id, order_number, status, total, tax_amount, created_at, order_items (menu_item_id, quantity, price_at_order, menu_items (name))')
-        .eq('id', selectedTable.current_order_id)
-        .single()
-      )
-      .then((r: any) => {
-        if (!cancelled && r && !r.error) setTableOrder(r.data as unknown as Order);
+    supa(slug, {
+      table: 'orders',
+      select: 'id, order_number, status, total, tax_amount, created_at, order_items (menu_item_id, quantity, price_at_order, menu_items (name))',
+      eq: ['id', selectedTable.current_order_id],
+      single: true,
+    })
+      .then((r) => {
+        if (!cancelled && r.ok) setTableOrder(r.data as unknown as Order);
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setTableOrderLoading(false); });
 
     return () => { cancelled = true; };
-  }, [selectedTable, getSupabaseClient]);
+  }, [selectedTable, slug]);
 
   // Fetch settings
   useEffect(() => {
     if (!authReady) return;
     let cancelled = false;
-    (async () => {
-      try {
-        const client = await getSupabaseClient();
-        const { data } = await client.from('settings').select('tax_enabled, tax_rate, currency_symbol, receipt_footer_text').limit(1).single();
-        if (cancelled || !data) return;
-        setSettings({
-          taxEnabled: data.tax_enabled,
-          taxRate: Number(data.tax_rate),
-          currencySymbol: data.currency_symbol,
-          footerText: data.receipt_footer_text,
-        });
-      } catch (e) {}
-    })();
+    supa(slug, { table: 'settings', select: 'tax_enabled, tax_rate, currency_symbol, receipt_footer_text', limit: 1 })
+      .then((r) => {
+        if (cancelled || !r.ok || !r.data?.[0]) return;
+        const d = r.data[0];
+        setSettings({ taxEnabled: d.tax_enabled, taxRate: Number(d.tax_rate), currencySymbol: d.currency_symbol, footerText: d.receipt_footer_text });
+      })
+      .catch(() => {});
     return () => { cancelled = true; };
-  }, [authReady, getSupabaseClient]);
+  }, [authReady, slug]);
 
   // Fetch most ordered items
   useEffect(() => {
@@ -228,14 +208,10 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
     (async () => {
       setMostOrderedLoading(true);
       try {
-        const client = await getSupabaseClient();
-        const { data } = await client
-          .from('order_items')
-          .select('menu_item_id, quantity, menu_items!inner(id, name, description, price, category, available)')
-          .limit(5000);
-        if (cancelled || !data) return;
+        const r = await supa(slug, { table: 'order_items', select: 'menu_item_id, quantity, menu_items!inner(id, name, description, price, category, available)', limit: 5000 });
+        if (cancelled || !r.ok || !r.data) return;
         const grouped = new Map<string, { item: MenuItem; qty: number }>();
-        for (const row of data) {
+        for (const row of r.data as any[]) {
           const mi = (row.menu_items as any);
           if (mi?.available === false) continue;
           const key = mi.id;
@@ -253,7 +229,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
       setMostOrderedLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [authReady, getSupabaseClient]);
+  }, [authReady, slug]);
 
   // Customer search debounce
   useEffect(() => {
@@ -262,14 +238,13 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
       if (!customerSearch.trim()) { setCustomerResults([]); return; }
       setCustomerSearchLoading(true);
       try {
-        const client = await getSupabaseClient();
-        const results = await searchCustomers(client, customerSearch);
+        const results = await searchCustomersSupa(slug, customerSearch);
         setCustomerResults(results);
       } catch (e) {}
       setCustomerSearchLoading(false);
     }, 300);
     return () => clearTimeout(timer);
-  }, [customerSearch, authReady, getSupabaseClient]);
+  }, [customerSearch, authReady, slug]);
 
   const handleSelectTable = useCallback((table: TableRecord) => {
     setCart([]);
@@ -288,12 +263,11 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
   const toggleReserve = useCallback(async (table: TableRecord) => {
     const newStatus = table.status === 'reserved' ? 'available' : 'reserved';
     try {
-      const client = await getSupabaseClient();
-      const { error } = await client.from('tables').update({ status: newStatus }).eq('id', table.id);
-      if (error) return;
+      const r = await supa(slug, { table: 'tables', method: 'PATCH', body: { status: newStatus }, eq: ['id', table.id], select: 'id' });
+      if (!r.ok) return;
       setTables((prev) => prev.map((t) => (t.id === table.id ? { ...t, status: newStatus as TableRecord['status'] } : t)));
     } catch (e) {}
-  }, [getSupabaseClient]);
+  }, [slug]);
 
   const handleQuickReserve = useCallback((table: TableRecord, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -323,29 +297,31 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
     if (cart.length === 0 || !selectedTable) return;
     setCheckingOut(true);
     try {
-      const client = await getSupabaseClient();
       const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
       let taxAmount = 0;
       if (settings?.taxEnabled && settings.taxRate > 0) {
         taxAmount = subtotal * (settings.taxRate / 100);
       }
       const total = subtotal + taxAmount;
-      const { data: order, error: orderError } = await client
-        .from('orders')
-        .insert({ status: 'pending', source: 'pos', total, tax_amount: taxAmount, table_id: selectedTable.id, customer_id: selectedCustomer?.id || null })
-        .select('id, order_number, created_at')
-        .single();
-      if (orderError || !order) { console.error('[DineIn Checkout]', orderError); setCheckingOut(false); return; }
+
+      const orderR = await supa(slug, {
+        table: 'orders',
+        method: 'POST',
+        body: { status: 'pending', source: 'pos', total, tax_amount: taxAmount, table_id: selectedTable.id, customer_id: selectedCustomer?.id || null },
+        select: 'id, order_number, created_at',
+      });
+      if (!orderR.ok || !orderR.data?.[0]) { console.error('[DineIn Checkout]', orderR.error); setCheckingOut(false); return; }
+      const order = orderR.data[0];
 
       const items = cart.map((item) => ({ order_id: order.id, menu_item_id: item.id, quantity: item.quantity, price_at_order: item.price }));
-      const { error: itemsError } = await client.from('order_items').insert(items);
-      if (itemsError) { console.error('[DineIn Items]', itemsError); setCheckingOut(false); return; }
+      const itemsR = await supa(slug, { table: 'order_items', method: 'POST', body: items });
+      if (!itemsR.ok) { console.error('[DineIn Items]', itemsR.error); setCheckingOut(false); return; }
 
       // Deduct inventory for linked ingredients
-      await deductInventory(client, cart).catch((e) => console.error('[DineIn Inventory deduct]', e));
+      await deductInventorySupa(slug, cart).catch((e) => console.error('[DineIn Inventory deduct]', e));
 
       // Update table to occupied
-      await client.from('tables').update({ status: 'occupied', current_order_id: order.id }).eq('id', selectedTable.id);
+      await supa(slug, { table: 'tables', method: 'PATCH', body: { status: 'occupied', current_order_id: order.id }, eq: ['id', selectedTable.id] });
 
       // Optimistic local updates
       setTables((prev) => prev.map((t) => (t.id === selectedTable.id ? { ...t, status: 'occupied' as const, current_order_id: order.id } : t)));
@@ -373,31 +349,26 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
       setCustomerResults([]);
     } catch (e) { console.error('[DineIn Checkout]', e); }
     setCheckingOut(false);
-  }, [cart, selectedTable, selectedCustomer, settings, getSupabaseClient]);
+  }, [cart, selectedTable, selectedCustomer, settings, slug]);
 
   // Status update for occupied table — also reverts table on completed/cancelled
   const handleUpdateStatus = useCallback(async (orderId: string, newStatus: string) => {
     if (!selectedTable) return;
     setUpdating(orderId);
     try {
-      const client = await getSupabaseClient();
-      const { error } = await client.from('orders').update({ status: newStatus }).eq('id', orderId);
-      if (error) { console.error('[DineIn Status]', error.message); setUpdating(null); return; }
+      const orderR = await supa(slug, { table: 'orders', method: 'PATCH', body: { status: newStatus }, eq: ['id', orderId] });
+      if (!orderR.ok) { console.error('[DineIn Status]', orderR.error); setUpdating(null); return; }
 
       // Award loyalty points when order is completed and linked to a customer
       if (newStatus === 'completed') {
-        const { data: completedOrder } = await client
-          .from('orders')
-          .select('customer_id, total')
-          .eq('id', orderId)
-          .single();
-        if (completedOrder?.customer_id) {
-          await updateCustomerLoyalty(client, completedOrder.customer_id, Number(completedOrder.total));
+        const coR = await supa(slug, { table: 'orders', select: 'customer_id, total', eq: ['id', orderId], single: true });
+        if (coR.ok && coR.data?.customer_id) {
+          await updateCustomerLoyaltySupa(slug, coR.data.customer_id, Number(coR.data.total));
         }
       }
 
       if (newStatus === 'completed' || newStatus === 'cancelled') {
-        await client.from('tables').update({ status: 'available', current_order_id: null }).eq('id', selectedTable.id);
+        await supa(slug, { table: 'tables', method: 'PATCH', body: { status: 'available', current_order_id: null }, eq: ['id', selectedTable.id] });
         setTables((prev) => prev.map((t) => (t.id === selectedTable.id ? { ...t, status: 'available' as const, current_order_id: null } : t)));
         setSelectedTable(null);
         setTableOrder(null);
@@ -406,7 +377,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
       }
     } catch (e) { console.error('[DineIn Status]', e); }
     setUpdating(null);
-  }, [selectedTable, getSupabaseClient]);
+  }, [selectedTable, slug]);
 
   const handlePrintBill = useCallback((order: Order) => {
     setReceiptOrder(order);
@@ -446,7 +417,6 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
     if (!tableOrder || !tableOrder.id) return;
     setUpdating(tableOrder.id);
     try {
-      const client = await getSupabaseClient();
       const subtotal = editCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
       let taxAmount = 0;
       if (settings?.taxEnabled && settings.taxRate > 0) {
@@ -454,7 +424,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
       }
       const total = subtotal + taxAmount;
 
-      await client.from('order_items').delete().eq('order_id', tableOrder.id);
+      await supa(slug, { table: 'order_items', method: 'DELETE', eq: ['order_id', tableOrder.id] });
       if (editCart.length > 0) {
         const items = editCart.map((item) => ({
           order_id: tableOrder.id,
@@ -462,9 +432,9 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
           quantity: item.quantity,
           price_at_order: item.price,
         }));
-        await client.from('order_items').insert(items);
+        await supa(slug, { table: 'order_items', method: 'POST', body: items });
       }
-      await client.from('orders').update({ total, tax_amount: taxAmount }).eq('id', tableOrder.id);
+      await supa(slug, { table: 'orders', method: 'PATCH', body: { total, tax_amount: taxAmount }, eq: ['id', tableOrder.id] });
 
       setTableOrder((prev) =>
         prev ? { ...prev, total, tax_amount: taxAmount, order_items: editCart.map((ci) => ({ menu_item_id: ci.id, quantity: ci.quantity, price_at_order: ci.price, menu_items: { name: ci.name } })) } : prev
@@ -472,7 +442,7 @@ export default function DineInView({ supabaseUrl, supabaseAnonKey, theme, brandN
       setEditingOrder(false);
     } catch (e) { console.error('[DineIn Edit Order]', e); }
     setUpdating(null);
-  }, [tableOrder, editCart, settings, getSupabaseClient]);
+  }, [tableOrder, editCart, settings, slug]);
 
   const handleCancelEdit = useCallback(() => {
     setEditingOrder(false);
