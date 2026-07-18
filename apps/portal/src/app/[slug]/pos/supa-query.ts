@@ -21,6 +21,7 @@ interface QueryResultOk {
   ok: true;
   data: any;
   count?: number;
+  error?: undefined;
 }
 
 interface QueryResultErr {
@@ -55,15 +56,17 @@ const PERMISSIONS_OWNER = [
   'staff:manage', 'settings:edit',
 ];
 
-async function checkAccess(slug: string, table: string, write: boolean) {
+type CheckAccessResult = { authorized: false; reason: string } | { authorized: true; tenant: { id: string; supabase_url: string; slug: string } };
+
+async function checkAccess(slug: string, table: string, write: boolean): Promise<CheckAccessResult> {
   const { userId } = auth();
-  if (!userId) return { userId: null, authorized: false, reason: 'Unauthorized' };
+  if (!userId) return { authorized: false, reason: 'Unauthorized' };
 
   const tenant = await getTenantBySlug(slug);
-  if (!tenant) return { userId, authorized: false, reason: 'Tenant not found' };
+  if (!tenant) return { authorized: false, reason: 'Tenant not found' };
 
   if (!ALLOWED_TABLES.has(table)) {
-    return { userId, authorized: false, reason: `Table '${table}' not allowed` };
+    return { authorized: false, reason: `Table '${table}' not allowed` };
   }
 
   const staff = await getStaffByTenant(tenant.id);
@@ -71,25 +74,25 @@ async function checkAccess(slug: string, table: string, write: boolean) {
 
   if (me) {
     if (me.role === 'owner' || me.role === 'super_admin') {
-      return { userId, authorized: true, tenant };
+      return { authorized: true, tenant };
     }
     if (write) {
       const required = TABLE_WRITE_PERMISSION[table];
       if (required && !me.permissions.includes(required)) {
-        return { userId, authorized: false, reason: `Forbidden: missing ${required}` };
+        return { authorized: false, reason: `Forbidden: missing ${required}` };
       }
     }
-    return { userId, authorized: true, tenant };
+    return { authorized: true, tenant };
   }
 
   // Not in staff_roles — check if super_admin via Clerk metadata
   const user = await currentUser();
   const role = (user?.publicMetadata as Record<string, any> | undefined)?.role;
   if (role === 'super_admin') {
-    return { userId, authorized: true, tenant };
+    return { authorized: true, tenant };
   }
 
-  return { userId, authorized: false, reason: 'Forbidden: no access to this tenant' };
+  return { authorized: false, reason: 'Forbidden: no access to this tenant' };
 }
 
 async function getSvcKey(slug: string) {
