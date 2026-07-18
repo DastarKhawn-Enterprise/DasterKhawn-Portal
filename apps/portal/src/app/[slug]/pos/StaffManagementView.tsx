@@ -1,19 +1,22 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@clerk/nextjs';
+import { useUser } from '@clerk/nextjs';
 import { getStaffList, createStaffAccount, removeStaff } from './staff-actions';
 import type { StaffMember, StaffListResult } from './staff-actions';
-import { hasPermission, decodeJwt } from './permissions';
+import { hasPermission } from './permissions';
 
 interface Props {
   slug: string;
 }
 
 export default function StaffManagementView({ slug }: Props) {
-  const { getToken, isLoaded, isSignedIn } = useAuth();
-  const [authReady, setAuthReady] = useState(false);
-  const [canManage, setCanManage] = useState(false);
+  const { user, isLoaded } = useUser();
+  const meta = user?.publicMetadata as Record<string, any> | undefined;
+  const perms = (meta?.permissions ?? []) as string[];
+  const role = (meta?.role ?? '') as string;
+  const canManage = hasPermission(perms, role, 'staff:manage');
+
   const [currentUser, setCurrentUser] = useState<StaffListResult['currentUser'] | null>(null);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,20 +33,6 @@ export default function StaffManagementView({ slug }: Props) {
   const [removingId, setRemovingId] = useState('');
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isLoaded || !isSignedIn) return;
-    setAuthReady(true);
-    (async () => {
-      try {
-        const token = await getToken({ template: 'supabase' });
-        if (token) {
-          const decoded = decodeJwt(token);
-          if (decoded) setCanManage(hasPermission(decoded.permissions, decoded.tenant_role, 'staff:manage'));
-        }
-      } catch {}
-    })();
-  }, [isLoaded, isSignedIn, getToken]);
-
   const fetchStaff = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -58,8 +47,8 @@ export default function StaffManagementView({ slug }: Props) {
   }, [slug]);
 
   useEffect(() => {
-    if (authReady) fetchStaff();
-  }, [authReady, fetchStaff]);
+    if (isLoaded && user) fetchStaff();
+  }, [isLoaded, user, fetchStaff]);
 
   const handleCreate = async () => {
     const email = createEmail.trim();
@@ -95,7 +84,7 @@ export default function StaffManagementView({ slug }: Props) {
     setRemovingId('');
   };
 
-  if (!isLoaded || !authReady) {
+  if (!isLoaded) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-50">
         <p className="text-gray-500">Loading...</p>

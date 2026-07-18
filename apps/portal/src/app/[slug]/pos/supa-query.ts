@@ -8,13 +8,20 @@ interface QueryOptions {
   select?: string;
   eq?: [string, any];
   neq?: [string, any];
+  gte?: [string, any];
+  lte?: [string, any];
+  in?: [string, any[]];
+  notIn?: [string, any[]];
+  notEq?: [string, any];
   isNull?: [string];
-  order?: string;
+  order?: string | { column: string; ascending?: boolean } | (string | { column: string; ascending?: boolean })[];
   limit?: number;
   single?: boolean;
   method?: 'select' | 'insert' | 'update' | 'delete';
   body?: any;
   filter?: Record<string, any>;
+  or?: string;
+  head?: boolean;
 }
 
 interface QueryResultOk {
@@ -117,12 +124,38 @@ function buildUrl(baseUrl: string, table: string, opts: QueryOptions) {
     params.push(`${encodeURIComponent(opts.neq[0])}=neq.${encodeURIComponent(String(opts.neq[1]))}`);
   }
 
+  if (opts.gte) {
+    params.push(`${encodeURIComponent(opts.gte[0])}=gte.${encodeURIComponent(String(opts.gte[1]))}`);
+  }
+
+  if (opts.lte) {
+    params.push(`${encodeURIComponent(opts.lte[0])}=lte.${encodeURIComponent(String(opts.lte[1]))}`);
+  }
+
+  if (opts.in) {
+    const vals = opts.in[1].map((v) => String(v)).join(',');
+    params.push(`${encodeURIComponent(opts.in[0])}=in.(${vals})`);
+  }
+
+  if (opts.notIn) {
+    const vals = opts.notIn[1].map((v) => String(v)).join(',');
+    params.push(`${encodeURIComponent(opts.notIn[0])}=not.in.(${vals})`);
+  }
+
+  if (opts.notEq) {
+    params.push(`${encodeURIComponent(opts.notEq[0])}=not.eq.${encodeURIComponent(String(opts.notEq[1]))}`);
+  }
+
   if (opts.isNull) {
     params.push(`${encodeURIComponent(opts.isNull[0])}=is.null`);
   }
 
   if (opts.order) {
-    params.push(`order=${encodeURIComponent(opts.order)}`);
+    const orders = Array.isArray(opts.order) ? opts.order : [opts.order];
+    for (const o of orders) {
+      const orderStr = typeof o === 'string' ? o : `${o.column}.${o.ascending !== false ? 'asc' : 'desc'}`;
+      params.push(`order=${encodeURIComponent(orderStr)}`);
+    }
   }
 
   if (opts.limit) {
@@ -133,6 +166,10 @@ function buildUrl(baseUrl: string, table: string, opts: QueryOptions) {
     for (const [key, val] of Object.entries(opts.filter)) {
       params.push(`${encodeURIComponent(key)}=eq.${encodeURIComponent(String(val))}`);
     }
+  }
+
+  if (opts.or) {
+    params.push(`or=${encodeURIComponent(opts.or)}`);
   }
 
   return `${base}/rest/v1/${table}?${params.join('&')}`;
@@ -158,20 +195,26 @@ export async function supa(slug: string, opts: QueryOptions): Promise<QueryResul
 
     // SELECT
     if (!opts.method || opts.method === 'select') {
-      const prefer = opts.single ? 'return=representation' : '';
+      const prefer: string[] = [];
+      if (opts.single) prefer.push('return=representation');
+      if (opts.head) prefer.push('count=exact');
       const res = await fetch(url, {
-        headers: { ...headers, ...(prefer ? { Prefer: prefer } : {}) },
+        headers: { ...headers, ...(prefer.length ? { Prefer: prefer.join(',') } : {}) },
       });
       if (!res.ok) {
         const txt = await res.text();
         return { ok: false, error: `${res.status}: ${txt.slice(0, 200)}` };
       }
+      const ct = res.headers.get('content-range');
+      const count = ct?.split('/')?.[1] ? parseInt(ct.split('/')[1]) : undefined;
+      if (opts.head) {
+        return { ok: true, data: null, count };
+      }
       const data = await res.json();
-      const count = res.headers.get('content-range')?.split('/')?.[1];
       if (opts.single) {
         return { ok: true, data: data?.[0] ?? null };
       }
-      return { ok: true, data, count: count ? parseInt(count) : undefined };
+      return { ok: true, data, count };
     }
 
     // INSERT

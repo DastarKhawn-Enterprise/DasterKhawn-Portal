@@ -47,6 +47,8 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [activeView, setActiveView] = useState<ViewId>('dashboard');
 
+
+
   const hiddenViews = useMemo(() => {
     const meta = user?.publicMetadata as Record<string, any> | undefined;
     const perms: string[] = meta?.permissions ?? [];
@@ -103,7 +105,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
       case 'take-away':
         return <CurrentOrdersView slug={slug} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} brandName={brandName} viewConfig={{ title: 'Take Away', orderType: 'takeaway', showCustomerFields: true }} />;
       case 'dashboard':
-        return <DashboardView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
+        return <DashboardView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} slug={slug} />;
       case 'orders-completed':
         return placeholder('Completed Orders');
       case 'orders-cancelled':
@@ -119,21 +121,21 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
       case 'third-party':
         return <ThirdPartyView />;
       case 'reservations':
-        return <ReservationsView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
+        return <ReservationsView slug={slug} theme={theme} />;
       case 'menu':
         return <MenuManagementView slug={slug} theme={theme} />;
       case 'inventory':
-        return <InventoryView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
+        return <InventoryView slug={slug} theme={theme} />;
       case 'customers':
-        return <CustomersView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} loyaltyPointsEnabled={enabledModules.loyalty_points !== false} />;
+        return <CustomersView slug={slug} theme={theme} loyaltyPointsEnabled={enabledModules.loyalty_points !== false} />;
       case 'reports':
-        return <ReportsView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
+        return <ReportsView slug={slug} theme={theme} />;
       case 'expenses':
-        return <ExpensesView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
+        return <ExpensesView slug={slug} theme={theme} />;
       case 'staff':
         return <StaffManagementView slug={slug} />;
       case 'settings':
-        return <SettingsView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} />;
+        return <SettingsView slug={slug} theme={theme} />;
       default:
         return placeholder('Unknown');
     }

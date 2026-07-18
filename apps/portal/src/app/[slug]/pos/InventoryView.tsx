@@ -1,14 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@clerk/nextjs';
-import { createClient } from '@supabase/supabase-js';
+import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
-import { hasPermission, decodeJwt } from './permissions';
+import { hasPermission } from './permissions';
+import { supa } from './supa-query';
 
 interface Props {
-  supabaseUrl: string;
-  supabaseAnonKey: string;
+  slug: string;
   theme: ThemeConfig;
 }
 
@@ -23,14 +22,16 @@ interface InventoryItem {
 
 const UNITS = ['pcs', 'kg', 'liters', 'grams', 'ml', 'oz', 'lb', 'bags', 'boxes', 'bottles'];
 
-export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: Props) {
-  const { getToken, isLoaded, isSignedIn } = useAuth();
-  const [authReady, setAuthReady] = useState(false);
-  const [canEdit, setCanEdit] = useState(false);
+export default function InventoryView({ slug, theme }: Props) {
+  const { user, isLoaded } = useUser();
+  const meta = user?.publicMetadata as Record<string, any> | undefined;
+  const perms = (meta?.permissions ?? []) as string[];
+  const role = (meta?.role ?? '') as string;
+  const canEdit = hasPermission(perms, role, 'menu:edit');
+
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Add/Edit modal
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
@@ -39,59 +40,26 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
   const [formThreshold, setFormThreshold] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Stock adjustment modal
   const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null);
   const [adjustDelta, setAdjustDelta] = useState('');
   const [adjustNote, setAdjustNote] = useState('');
   const [adjusting, setAdjusting] = useState(false);
 
-  // Delete confirmation
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-
-  // Errors
   const [error, setError] = useState('');
 
-  const getSupabaseClient = useCallback(async () => {
-    const token = await getToken({ template: 'supabase' });
-    if (!token) throw new Error('No auth token');
-    return createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-      auth: { persistSession: false },
-    });
-  }, [getToken, supabaseUrl, supabaseAnonKey]);
-
-  useEffect(() => {
-    if (!isLoaded || !isSignedIn) return;
-    setAuthReady(true);
-  }, [isLoaded, isSignedIn]);
-
-  useEffect(() => {
-    if (!authReady) return;
-    (async () => {
-      try {
-        const token = await getToken({ template: 'supabase' });
-        if (!token) return;
-        const decoded = decodeJwt(token);
-        if (decoded) setCanEdit(hasPermission(decoded.permissions, decoded.tenant_role, 'menu:edit'));
-      } catch (e) {}
-    })();
-  }, [authReady, getToken]);
-
   const fetchItems = useCallback(async () => {
-    if (!authReady) return;
+    if (!isLoaded) return;
     setLoading(true);
     try {
-      const client = await getSupabaseClient();
-      const { data } = await client.from('inventory_items').select('*').order('name');
-      if (data) setItems(data as unknown as InventoryItem[]);
+      const result = await supa(slug, { table: 'inventory_items', select: '*', order: 'name' });
+      if (result.ok && result.data) setItems(result.data as InventoryItem[]);
     } catch (e) { console.error('[Inventory] fetch', e); }
     setLoading(false);
-  }, [authReady, getSupabaseClient]);
+  }, [isLoaded, slug]);
 
-  useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
+  useEffect(() => { fetchItems(); }, [fetchItems]);
 
   const openAddForm = () => {
     setEditingId(null);
@@ -122,17 +90,16 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
     setSaving(true);
     setError('');
     try {
-      const client = await getSupabaseClient();
       const payload = { name: formName.trim(), unit: formUnit, current_stock: stock, low_stock_threshold: threshold };
 
       if (editingId) {
-        const { error: err } = await client.from('inventory_items').update(payload).eq('id', editingId);
-        if (err) { setError(err.message); setSaving(false); return; }
+        const result = await supa(slug, { table: 'inventory_items', method: 'update', eq: ['id', editingId], body: payload });
+        if (!result.ok) { setError(result.error); setSaving(false); return; }
         setItems((prev) => prev.map((i) => (i.id === editingId ? { ...i, ...payload } : i)));
       } else {
-        const { data, error: err } = await client.from('inventory_items').insert(payload).select('*').single();
-        if (err) { setError(err.message); setSaving(false); return; }
-        if (data) setItems((prev) => [...prev, data as unknown as InventoryItem]);
+        const result = await supa(slug, { table: 'inventory_items', method: 'insert', body: payload, single: true });
+        if (!result.ok) { setError(result.error); setSaving(false); return; }
+        if (result.data) setItems((prev) => [...prev, result.data as InventoryItem]);
       }
       setShowForm(false);
     } catch (e: any) { setError(e.message || 'Save failed'); }
@@ -144,9 +111,8 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
     setDeleting(true);
     setError('');
     try {
-      const client = await getSupabaseClient();
-      const { error: err } = await client.from('inventory_items').delete().eq('id', deleteId);
-      if (err) { setError(err.message); setDeleting(false); return; }
+      const result = await supa(slug, { table: 'inventory_items', method: 'delete', eq: ['id', deleteId] });
+      if (!result.ok) { setError(result.error); setDeleting(false); return; }
       setItems((prev) => prev.filter((i) => i.id !== deleteId));
       setDeleteId(null);
     } catch (e: any) { setError(e.message || 'Delete failed'); }
@@ -161,10 +127,9 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
     setAdjusting(true);
     setError('');
     try {
-      const client = await getSupabaseClient();
       const newStock = Number(adjustItem.current_stock) + delta;
-      const { error: err } = await client.from('inventory_items').update({ current_stock: newStock }).eq('id', adjustItem.id);
-      if (err) { setError(err.message); setAdjusting(false); return; }
+      const result = await supa(slug, { table: 'inventory_items', method: 'update', eq: ['id', adjustItem.id], body: { current_stock: newStock } });
+      if (!result.ok) { setError(result.error); setAdjusting(false); return; }
       setItems((prev) => prev.map((i) => (i.id === adjustItem.id ? { ...i, current_stock: newStock } : i)));
       setAdjustItem(null);
       setAdjustDelta('');
@@ -175,7 +140,7 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
 
   const lowStockItems = items.filter((i) => Number(i.current_stock) <= Number(i.low_stock_threshold));
 
-  if (!isLoaded || !authReady) {
+  if (!isLoaded) {
     return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
   }
 
@@ -185,17 +150,12 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Inventory</h1>
           {canEdit && (
-            <button
-              onClick={openAddForm}
-              className="px-4 py-2 text-white rounded text-sm font-medium transition-colors"
-              style={{ backgroundColor: theme.primaryColor }}
-            >
+            <button onClick={openAddForm} className="px-4 py-2 text-white rounded text-sm font-medium transition-colors" style={{ backgroundColor: theme.primaryColor }}>
               + Add Item
             </button>
           )}
         </div>
 
-        {/* Low stock alert banner */}
         {lowStockItems.length > 0 && (
           <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-6">
             <div className="flex items-center gap-2 text-red-700 font-medium text-sm mb-1">
@@ -204,19 +164,14 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
             </div>
             <ul className="text-sm text-red-600 ml-5 list-disc">
               {lowStockItems.map((i) => (
-                <li key={i.id}>
-                  {i.name} — {Number(i.current_stock)} {i.unit} (threshold: {Number(i.low_stock_threshold)})
-                </li>
+                <li key={i.id}>{i.name} — {Number(i.current_stock)} {i.unit} (threshold: {Number(i.low_stock_threshold)})</li>
               ))}
             </ul>
           </div>
         )}
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm mb-4">{error}</div>
-        )}
+        {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm mb-4">{error}</div>}
 
-        {/* Inventory list - cards on mobile, table on desktop */}
         {loading ? (
           <p className="text-gray-400 text-sm">Loading inventory...</p>
         ) : items.length === 0 ? (
@@ -225,7 +180,6 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
           </div>
         ) : (
           <>
-            {/* Mobile cards */}
             <div className="md:hidden space-y-3">
               {items.map((item) => {
                 const stock = Number(item.current_stock);
@@ -248,31 +202,15 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
                     </div>
                     {canEdit && (
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => { setAdjustItem(item); setAdjustDelta(''); setAdjustNote(''); setError(''); }}
-                          className="flex-1 px-3 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100"
-                        >
-                          Adjust
-                        </button>
-                        <button
-                          onClick={() => openEditForm(item)}
-                          className="flex-1 px-3 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => { setDeleteId(item.id); setError(''); }}
-                          className="flex-1 px-3 py-1.5 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50"
-                        >
-                          Delete
-                        </button>
+                        <button onClick={() => { setAdjustItem(item); setAdjustDelta(''); setAdjustNote(''); setError(''); }} className="flex-1 px-3 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100">Adjust</button>
+                        <button onClick={() => openEditForm(item)} className="flex-1 px-3 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100">Edit</button>
+                        <button onClick={() => { setDeleteId(item.id); setError(''); }} className="flex-1 px-3 py-1.5 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50">Delete</button>
                       </div>
                     )}
                   </div>
                 );
               })}
             </div>
-            {/* Desktop table */}
             <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
@@ -306,24 +244,9 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
                         {canEdit && (
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-1">
-                              <button
-                                onClick={() => { setAdjustItem(item); setAdjustDelta(''); setAdjustNote(''); setError(''); }}
-                                className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100"
-                              >
-                                Adjust
-                              </button>
-                              <button
-                                onClick={() => openEditForm(item)}
-                                className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => { setDeleteId(item.id); setError(''); }}
-                                className="px-2 py-1 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50"
-                              >
-                                Del
-                              </button>
+                              <button onClick={() => { setAdjustItem(item); setAdjustDelta(''); setAdjustNote(''); setError(''); }} className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100">Adjust</button>
+                              <button onClick={() => openEditForm(item)} className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100">Edit</button>
+                              <button onClick={() => { setDeleteId(item.id); setError(''); }} className="px-2 py-1 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50">Del</button>
                             </div>
                           </td>
                         )}
@@ -337,7 +260,6 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
         )}
       </div>
 
-      {/* Add/Edit modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setShowForm(false)}>
           <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-md md:mx-4 p-6 md:max-h-[90vh] md:overflow-y-auto rounded-t-xl" onClick={(e) => e.stopPropagation()}>
@@ -346,24 +268,14 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
               <button onClick={() => setShowForm(false)} className="md:hidden text-gray-400 text-xl">✕</button>
             </div>
             <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Name</label>
-                <input type="text" value={formName} onChange={(e) => setFormName(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Unit</label>
+              <div><label className="block text-sm text-gray-600 mb-1">Name</label><input type="text" value={formName} onChange={(e) => setFormName(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+              <div><label className="block text-sm text-gray-600 mb-1">Unit</label>
                 <select value={formUnit} onChange={(e) => setFormUnit(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm">
                   {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Current Stock</label>
-                <input type="number" step="any" value={formStock} onChange={(e) => setFormStock(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Low Stock Threshold</label>
-                <input type="number" step="any" value={formThreshold} onChange={(e) => setFormThreshold(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
-              </div>
+              <div><label className="block text-sm text-gray-600 mb-1">Current Stock</label><input type="number" step="any" value={formStock} onChange={(e) => setFormStock(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+              <div><label className="block text-sm text-gray-600 mb-1">Low Stock Threshold</label><input type="number" step="any" value={formThreshold} onChange={(e) => setFormThreshold(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
               {error && <p className="text-red-600 text-sm">{error}</p>}
             </div>
             <div className="flex justify-end gap-2 mt-6">
@@ -376,7 +288,6 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
         </div>
       )}
 
-      {/* Stock adjustment modal */}
       {adjustItem && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setAdjustItem(null)}>
           <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-sm md:mx-4 p-6 md:max-h-[90vh] md:overflow-y-auto rounded-t-xl" onClick={(e) => e.stopPropagation()}>
@@ -386,27 +297,18 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
             </div>
             <p className="text-sm text-gray-500 mb-4">{adjustItem.name} (current: {Number(adjustItem.current_stock)} {adjustItem.unit})</p>
             <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Amount (+ add / − remove)</label>
-                <input type="number" step="any" value={adjustDelta} onChange={(e) => setAdjustDelta(e.target.value)} placeholder="e.g. 10 or -5" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Note (optional)</label>
-                <input type="text" value={adjustNote} onChange={(e) => setAdjustNote(e.target.value)} placeholder="e.g. restock, wastage" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
-              </div>
+              <div><label className="block text-sm text-gray-600 mb-1">Amount (+ add / − remove)</label><input type="number" step="any" value={adjustDelta} onChange={(e) => setAdjustDelta(e.target.value)} placeholder="e.g. 10 or -5" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+              <div><label className="block text-sm text-gray-600 mb-1">Note (optional)</label><input type="text" value={adjustNote} onChange={(e) => setAdjustNote(e.target.value)} placeholder="e.g. restock, wastage" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
               {error && <p className="text-red-600 text-sm">{error}</p>}
             </div>
             <div className="flex justify-end gap-2 mt-6">
               <button onClick={() => setAdjustItem(null)} className="px-4 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button onClick={handleAdjust} disabled={adjusting} className="px-4 py-2 text-sm rounded text-white font-medium disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>
-                {adjusting ? 'Adjusting...' : 'Apply'}
-              </button>
+              <button onClick={handleAdjust} disabled={adjusting} className="px-4 py-2 text-sm rounded text-white font-medium disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>{adjusting ? 'Adjusting...' : 'Apply'}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Delete confirmation modal */}
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setDeleteId(null)}>
           <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-sm md:mx-4 p-6 rounded-t-xl" onClick={(e) => e.stopPropagation()}>
@@ -419,9 +321,7 @@ export default function InventoryView({ supabaseUrl, supabaseAnonKey, theme }: P
             {error && <p className="text-red-600 text-sm mb-2">{error}</p>}
             <div className="flex justify-end gap-2">
               <button onClick={() => setDeleteId(null)} className="px-4 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button onClick={handleDelete} disabled={deleting} className="px-4 py-2 text-sm rounded bg-red-600 text-white font-medium disabled:opacity-50">
-                {deleting ? 'Deleting...' : 'Delete'}
-              </button>
+              <button onClick={handleDelete} disabled={deleting} className="px-4 py-2 text-sm rounded bg-red-600 text-white font-medium disabled:opacity-50">{deleting ? 'Deleting...' : 'Delete'}</button>
             </div>
           </div>
         </div>

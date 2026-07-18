@@ -1,14 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@clerk/nextjs';
-import { createClient } from '@supabase/supabase-js';
+import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
-import { hasPermission, decodeJwt } from './permissions';
+import { hasPermission } from './permissions';
+import { supa } from './supa-query';
 
 interface Props {
-  supabaseUrl: string;
-  supabaseAnonKey: string;
+  slug: string;
   theme: ThemeConfig;
 }
 
@@ -34,10 +33,7 @@ interface TableRecord {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  confirmed: 'Confirmed',
-  seated: 'Seated',
-  cancelled: 'Cancelled',
-  no_show: 'No Show',
+  confirmed: 'Confirmed', seated: 'Seated', cancelled: 'Cancelled', no_show: 'No Show',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -49,19 +45,19 @@ const STATUS_COLORS: Record<string, string> = {
 
 type FilterMode = 'upcoming' | 'past' | 'all';
 
-export default function ReservationsView({ supabaseUrl, supabaseAnonKey, theme }: Props) {
-  const { getToken, isLoaded, isSignedIn } = useAuth();
-  const [authReady, setAuthReady] = useState(false);
-  const [canEdit, setCanEdit] = useState(false);
+export default function ReservationsView({ slug, theme }: Props) {
+  const { user, isLoaded } = useUser();
+  const meta = user?.publicMetadata as Record<string, any> | undefined;
+  const perms = (meta?.permissions ?? []) as string[];
+  const role = (meta?.role ?? '') as string;
+  const canEdit = hasPermission(perms, role, 'orders:create') || hasPermission(perms, role, 'orders:update');
+
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [tables, setTables] = useState<TableRecord[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Filter
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterMode, setFilterMode] = useState<FilterMode>('upcoming');
 
-  // Add/Edit modal
   const [showForm, setShowForm] = useState(false);
   const [editingRes, setEditingRes] = useState<Reservation | null>(null);
   const [formGuestName, setFormGuestName] = useState('');
@@ -73,109 +69,67 @@ export default function ReservationsView({ supabaseUrl, supabaseAnonKey, theme }
   const [formNotes, setFormNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-
-  // Delete confirmation
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const getSupabaseClient = useCallback(async () => {
-    const token = await getToken({ template: 'supabase' });
-    if (!token) throw new Error('No auth token');
-    return createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-      auth: { persistSession: false },
-    });
-  }, [getToken, supabaseUrl, supabaseAnonKey]);
-
-  useEffect(() => {
-    if (!isLoaded || !isSignedIn) return;
-    setAuthReady(true);
-  }, [isLoaded, isSignedIn]);
-
-  useEffect(() => {
-    if (!authReady) return;
-    (async () => {
-      try {
-        const token = await getToken({ template: 'supabase' });
-        if (!token) return;
-        const decoded = decodeJwt(token);
-        if (decoded) setCanEdit(hasPermission(decoded.permissions, decoded.tenant_role, 'orders:create') || hasPermission(decoded.permissions, decoded.tenant_role, 'orders:update'));
-      } catch (e) {}
-    })();
-  }, [authReady, getToken]);
-
   const fetchData = useCallback(async () => {
-    if (!authReady) return;
+    if (!isLoaded) return;
     setLoading(true);
     try {
-      const client = await getSupabaseClient();
-      const [resRes, tablesRes] = await Promise.all([
-        client.from('reservations').select('*, tables!left(table_number)').order('reservation_date', { ascending: true }).order('reservation_time', { ascending: true }),
-        client.from('tables').select('id, table_number, capacity, status').order('table_number'),
+      const [resResult, tablesResult] = await Promise.all([
+        supa(slug, {
+          table: 'reservations',
+          select: '*, tables!left(table_number)',
+          order: [
+            { column: 'reservation_date', ascending: true },
+            { column: 'reservation_time', ascending: true },
+          ],
+        }),
+        supa(slug, { table: 'tables', select: 'id, table_number, capacity, status', order: 'table_number' }),
       ]);
-      if (!resRes.error && resRes.data) setReservations(resRes.data as unknown as Reservation[]);
-      if (!tablesRes.error && tablesRes.data) setTables(tablesRes.data as TableRecord[]);
+      if (resResult.ok && resResult.data) setReservations(resResult.data as Reservation[]);
+      if (tablesResult.ok && tablesResult.data) setTables(tablesResult.data as TableRecord[]);
     } catch (e) { console.error('[Reservations] fetch', e); }
     setLoading(false);
-  }, [authReady, getSupabaseClient]);
+  }, [isLoaded, slug]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const openAddForm = () => {
-    setEditingRes(null);
-    setFormGuestName('');
-    setFormGuestPhone('');
-    setFormPartySize(2);
-    setFormDate(new Date().toISOString().split('T')[0]);
-    setFormTime('');
-    setFormTableId('');
-    setFormNotes('');
-    setError('');
-    setShowForm(true);
+    setEditingRes(null); setFormGuestName(''); setFormGuestPhone(''); setFormPartySize(2);
+    setFormDate(new Date().toISOString().split('T')[0]); setFormTime(''); setFormTableId(''); setFormNotes('');
+    setError(''); setShowForm(true);
   };
 
   const openEditForm = (res: Reservation) => {
-    setEditingRes(res);
-    setFormGuestName(res.guest_name);
-    setFormGuestPhone(res.guest_phone || '');
-    setFormPartySize(res.party_size);
-    setFormDate(res.reservation_date);
-    setFormTime(res.reservation_time);
-    setFormTableId(res.table_id || '');
-    setFormNotes(res.notes || '');
-    setError('');
-    setShowForm(true);
+    setEditingRes(res); setFormGuestName(res.guest_name); setFormGuestPhone(res.guest_phone || '');
+    setFormPartySize(res.party_size); setFormDate(res.reservation_date); setFormTime(res.reservation_time);
+    setFormTableId(res.table_id || ''); setFormNotes(res.notes || ''); setError(''); setShowForm(true);
   };
 
   const handleSave = async () => {
     if (!formGuestName.trim()) { setError('Guest name is required'); return; }
     if (!formDate) { setError('Date is required'); return; }
     if (!formTime) { setError('Time is required'); return; }
-
-    setSaving(true);
-    setError('');
+    setSaving(true); setError('');
     try {
-      const client = await getSupabaseClient();
       const payload: Record<string, unknown> = {
-        guest_name: formGuestName.trim(),
-        guest_phone: formGuestPhone.trim() || null,
-        party_size: formPartySize,
-        reservation_date: formDate,
-        reservation_time: formTime,
-        table_id: formTableId || null,
-        notes: formNotes.trim() || null,
+        guest_name: formGuestName.trim(), guest_phone: formGuestPhone.trim() || null,
+        party_size: formPartySize, reservation_date: formDate, reservation_time: formTime,
+        table_id: formTableId || null, notes: formNotes.trim() || null,
       };
-
       if (editingRes) {
-        const { error: err } = await client.from('reservations').update(payload).eq('id', editingRes.id);
-        if (err) { setError(err.message); setSaving(false); return; }
+        const result = await supa(slug, { table: 'reservations', method: 'update', eq: ['id', editingRes.id], body: payload });
+        if (!result.ok) { setError(result.error); setSaving(false); return; }
         fetchData();
       } else {
-        const { data, error: err } = await client.from('reservations').insert(payload).select('*, tables!left(table_number)').single();
-        if (err) { setError(err.message); setSaving(false); return; }
-        if (data) setReservations((prev) => [...prev, data as unknown as Reservation].sort((a, b) => a.reservation_date.localeCompare(b.reservation_date) || a.reservation_time.localeCompare(b.reservation_time)));
+        const result = await supa(slug, { table: 'reservations', method: 'insert', body: payload, single: true });
+        if (!result.ok) { setError(result.error); setSaving(false); return; }
+        if (result.data) {
+          setReservations((prev) => [...prev, result.data as Reservation].sort(
+            (a, b) => a.reservation_date.localeCompare(b.reservation_date) || a.reservation_time.localeCompare(b.reservation_time)
+          ));
+        }
       }
       setShowForm(false);
     } catch (e: any) { setError(e.message || 'Save failed'); }
@@ -185,15 +139,12 @@ export default function ReservationsView({ supabaseUrl, supabaseAnonKey, theme }
   const handleStatusAction = async (res: Reservation, newStatus: Reservation['status']) => {
     setError('');
     try {
-      const client = await getSupabaseClient();
       const updates: Record<string, unknown> = { status: newStatus };
-
       if (newStatus === 'seated' && res.table_id) {
-        await client.from('tables').update({ status: 'occupied' }).eq('id', res.table_id);
+        await supa(slug, { table: 'tables', method: 'update', body: { status: 'occupied' }, eq: ['id', res.table_id] });
       }
-
-      const { error: err } = await client.from('reservations').update(updates).eq('id', res.id);
-      if (err) { setError(err.message); return; }
+      const result = await supa(slug, { table: 'reservations', method: 'update', body: updates, eq: ['id', res.id] });
+      if (!result.ok) { setError(result.error); return; }
       fetchData();
     } catch (e: any) { setError(e.message || 'Status update failed'); }
   };
@@ -202,9 +153,8 @@ export default function ReservationsView({ supabaseUrl, supabaseAnonKey, theme }
     if (!deleteId) return;
     setDeleting(true);
     try {
-      const client = await getSupabaseClient();
-      const { error: err } = await client.from('reservations').delete().eq('id', deleteId);
-      if (err) { setError(err.message); setDeleting(false); return; }
+      const result = await supa(slug, { table: 'reservations', method: 'delete', eq: ['id', deleteId] });
+      if (!result.ok) { setError(result.error); setDeleting(false); return; }
       setReservations((prev) => prev.filter((r) => r.id !== deleteId));
       setDeleteId(null);
     } catch (e: any) { setError(e.message || 'Delete failed'); }
@@ -212,24 +162,19 @@ export default function ReservationsView({ supabaseUrl, supabaseAnonKey, theme }
   };
 
   const today = new Date().toISOString().split('T')[0];
-
   const filteredReservations = reservations.filter((r) => {
     if (filterMode === 'upcoming' && filterDate) {
-      const dateFilter = new Date(filterDate);
-      const rDate = new Date(r.reservation_date);
-      const timeStr = r.reservation_time;
-      const rDateTime = new Date(`${r.reservation_date}T${timeStr}`);
-      return rDateTime >= dateFilter && r.status === 'confirmed';
+      const rDateTime = new Date(`${r.reservation_date}T${r.reservation_time}`);
+      return rDateTime >= new Date(filterDate) && r.status === 'confirmed';
     }
     if (filterMode === 'past') {
-      const dateFilter = new Date(filterDate || today);
       const rDate = new Date(r.reservation_date);
-      return (rDate < dateFilter || r.status !== 'confirmed');
+      return (rDate < new Date(filterDate || today) || r.status !== 'confirmed');
     }
     return true;
   });
 
-  if (!isLoaded || !authReady) {
+  if (!isLoaded) {
     return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
   }
 
@@ -238,82 +183,42 @@ export default function ReservationsView({ supabaseUrl, supabaseAnonKey, theme }
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Reservations</h1>
-          {canEdit && (
-            <button
-              onClick={openAddForm}
-              className="px-4 py-2 text-white rounded text-sm font-medium transition-colors"
-              style={{ backgroundColor: theme.primaryColor }}
-            >
-              + Add Reservation
-            </button>
-          )}
+          {canEdit && <button onClick={openAddForm} className="px-4 py-2 text-white rounded text-sm font-medium transition-colors" style={{ backgroundColor: theme.primaryColor }}>+ Add Reservation</button>}
         </div>
 
-        {/* Filters */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex gap-1.5">
               {(['upcoming', 'past', 'all'] as FilterMode[]).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setFilterMode(m)}
-                  className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
-                    filterMode === m ? 'text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                  style={filterMode === m ? { backgroundColor: theme.primaryColor } : {}}
-                >
+                <button key={m} onClick={() => setFilterMode(m)}
+                  className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${filterMode === m ? 'text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  style={filterMode === m ? { backgroundColor: theme.primaryColor } : {}}>
                   {m === 'upcoming' ? 'Upcoming' : m === 'past' ? 'Past / Handled' : 'All'}
                 </button>
               ))}
             </div>
-            <input
-              type="date"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-              className="px-3 py-1.5 text-xs border border-gray-300 rounded"
-            />
-            <button
-              onClick={fetchData}
-              disabled={loading}
-              className="px-3 py-1.5 rounded text-xs font-semibold text-white disabled:opacity-50"
-              style={{ backgroundColor: theme.primaryColor }}
-            >
-              {loading ? '...' : 'Refresh'}
-            </button>
+            <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="px-3 py-1.5 text-xs border border-gray-300 rounded" />
+            <button onClick={fetchData} disabled={loading} className="px-3 py-1.5 rounded text-xs font-semibold text-white disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>{loading ? '...' : 'Refresh'}</button>
           </div>
         </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm mb-4">{error}</div>
-        )}
+        {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm mb-4">{error}</div>}
 
         {loading ? (
           <p className="text-gray-400 text-sm">Loading reservations...</p>
         ) : filteredReservations.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-            <p className="text-gray-400 text-sm">No reservations found.</p>
-          </div>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center"><p className="text-gray-400 text-sm">No reservations found.</p></div>
         ) : (
           <>
-            {/* Mobile cards */}
             <div className="md:hidden space-y-3">
               {filteredReservations.map((r) => (
                 <div key={r.id} className={`bg-white rounded-lg shadow-sm border p-4 ${r.status !== 'confirmed' ? 'opacity-60' : ''}`}>
                   <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <div className="text-sm font-semibold text-gray-800">{r.guest_name}</div>
-                      <div className="text-xs text-gray-500">{r.guest_phone || '—'}</div>
-                    </div>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${STATUS_COLORS[r.status] || ''}`}>
-                      {STATUS_LABELS[r.status]}
-                    </span>
+                    <div><div className="text-sm font-semibold text-gray-800">{r.guest_name}</div><div className="text-xs text-gray-500">{r.guest_phone || '—'}</div></div>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${STATUS_COLORS[r.status] || ''}`}>{STATUS_LABELS[r.status]}</span>
                   </div>
-                  <div className="text-xs text-gray-500 mb-2">
-                    {r.reservation_date} · {r.reservation_time.slice(0, 5)} · {r.party_size} {r.party_size === 1 ? 'guest' : 'guests'}
-                  </div>
-                  <div className="text-xs text-gray-500 mb-2">
-                    Table: {r.table_id ? (r.tables?.table_number || '—') : <span className="italic">Unassigned</span>}
-                  </div>
+                  <div className="text-xs text-gray-500 mb-2">{r.reservation_date} · {r.reservation_time.slice(0, 5)} · {r.party_size} {r.party_size === 1 ? 'guest' : 'guests'}</div>
+                  <div className="text-xs text-gray-500 mb-2">Table: {r.table_id ? (r.tables?.table_number || '—') : <span className="italic">Unassigned</span>}</div>
                   {r.notes && <div className="text-xs text-gray-400 italic mb-2">{r.notes}</div>}
                   {canEdit && r.status === 'confirmed' && (
                     <div className="flex gap-1.5 mt-2">
@@ -332,8 +237,6 @@ export default function ReservationsView({ supabaseUrl, supabaseAnonKey, theme }
                 </div>
               ))}
             </div>
-
-            {/* Desktop table */}
             <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
@@ -353,19 +256,11 @@ export default function ReservationsView({ supabaseUrl, supabaseAnonKey, theme }
                     <tr key={r.id} className={`border-b border-gray-100 hover:bg-gray-50 ${r.status !== 'confirmed' ? 'opacity-50' : ''}`}>
                       <td className="px-4 py-3 font-medium text-gray-800">{r.guest_name}</td>
                       <td className="px-4 py-3 text-gray-600">{r.guest_phone || '—'}</td>
-                      <td className="px-4 py-3 text-gray-600">
-                        {r.reservation_date}<br /><span className="text-xs">{r.reservation_time.slice(0, 5)}</span>
-                      </td>
+                      <td className="px-4 py-3 text-gray-600">{r.reservation_date}<br /><span className="text-xs">{r.reservation_time.slice(0, 5)}</span></td>
                       <td className="px-4 py-3 text-gray-700">{r.party_size}</td>
-                      <td className="px-4 py-3 text-gray-600">
-                        {r.table_id ? (r.tables?.table_number || '—') : <span className="italic text-gray-400">Unassigned</span>}
-                      </td>
+                      <td className="px-4 py-3 text-gray-600">{r.table_id ? (r.tables?.table_number || '—') : <span className="italic text-gray-400">Unassigned</span>}</td>
                       <td className="px-4 py-3 text-gray-400 max-w-[120px] truncate">{r.notes || '—'}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold border ${STATUS_COLORS[r.status] || ''}`}>
-                          {STATUS_LABELS[r.status]}
-                        </span>
-                      </td>
+                      <td className="px-4 py-3"><span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold border ${STATUS_COLORS[r.status] || ''}`}>{STATUS_LABELS[r.status]}</span></td>
                       <td className="px-4 py-3 text-right">
                         {canEdit && r.status === 'confirmed' ? (
                           <div className="flex items-center justify-end gap-1">
@@ -390,7 +285,6 @@ export default function ReservationsView({ supabaseUrl, supabaseAnonKey, theme }
         )}
       </div>
 
-      {/* Add/Edit modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setShowForm(false)}>
           <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-md md:mx-4 p-6 rounded-t-xl md:max-h-[90vh] md:overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -399,30 +293,14 @@ export default function ReservationsView({ supabaseUrl, supabaseAnonKey, theme }
               <button onClick={() => setShowForm(false)} className="md:hidden text-gray-400 text-xl">✕</button>
             </div>
             <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Guest Name *</label>
-                <input type="text" value={formGuestName} onChange={(e) => setFormGuestName(e.target.value)} placeholder="Guest name" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Phone</label>
-                <input type="text" value={formGuestPhone} onChange={(e) => setFormGuestPhone(e.target.value)} placeholder="Phone number" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
-              </div>
+              <div><label className="block text-sm text-gray-600 mb-1">Guest Name *</label><input type="text" value={formGuestName} onChange={(e) => setFormGuestName(e.target.value)} placeholder="Guest name" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+              <div><label className="block text-sm text-gray-600 mb-1">Phone</label><input type="text" value={formGuestPhone} onChange={(e) => setFormGuestPhone(e.target.value)} placeholder="Phone number" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
               <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Party Size</label>
-                  <input type="number" min="1" value={formPartySize} onChange={(e) => setFormPartySize(Math.max(1, parseInt(e.target.value) || 1))} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Date *</label>
-                  <input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Time *</label>
-                  <input type="time" value={formTime} onChange={(e) => setFormTime(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
-                </div>
+                <div><label className="block text-sm text-gray-600 mb-1">Party Size</label><input type="number" min="1" value={formPartySize} onChange={(e) => setFormPartySize(Math.max(1, parseInt(e.target.value) || 1))} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+                <div><label className="block text-sm text-gray-600 mb-1">Date *</label><input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+                <div><label className="block text-sm text-gray-600 mb-1">Time *</label><input type="time" value={formTime} onChange={(e) => setFormTime(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Table (optional)</label>
+              <div><label className="block text-sm text-gray-600 mb-1">Table (optional)</label>
                 <select value={formTableId} onChange={(e) => setFormTableId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm">
                   <option value="">— No table assigned —</option>
                   {tables.filter((t) => t.status === 'available' || t.id === formTableId).map((t) => (
@@ -430,23 +308,17 @@ export default function ReservationsView({ supabaseUrl, supabaseAnonKey, theme }
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Notes (optional)</label>
-                <input type="text" value={formNotes} onChange={(e) => setFormNotes(e.target.value)} placeholder="Special requests, allergies, etc." className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
-              </div>
+              <div><label className="block text-sm text-gray-600 mb-1">Notes (optional)</label><input type="text" value={formNotes} onChange={(e) => setFormNotes(e.target.value)} placeholder="Special requests, allergies, etc." className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
               {error && <p className="text-red-600 text-sm">{error}</p>}
             </div>
             <div className="flex justify-end gap-2 mt-6">
               <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-sm rounded text-white font-medium disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>
-                {saving ? 'Saving...' : (editingRes ? 'Update' : 'Add')}
-              </button>
+              <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-sm rounded text-white font-medium disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>{saving ? 'Saving...' : (editingRes ? 'Update' : 'Add')}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Delete confirmation */}
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setDeleteId(null)}>
           <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-sm md:mx-4 p-6 rounded-t-xl" onClick={(e) => e.stopPropagation()}>
@@ -458,9 +330,7 @@ export default function ReservationsView({ supabaseUrl, supabaseAnonKey, theme }
             {error && <p className="text-red-600 text-sm mb-2">{error}</p>}
             <div className="flex justify-end gap-2">
               <button onClick={() => setDeleteId(null)} className="px-4 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button onClick={handleDelete} disabled={deleting} className="px-4 py-2 text-sm rounded bg-red-600 text-white font-medium disabled:opacity-50">
-                {deleting ? 'Deleting...' : 'Delete'}
-              </button>
+              <button onClick={handleDelete} disabled={deleting} className="px-4 py-2 text-sm rounded bg-red-600 text-white font-medium disabled:opacity-50">{deleting ? 'Deleting...' : 'Delete'}</button>
             </div>
           </div>
         </div>
