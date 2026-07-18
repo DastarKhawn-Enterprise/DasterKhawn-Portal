@@ -4,7 +4,7 @@ import { useAuth } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { supa, supaBatch, getSupabaseRealtimeToken } from './supa-query';
+import { supa, supaBatch } from './supa-query';
 
 interface Props {
   supabaseUrl: string;
@@ -101,26 +101,29 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
     fetchAll();
   }, [authReady, fetchAll]);
 
-  // Realtime subscriptions — use Clerk JWT (best-effort, silently fails on tenants where JWT is invalid)
+  // Realtime subscriptions (notification-only via anon key — best-effort)
+  // Actual data re-fetch always uses secure supa() server actions.
+  // A polling fallback ensures updates on tenants where anon-key Realtime is blocked by RLS.
   useEffect(() => {
     if (!authReady) return;
     let channel: ReturnType<SupabaseClient['channel']> | null = null;
 
-    getSupabaseRealtimeToken(slug).then((token) => {
-      if (!token) return;
-      const client = createClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: { Authorization: `Bearer ${token}` } },
-        auth: { persistSession: false },
-      });
-      channel = client
-        .channel('dashboard-realtime')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { fetchAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => { fetchAll(); })
-        .subscribe();
-    }).catch(() => {});
+    const client = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } });
+    channel = client
+      .channel('dashboard-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { fetchAll(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => { fetchAll(); })
+      .subscribe();
 
     return () => { if (channel) channel.unsubscribe(); };
-  }, [authReady, slug, supabaseUrl, supabaseAnonKey, fetchAll]);
+  }, [authReady, supabaseUrl, supabaseAnonKey, fetchAll]);
+
+  // Polling fallback — refreshes every 5s regardless of Realtime status
+  useEffect(() => {
+    if (!authReady) return;
+    const interval = setInterval(() => fetchAll(), 5000);
+    return () => clearInterval(interval);
+  }, [authReady, fetchAll]);
 
   if (!isLoaded || !authReady) {
     return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;

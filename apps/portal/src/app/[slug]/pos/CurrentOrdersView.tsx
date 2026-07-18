@@ -9,7 +9,7 @@ import type { SupabaseClient, RealtimePostgresChangesPayload } from '@supabase/s
 import ReceiptView from './ReceiptView';
 import { deductInventorySupa } from './inventory-utils';
 import { updateCustomerLoyaltySupa, searchCustomersSupa } from './customer-utils';
-import { supa, getSupabaseRealtimeToken } from './supa-query';
+import { supa } from './supa-query';
 
 interface OrderItem {
   menu_item_id: string;
@@ -134,14 +134,9 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
 
   const selectedOrder = orders.find((o) => o.id === selectedId) ?? null;
 
-  const getSupabaseClient = useCallback(async () => {
-    const token = await getSupabaseRealtimeToken(slug);
-    if (!token) return null;
-    return createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-      auth: { persistSession: false },
-    });
-  }, [slug, supabaseUrl, supabaseAnonKey]);
+  const getSupabaseClient = useCallback(() => {
+    return createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } });
+  }, [supabaseUrl, supabaseAnonKey]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -234,55 +229,30 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
     if (result.ok && result.data) setOrders(result.data as unknown as Order[]);
   }, [slug, cfg.statusFilter]);
 
-  // Realtime subscription (still uses Supabase client, falls back silently on tenants where JWT is invalid)
+  // Realtime subscription (notification-only via anon key — best-effort)
+  // Actual data re-fetch always uses secure supa() server actions.
+  // A polling fallback ensures updates on tenants where anon-key Realtime is blocked by RLS.
   useEffect(() => {
     if (!authReady) return;
-    let channel: ReturnType<SupabaseClient['channel']> | null = null;
+    const client = getSupabaseClient();
+    const channel = client
+      .channel('orders-realtime')
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'orders' },
+        () => { fetchOrdersInitial(); })
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'orders' },
+        () => { fetchOrdersInitial(); })
+      .subscribe();
+    return () => { channel.unsubscribe(); };
+  }, [authReady, getSupabaseClient, fetchOrdersInitial]);
 
-    const init = async () => {
-      const client = await getSupabaseClient().catch(() => null);
-      if (!client) return;
-
-      const insertFilter = cfg.statusFilter
-        ? `status=eq.${cfg.statusFilter}`
-        : cfg.orderType
-          ? `order_type=eq.${cfg.orderType}`
-          : 'status=neq.completed';
-
-      channel = client
-        .channel(cfg.orderType ? `orders-${cfg.orderType}` : 'current-orders')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders', filter: insertFilter },
-          async (payload: RealtimePostgresChangesPayload<{ id: string }>) => {
-            const rec = payload.new as { id?: string } | null;
-            if (!rec?.id) return;
-            const oResult = await supa(slug, { table: 'orders', select: SELECT_ORDER_FIELDS, eq: ['id', rec.id], single: true });
-            const o = oResult.ok ? oResult.data as unknown as Order : null;
-            if (o && o.status !== 'completed' && o.status !== 'cancelled') {
-              setOrders((prev) => (prev.some((x) => x.id === o.id) ? prev : [...prev, o]));
-            }
-          })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' },
-          (payload: RealtimePostgresChangesPayload<{ id: string; status: string; order_type?: string }>) => {
-            const rec = payload.new as { id?: string; status?: string; order_type?: string } | null;
-            if (!rec?.id) return;
-            const { id, status, order_type } = rec;
-            if (cfg.orderType && order_type !== cfg.orderType) {
-              setOrders((prev) => prev.filter((o) => o.id !== id));
-              return;
-            }
-            if (status === 'completed' || status === 'cancelled') {
-              setOrders((prev) => prev.filter((o) => o.id !== id));
-              setSelectedId((prev) => (prev === id ? null : prev));
-            } else if (status) {
-              setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
-            }
-          })
-        .subscribe();
-    };
-
-    init();
-    return () => { if (channel) channel.unsubscribe(); };
-  }, [authReady, getSupabaseClient, slug, cfg.orderType, cfg.statusFilter]);
+  // Polling fallback — refreshes every 5s regardless of Realtime status
+  useEffect(() => {
+    if (!authReady) return;
+    const interval = setInterval(() => fetchOrdersInitial(), 5000);
+    return () => clearInterval(interval);
+  }, [authReady, fetchOrdersInitial]);
 
   useEffect(() => {
     if (!authReady) return;

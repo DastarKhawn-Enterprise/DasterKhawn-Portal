@@ -9,7 +9,7 @@ import type { SupabaseClient, RealtimePostgresChangesPayload } from '@supabase/s
 import ReceiptView from './ReceiptView';
 import { deductInventorySupa } from './inventory-utils';
 import { updateCustomerLoyaltySupa, searchCustomersSupa } from './customer-utils';
-import { supa, getSupabaseRealtimeToken } from './supa-query';
+import { supa } from './supa-query';
 
 interface TableRecord {
   id: string;
@@ -103,14 +103,9 @@ export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, 
   const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string; phone: string | null } | null>(null);
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
 
-  const getSupabaseClient = useCallback(async () => {
-    const token = await getSupabaseRealtimeToken(slug);
-    if (!token) return null;
-    return createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-      auth: { persistSession: false },
-    });
-  }, [slug, supabaseUrl, supabaseAnonKey]);
+  const getSupabaseClient = useCallback(() => {
+    return createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } });
+  }, [supabaseUrl, supabaseAnonKey]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -127,41 +122,32 @@ export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, 
     return () => { cancelled = true; };
   }, [authReady, slug]);
 
-  // Fetch tables (initial load via supa) + Realtime (via client)
+  const fetchTables = useCallback(async () => {
+    const r = await supa(slug, { table: 'tables', select: '*', order: 'table_number' });
+    if (r.ok) setTables(r.data as TableRecord[]);
+  }, [slug]);
+
+  // Initial tables load + Realtime notification (best-effort via anon key) + polling fallback
   useEffect(() => {
     if (!authReady) return;
-    let cancelled = false;
+    fetchTables();
+  }, [authReady, fetchTables]);
 
-    supa(slug, { table: 'tables', select: '*', order: 'table_number' })
-      .then((r) => { if (!cancelled && r.ok) setTables(r.data as TableRecord[]); })
-      .catch(() => {});
+  useEffect(() => {
+    if (!authReady) return;
+    const client = getSupabaseClient();
+    const channel = client
+      .channel('dine-in-tables')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => { fetchTables(); })
+      .subscribe();
+    return () => { channel.unsubscribe(); };
+  }, [authReady, getSupabaseClient, fetchTables]);
 
-    // Realtime subscription
-    let channel: ReturnType<SupabaseClient['channel']> | null = null;
-    getSupabaseClient().then((client) => {
-      if (cancelled || !client) return;
-      channel = client
-        .channel('dine-in-tables')
-        .on('postgres_changes',
-          { event: '*', schema: 'public', table: 'tables' },
-          (payload: RealtimePostgresChangesPayload<TableRecord>) => {
-            const rec = payload.new as TableRecord | null;
-            if (!rec) return;
-            setTables((prev) => {
-              const idx = prev.findIndex((t) => t.id === rec.id);
-              if (idx >= 0) {
-                const next = [...prev];
-                next[idx] = rec;
-                return next;
-              }
-              return [...prev, rec];
-            });
-          })
-        .subscribe();
-    }).catch(() => {});
-
-    return () => { cancelled = true; if (channel) channel.unsubscribe(); };
-  }, [authReady, getSupabaseClient, slug]);
+  useEffect(() => {
+    if (!authReady) return;
+    const interval = setInterval(() => fetchTables(), 5000);
+    return () => clearInterval(interval);
+  }, [authReady, fetchTables]);
 
   // When selectedTable changes to occupied, fetch its order
   useEffect(() => {
