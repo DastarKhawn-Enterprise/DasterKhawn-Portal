@@ -147,7 +147,7 @@ export default function InventoryView({ slug, theme }: Props) {
   return (
     <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-bold text-gray-800">Inventory</h1>
           {canEdit && (
             <button onClick={openAddForm} className="px-4 py-2 text-white rounded text-sm font-medium transition-colors" style={{ backgroundColor: theme.primaryColor }}>
@@ -157,12 +157,12 @@ export default function InventoryView({ slug, theme }: Props) {
         </div>
 
         {lowStockItems.length > 0 && (
-          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-6">
-            <div className="flex items-center gap-2 text-red-700 font-medium text-sm mb-1">
-              <span>⚠</span>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6">
+            <div className="flex items-center gap-2 text-amber-800 font-medium text-sm mb-1">
+              <span>△</span>
               <span>Low Stock Alert{lowStockItems.length > 1 ? 's' : ''}</span>
             </div>
-            <ul className="text-sm text-red-600 ml-5 list-disc">
+            <ul className="text-sm text-amber-700 ml-5 list-disc">
               {lowStockItems.map((i) => (
                 <li key={i.id}>{i.name} — {Number(i.current_stock)} {i.unit} (threshold: {Number(i.low_stock_threshold)})</li>
               ))}
@@ -175,7 +175,7 @@ export default function InventoryView({ slug, theme }: Props) {
         {loading ? (
           <p className="text-gray-400 text-sm">Loading inventory...</p>
         ) : items.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
+          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
             <p className="text-gray-400 text-sm">{'No inventory items yet. Click "+ Add Item" to begin.'}</p>
           </div>
         ) : (
@@ -186,7 +186,7 @@ export default function InventoryView({ slug, theme }: Props) {
                 const threshold = Number(item.low_stock_threshold);
                 const isLow = stock <= threshold;
                 return (
-                  <div key={item.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                  <div key={item.id} className="bg-white rounded-xl border border-gray-200 p-4">
                     <div className="flex items-start justify-between mb-2">
                       <div className="font-semibold text-gray-800">{item.name}</div>
                       {isLow ? (
@@ -211,10 +211,10 @@ export default function InventoryView({ slug, theme }: Props) {
                 );
               })}
             </div>
-            <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+                  <tr className="border-b border-gray-200 bg-gray-50 text-gray-400 text-xs uppercase tracking-wider">
                     <th className="text-left px-4 py-3 font-medium">Name</th>
                     <th className="text-left px-4 py-3 font-medium">Unit</th>
                     <th className="text-right px-4 py-3 font-medium">Stock</th>

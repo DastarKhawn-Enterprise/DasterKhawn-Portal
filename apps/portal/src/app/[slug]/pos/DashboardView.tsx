@@ -25,11 +25,11 @@ const ORDER_TYPE_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-  in_kitchen: 'bg-blue-100 text-blue-800 border-blue-300',
-  ready: 'bg-green-100 text-green-800 border-green-300',
-  completed: 'bg-gray-100 text-gray-500 border-gray-200',
-  cancelled: 'bg-red-100 text-red-800 border-red-300',
+  pending: 'bg-blue-50 text-blue-700 border border-blue-200',
+  in_kitchen: 'bg-amber-50 text-amber-700 border border-amber-200',
+  ready: 'bg-green-50 text-green-700 border border-green-200',
+  completed: 'bg-gray-50 text-gray-500 border border-gray-200',
+  cancelled: 'bg-red-50 text-red-700 border border-red-200',
 };
 
 export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slug, currencySymbol }: Props) {
@@ -130,38 +130,37 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
   }
 
   const maxTypeRevenue = Math.max(...orderTypes.map(t => t.revenue), 1);
-  const cardStyle = { borderLeftColor: theme.primaryColor };
 
   return (
     <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
       <div className="max-w-6xl mx-auto">
-        <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider mb-5">Today&apos;s Dashboard</h2>
+        <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider mb-5">Dashboard</h2>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 border-l-4 p-4" style={cardStyle}>
-            <p className="text-xs text-gray-500 uppercase tracking-wide">Orders</p>
-            <p className="text-2xl font-bold text-gray-800 mt-1">{summary.totalOrders}</p>
-            <p className="text-xs text-gray-400 mt-1">completed today</p>
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Orders</p>
+              <p className="text-2xl font-medium text-gray-800">{summary.totalOrders}</p>
+              <p className="text-xs text-gray-400 mt-1">completed today</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Revenue</p>
+              <p className="text-2xl font-medium text-gray-800">{currencySymbol}{summary.totalRevenue.toFixed(2)}</p>
+              <p className="text-xs text-gray-400 mt-1">earned today</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Active</p>
+              <p className="text-2xl font-medium text-gray-800">{summary.activeOrders}</p>
+              <p className="text-xs text-gray-400 mt-1">orders in progress</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Avg Order</p>
+              <p className="text-2xl font-medium text-gray-800">{currencySymbol}{summary.avgOrderValue.toFixed(2)}</p>
+              <p className="text-xs text-gray-400 mt-1">per completed order</p>
+            </div>
           </div>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 border-l-4 p-4" style={cardStyle}>
-            <p className="text-xs text-gray-500 uppercase tracking-wide">Revenue</p>
-            <p className="text-2xl font-bold text-gray-800 mt-1">{currencySymbol}{summary.totalRevenue.toFixed(2)}</p>
-            <p className="text-xs text-gray-400 mt-1">earned today</p>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 border-l-4 p-4" style={cardStyle}>
-            <p className="text-xs text-gray-500 uppercase tracking-wide">Active</p>
-            <p className="text-2xl font-bold text-gray-800 mt-1">{summary.activeOrders}</p>
-            <p className="text-xs text-gray-400 mt-1">orders in progress</p>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 border-l-4 p-4" style={cardStyle}>
-            <p className="text-xs text-gray-500 uppercase tracking-wide">Avg Order</p>
-            <p className="text-2xl font-bold text-gray-800 mt-1">{currencySymbol}{summary.avgOrderValue.toFixed(2)}</p>
-            <p className="text-xs text-gray-400 mt-1">per completed order</p>
-          </div>
-        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Open Tables</h3>
             {tables.total === 0 ? (
               <p className="text-sm text-gray-400">No tables configured.</p>
@@ -176,14 +175,14 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
             )}
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Kitchen Status</h3>
             {kitchen.pending + kitchen.in_kitchen + kitchen.ready === 0 ? (
               <p className="text-sm text-gray-400">No active orders in kitchen.</p>
             ) : (
               <div className="space-y-2">
-                {([['pending', 'Pending', 'bg-yellow-100'],
-                  ['in_kitchen', 'In Kitchen', 'bg-blue-100'],
+                {([['pending', 'Pending', 'bg-blue-100'],
+                  ['in_kitchen', 'In Kitchen', 'bg-amber-100'],
                   ['ready', 'Ready', 'bg-green-100']] as const).map(([key, label, bg]) => (
                   <div key={key} className="flex items-center justify-between">
                     <div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${bg} border`} /><span className="text-sm text-gray-600">{label}</span></div>
@@ -196,7 +195,7 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Sales by Type (Today)</h3>
             {orderTypes.length === 0 ? (
               <p className="text-sm text-gray-400">No completed orders today.</p>
@@ -217,7 +216,7 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
             )}
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Recent Activity</h3>
             {recentOrders.length === 0 ? (
               <p className="text-sm text-gray-400">No recent orders.</p>

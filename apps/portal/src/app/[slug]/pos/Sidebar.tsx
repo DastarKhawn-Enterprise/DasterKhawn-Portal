@@ -30,7 +30,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '⊞' },
+  { id: 'dashboard', label: 'Dashboard', icon: '▦' },
   {
     id: 'current-orders',
     label: 'Orders',
@@ -42,18 +42,18 @@ const NAV_ITEMS: NavItem[] = [
       { id: 'orders-draft', label: 'Draft' },
     ],
   },
-  { id: 'dine-in', label: 'Dine In', icon: '🍽' },
-  { id: 'take-away', label: 'Take Away', icon: '🛍' },
-  { id: 'delivery', label: 'Delivery', icon: '🚚' },
-  { id: 'drive-thru', label: 'Drive Thru', icon: '🚗' },
-  { id: 'third-party', label: 'Third Party', icon: '🤝' },
-  { id: 'reservations', label: 'Reservations', icon: '📋' },
-  { id: 'menu', label: 'Menu', icon: '📖' },
-  { id: 'inventory', label: 'Inventory', icon: '📦' },
-  { id: 'customers', label: 'Customers', icon: '👥' },
-  { id: 'reports', label: 'Reports', icon: '📊' },
-  { id: 'expenses', label: 'Expenses', icon: '💰' },
-  { id: 'staff', label: 'Staff', icon: '👤' },
+  { id: 'dine-in', label: 'Dine In', icon: '◈' },
+  { id: 'take-away', label: 'Take Away', icon: '◐' },
+  { id: 'delivery', label: 'Delivery', icon: '⤵' },
+  { id: 'drive-thru', label: 'Drive Thru', icon: '◉' },
+  { id: 'third-party', label: 'Third Party', icon: '⊕' },
+  { id: 'reservations', label: 'Reservations', icon: '☷' },
+  { id: 'menu', label: 'Menu', icon: '☰' },
+  { id: 'inventory', label: 'Inventory', icon: '▣' },
+  { id: 'customers', label: 'Customers', icon: '◉' },
+  { id: 'reports', label: 'Reports', icon: '▤' },
+  { id: 'expenses', label: 'Expenses', icon: '⟐' },
+  { id: 'staff', label: 'Staff', icon: '◒' },
   { id: 'settings', label: 'Settings', icon: '⚙' },
 ];
 
@@ -92,7 +92,7 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
       {/* Collapse toggle — hidden on mobile */}
       <button
         onClick={onToggleCollapse}
-        className="hidden md:flex items-center justify-center h-12 text-gray-400 hover:text-white hover:bg-slate-800"
+        className="hidden md:flex items-center justify-center h-12 text-[#B8B6B0] hover:text-white hover:bg-[#252525]"
       >
         <span className="text-lg">{collapsed ? '▶' : '◀'}</span>
       </button>
@@ -108,11 +108,11 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
                   className={`flex items-center w-full px-4 py-2.5 text-sm transition-colors ${
                     isActive(item.id)
                       ? 'font-semibold'
-                      : 'text-gray-300 hover:bg-slate-800 hover:text-white'
+                      : 'text-[#B8B6B0] hover:bg-[#252525] hover:text-white'
                   }`}
-                  style={isActive(item.id) ? { backgroundColor: accentColor + '33', color: accentColor } : {}}
+                  style={isActive(item.id) ? { backgroundColor: accentColor + '26', color: accentColor } : {}}
                 >
-                  <span className="text-base w-6 text-center flex-shrink-0">{item.icon}</span>
+                  <span className="text-[17px] w-6 text-center flex-shrink-0">{item.icon}</span>
                   {!collapsed && (
                     <>
                       <span className="ml-3 flex-1 text-left">{item.label}</span>
@@ -127,9 +127,9 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
                     className={`flex items-center w-full pl-12 pr-4 py-2 text-sm transition-colors ${
                       isActive(child.id)
                         ? 'font-semibold'
-                        : 'text-gray-400 hover:bg-slate-800 hover:text-white'
+                        : 'text-[#B8B6B0] hover:bg-[#252525] hover:text-white'
                     }`}
-                    style={isActive(child.id) ? { backgroundColor: accentColor + '33', color: accentColor } : {}}
+                    style={isActive(child.id) ? { backgroundColor: accentColor + '26', color: accentColor } : {}}
                   >
                     {child.label}
                   </button>
@@ -145,9 +145,9 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
               className={`flex items-center w-full px-4 py-2.5 text-sm transition-colors ${
                 isActive(item.id)
                   ? 'font-semibold'
-                  : 'text-gray-300 hover:bg-slate-800 hover:text-white'
+                  : 'text-[#B8B6B0] hover:bg-[#252525] hover:text-white'
               }`}
-              style={isActive(item.id) ? { backgroundColor: accentColor + '33', color: accentColor } : {}}
+              style={isActive(item.id) ? { backgroundColor: accentColor + '26', color: accentColor } : {}}
             >
               <span className="text-base w-6 text-center flex-shrink-0">{item.icon}</span>
               {!collapsed && <span className="ml-3">{item.label}</span>}
@@ -167,7 +167,7 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
 
       {/* Desktop sidebar */}
       <nav
-        className={`hidden md:flex flex-col bg-slate-900 text-white transition-all duration-200 ${
+        className={`hidden md:flex flex-col bg-[#1A1A1A] text-white transition-all duration-200 ${
           collapsed ? 'w-16' : 'w-56'
         }`}
       >
@@ -176,14 +176,14 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
 
       {/* Mobile drawer */}
       <nav
-        className={`md:hidden fixed top-0 left-0 z-50 h-full bg-slate-900 text-white transition-all duration-300 ${
+        className={`md:hidden fixed top-0 left-0 z-50 h-full bg-[#1A1A1A] text-white transition-all duration-300 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         } w-64`}
       >
         {/* Close button */}
         <button
           onClick={onMobileClose}
-          className="flex items-center justify-center h-12 w-full text-gray-400 hover:text-white hover:bg-slate-800"
+          className="flex items-center justify-center h-12 w-full text-[#B8B6B0] hover:text-white hover:bg-[#252525]"
         >
           <span className="text-lg">✕</span>
         </button>

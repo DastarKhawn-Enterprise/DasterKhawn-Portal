@@ -5,7 +5,7 @@ import { useAuth } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
 import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
 import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
-import type { SupabaseClient, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import ReceiptView from './ReceiptView';
 import { deductInventorySupa } from './inventory-utils';
 import { updateCustomerLoyaltySupa, searchCustomersSupa } from './customer-utils';
@@ -74,10 +74,10 @@ const statusDisplay: Record<string, string> = {
 };
 
 const statusColor: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-  in_kitchen: 'bg-blue-100 text-blue-800 border-blue-300',
-  ready: 'bg-green-100 text-green-800 border-green-300',
-  cancelled: 'bg-red-100 text-red-800 border-red-300',
+  pending: 'bg-blue-50 text-blue-700 border border-blue-200',
+  in_kitchen: 'bg-amber-50 text-amber-700 border border-amber-200',
+  ready: 'bg-green-50 text-green-700 border border-green-200',
+  cancelled: 'bg-red-50 text-red-700 border border-red-200',
 };
 
 const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
@@ -474,10 +474,10 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
 
   const availableTables = orderedTables.filter((t) => t.status === 'available');
   const orderTypeBadge: Record<string, string> = {
-    dine_in: 'bg-purple-100 text-purple-800',
-    takeaway: 'bg-blue-100 text-blue-800',
-    delivery: 'bg-orange-100 text-orange-800',
-    drive_thru: 'bg-teal-100 text-teal-800',
+    dine_in: 'bg-purple-50 text-purple-700 border border-purple-200',
+    takeaway: 'bg-blue-50 text-blue-700 border border-blue-200',
+    delivery: 'bg-orange-50 text-orange-700 border border-orange-200',
+    drive_thru: 'bg-teal-50 text-teal-700 border border-teal-200',
   };
   const orderTypeDisplay: Record<string, string> = {
     dine_in: 'Dine In',
@@ -507,7 +507,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
             </button>
           )}
         </div>
-        <div className="flex-1 overflow-y-auto scrollbar-hide p-3 space-y-2">
+        <div className="flex-1 overflow-y-auto scrollbar-hide p-3 space-y-3">
           {orders.length === 0 && (
             <p className="text-gray-400 text-sm text-center pt-8">{cfg.statusFilter ? `No ${cfg.title.toLowerCase()}` : 'No active orders'}</p>
           )}
@@ -515,7 +515,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
             <button
               key={order.id}
               onClick={() => { setSelectedId(order.id); setMobilePanel('detail'); }}
-              className={`w-full text-left p-3 rounded-lg border transition-colors ${
+              className={`w-full text-left p-3 rounded-xl border transition-colors ${
                 selectedId === order.id ? '' : 'hover:bg-gray-50'
               }`}
               style={selectedId === order.id ? { borderColor: theme.primaryColor, boxShadow: `0 0 0 2px ${theme.primaryColor}20` } : { borderColor: '#e5e7eb' }}
@@ -565,7 +565,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
           ← Orders
         </button>
         {selectedOrder ? (
-          <div className="flex-1 overflow-y-auto scrollbar-hide p-4 md:p-6">
+          <div className="flex-1 overflow-y-auto scrollbar-hide p-4 md:p-6 space-y-4">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-xl font-bold">Order #{selectedOrder.order_number}</h2>
@@ -628,7 +628,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
               <>
                 <table className="w-full text-sm mb-6">
                   <thead>
-                    <tr className="text-gray-500 border-b">
+                    <tr className="text-gray-400 text-xs uppercase tracking-wider border-b border-gray-100">
                       <th className="text-left py-2 font-medium">Item</th>
                       <th className="text-right py-2 font-medium">Qty</th>
                       <th className="text-right py-2 font-medium">Price</th>
@@ -637,7 +637,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
                   </thead>
                   <tbody>
                     {selectedOrder.order_items.map((item, i) => (
-                      <tr key={i} className="border-b border-gray-100">
+                      <tr key={i} className="border-b border-gray-50">
                         <td className="py-2">{item.menu_items?.name || 'Unknown'}</td>
                         <td className="text-right py-2">{item.quantity}</td>
                         <td className="text-right py-2">{settings?.currencySymbol}{Number(item.price_at_order).toFixed(2)}</td>

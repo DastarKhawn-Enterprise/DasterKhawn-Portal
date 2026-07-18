@@ -167,7 +167,7 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
                 <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Sales by Order Type</h3>
                 {orderTypeBreakdown.length === 0 ? (
                   <p className="text-gray-400 text-sm text-center py-6">No completed orders in this period.</p>
@@ -188,7 +188,7 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
                 )}
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
                 <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Top Selling Items</h3>
                 {topItems.length === 0 ? (
                   <p className="text-gray-400 text-sm text-center py-6">No items sold in this period.</p>
@@ -214,7 +214,7 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
               </div>
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Sales Over Time</h3>
               {dailyRevenue.length === 0 ? (
                 <p className="text-gray-400 text-sm text-center py-6">No revenue data in this period.</p>
@@ -252,11 +252,11 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
 
 function SummaryCard({ label, value, format, currencySymbol, theme }: { label: string; value: number; format: 'number' | 'currency'; currencySymbol: string; theme: ThemeConfig }) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
-      <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{label}</div>
-      <div className="text-2xl font-bold" style={{ color: theme.primaryColor }}>
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{label}</p>
+      <p className="text-2xl font-medium text-gray-800">
         {format === 'currency' ? `${currencySymbol}${value.toFixed(2)}` : value}
-      </div>
+      </p>
     </div>
   );
 }

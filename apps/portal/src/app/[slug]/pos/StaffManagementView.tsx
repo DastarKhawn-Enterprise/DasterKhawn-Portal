@@ -125,7 +125,7 @@ export default function StaffManagementView({ slug }: Props) {
         )}
 
         {/* Create account form */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 mb-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-700 mb-3">Add Team Member</h2>
           <div className="flex flex-col gap-3">
             <input
@@ -188,8 +188,8 @@ export default function StaffManagementView({ slug }: Props) {
         </div>
 
         {/* Staff list */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-4 md:px-6 py-4 border-b border-gray-200 bg-gray-50">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-4 md:px-6 py-4 border-b border-gray-200">
             <h2 className="text-lg font-semibold text-gray-700">Team Members ({allMembers.length})</h2>
           </div>
 
@@ -201,7 +201,7 @@ export default function StaffManagementView({ slug }: Props) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 text-gray-500 text-xs uppercase">
+                  <tr className="border-b border-gray-200 text-gray-400 text-xs uppercase tracking-wider">
                     <th className="text-left px-4 md:px-6 py-3 font-medium">Name / Email</th>
                     <th className="text-left px-4 py-3 font-medium">Role</th>
                     <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Permissions</th>
@@ -218,7 +218,7 @@ export default function StaffManagementView({ slug }: Props) {
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                          member.role === 'owner' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                          member.role === 'owner' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-blue-50 text-blue-700 border border-blue-200'
                         }`}>
                           {member.role === 'owner' ? 'Owner' : 'Staff'}
                         </span>

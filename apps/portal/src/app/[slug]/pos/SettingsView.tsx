@@ -97,7 +97,7 @@ export default function SettingsView({ slug, theme }: Props) {
 
         {settings ? (
           <div className="space-y-6">
-            <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+            <section className="bg-white rounded-xl border border-gray-200 p-5">
               <h2 className="text-lg font-semibold text-gray-800 mb-4">Tax</h2>
               <div className="flex items-center justify-between mb-4">
                 <label className="text-sm text-gray-600">Enable Tax</label>
@@ -126,7 +126,7 @@ export default function SettingsView({ slug, theme }: Props) {
               )}
             </section>
 
-            <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+            <section className="bg-white rounded-xl border border-gray-200 p-5">
               <h2 className="text-lg font-semibold text-gray-800 mb-4">Currency</h2>
               <div>
                 <label className="block text-sm text-gray-600 mb-1">Currency Symbol</label>
@@ -141,7 +141,7 @@ export default function SettingsView({ slug, theme }: Props) {
               </div>
             </section>
 
-            <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+            <section className="bg-white rounded-xl border border-gray-200 p-5">
               <h2 className="text-lg font-semibold text-gray-800 mb-4">Receipt Footer</h2>
               <div>
                 <label className="block text-sm text-gray-600 mb-1">Footer Text</label>

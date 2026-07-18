@@ -214,7 +214,7 @@ export default function MenuManagementView({ slug, theme }: Props) {
           return (
             <div key={cat} className="mb-8">
               <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">{cat}</h3>
-              <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100">
+              <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
                 {catItems.map((item) => {
                   const isAvailable = item.available !== false;
                   return (
@@ -275,7 +275,7 @@ export default function MenuManagementView({ slug, theme }: Props) {
       {/* ─── Add/Edit Modal ─── */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowForm(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-xl border border-gray-200 w-full max-w-lg mx-4 p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-gray-800 mb-4">{editId ? 'Edit Item' : 'Add Menu Item'}</h3>
             <div className="space-y-3">
               <div>
@@ -444,7 +444,7 @@ export default function MenuManagementView({ slug, theme }: Props) {
       {/* ─── Delete Confirmation ─── */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteTarget(null)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-xl border border-gray-200 w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-gray-800 mb-2">Delete &ldquo;{deleteTarget.name}&rdquo;?</h3>
             <p className="text-sm text-gray-500 mb-6">
               This cannot be undone. Items that have been ordered before may break historical records.

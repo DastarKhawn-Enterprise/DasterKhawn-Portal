@@ -158,7 +158,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
   return (
     <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-6">
       <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-bold text-gray-800">Customers</h1>
           {canEdit && <button onClick={openAddForm} className="px-4 py-2 text-white rounded text-sm font-medium transition-colors" style={{ backgroundColor: theme.primaryColor }}>+ Add Customer</button>}
         </div>
@@ -174,14 +174,14 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
             {loading ? (
               <p className="text-gray-400 text-sm">Loading customers...</p>
             ) : customers.length === 0 ? (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
+              <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
                 <p className="text-gray-400 text-sm">{search ? 'No customers match your search.' : 'No customers yet. Click "+ Add Customer" to create one.'}</p>
               </div>
             ) : (
               <>
                 <div className="md:hidden space-y-3">
                   {customers.map((c) => (
-                    <div key={c.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 cursor-pointer hover:bg-gray-50" onClick={() => openProfile(c)}>
+                    <div key={c.id} className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:bg-gray-50" onClick={() => openProfile(c)}>
                       <div className="flex items-start justify-between mb-2">
                         <div className="font-semibold text-gray-800">{c.name}</div>
                         {loyaltyPointsEnabled && <div className="text-sm font-bold" style={{ color: theme.primaryColor }}>{c.loyalty_points} pts</div>}
@@ -197,10 +197,10 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
                     </div>
                   ))}
                 </div>
-                <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+                      <tr className="border-b border-gray-200 bg-gray-50 text-gray-400 text-xs uppercase tracking-wider">
                         <th className="text-left px-4 py-3 font-medium">Name</th>
                         <th className="text-left px-4 py-3 font-medium">Phone</th>
                         <th className="text-right px-4 py-3 font-medium">Orders</th>
@@ -228,7 +228,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
           </div>
 
           {selectedCustomer && (
-            <div className="hidden md:block w-80 flex-shrink-0 bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+            <div className="hidden md:block w-80 flex-shrink-0 bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-800">{selectedCustomer.name}</h2>
                 <div className="flex items-center gap-2">
@@ -281,11 +281,11 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
                 {selectedCustomer.notes && <p><span className="text-gray-400">Notes:</span> {selectedCustomer.notes}</p>}
               </div>
               <div className={`grid ${loyaltyPointsEnabled ? 'grid-cols-3' : 'grid-cols-2'} gap-2 mb-4 text-center`}>
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3"><div className="text-lg font-bold text-gray-800">{selectedCustomer.total_orders}</div><div className="text-xs text-gray-400">Orders</div></div>
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3"><div className="text-lg font-bold text-gray-800">{currencySymbol}{Number(selectedCustomer.total_spent).toFixed(2)}</div><div className="text-xs text-gray-400">Spent</div></div>
-                {loyaltyPointsEnabled && <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3"><div className="text-lg font-bold" style={{ color: theme.primaryColor }}>{selectedCustomer.loyalty_points}</div><div className="text-xs text-gray-400">Points</div></div>}
+                <div className="bg-white rounded-xl border border-gray-200 p-3"><div className="text-lg font-bold text-gray-800">{selectedCustomer.total_orders}</div><div className="text-xs text-gray-400">Orders</div></div>
+                <div className="bg-white rounded-xl border border-gray-200 p-3"><div className="text-lg font-bold text-gray-800">{currencySymbol}{Number(selectedCustomer.total_spent).toFixed(2)}</div><div className="text-xs text-gray-400">Spent</div></div>
+                {loyaltyPointsEnabled && <div className="bg-white rounded-xl border border-gray-200 p-3"><div className="text-lg font-bold" style={{ color: theme.primaryColor }}>{selectedCustomer.loyalty_points}</div><div className="text-xs text-gray-400">Points</div></div>}
               </div>
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
                 <h3 className="text-sm font-semibold text-gray-700 mb-2">Order History</h3>
                 {historyLoading ? (<p className="text-xs text-gray-400">Loading...</p>
                 ) : orderHistory.length === 0 ? (<p className="text-xs text-gray-400">No orders yet</p>

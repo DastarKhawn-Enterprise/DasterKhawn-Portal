@@ -5,7 +5,7 @@ import { useAuth } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
 import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
 import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
-import type { SupabaseClient, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import ReceiptView from './ReceiptView';
 import { deductInventorySupa } from './inventory-utils';
 import { updateCustomerLoyaltySupa, searchCustomersSupa } from './customer-utils';
@@ -55,22 +55,22 @@ const statusDisplay: Record<string, string> = {
 };
 
 const statusColor: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-  in_kitchen: 'bg-blue-100 text-blue-800 border-blue-300',
-  ready: 'bg-green-100 text-green-800 border-green-300',
-  cancelled: 'bg-red-100 text-red-800 border-red-300',
+  pending: 'bg-blue-50 text-blue-700 border border-blue-200',
+  in_kitchen: 'bg-amber-50 text-amber-700 border border-amber-200',
+  ready: 'bg-green-50 text-green-700 border border-green-200',
+  cancelled: 'bg-red-50 text-red-700 border border-red-200',
 };
 
 const tableBadge: Record<string, string> = {
-  available: 'bg-green-100 text-green-800',
-  occupied: 'bg-red-100 text-red-800',
-  reserved: 'bg-yellow-100 text-yellow-800',
+  available: 'bg-green-50 text-green-700',
+  occupied: 'bg-red-50 text-red-700',
+  reserved: 'bg-amber-50 text-amber-700',
 };
 
 const tableBorder: Record<string, string> = {
-  available: 'border-green-300 hover:border-green-500',
-  occupied: 'border-red-300 hover:border-red-500',
-  reserved: 'border-yellow-300 hover:border-yellow-500',
+  available: 'border-green-200 hover:border-green-400',
+  occupied: 'border-red-200 hover:border-red-400',
+  reserved: 'border-amber-200 hover:border-amber-400',
 };
 
 export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, brandName }: Props) {
@@ -455,24 +455,25 @@ export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, 
               className={`relative p-3 md:p-4 rounded-xl border-2 text-center transition-all hover:shadow-md ${tableBorder[table.status] || 'border-gray-300'} ${
                 selectedTable?.id === table.id ? 'ring-2 ring-offset-2 ring-blue-400' : ''
               }`}
+              style={{ backgroundColor: (() => { if (table.status === 'available') return 'rgba(34,197,94,0.08)'; if (table.status === 'occupied') return 'rgba(239,68,68,0.08)'; if (table.status === 'reserved') return 'rgba(245,158,11,0.08)'; return 'transparent'; })() }}
             >
               {/* Status badge */}
               <span className={`absolute top-1 right-1 text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${tableBadge[table.status] || 'bg-gray-100 text-gray-600'}`}>
                 {table.status}
               </span>
               {/* Table shape */}
-              <div className="mx-auto mb-1 flex items-center justify-center w-12 h-9 md:w-14 md:h-10 rounded border-2 border-gray-400 bg-white/60 text-gray-600 text-xs font-bold">
+              <div className="mx-auto mb-1 flex items-center justify-center w-12 h-9 md:w-14 md:h-10 rounded border-2 text-xs font-bold" style={{ borderColor: table.status === 'available' ? '#86efac' : table.status === 'occupied' ? '#fca5a5' : '#fcd34d', backgroundColor: table.status === 'available' ? 'rgba(34,197,94,0.15)' : table.status === 'occupied' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)', color: table.status === 'available' ? '#166534' : table.status === 'occupied' ? '#991b1b' : '#92400e' }}>
                 {table.table_number}
               </div>
-              <div className="text-xs text-gray-500">{table.capacity} seat{table.capacity !== 1 ? 's' : ''}</div>
+              <div className="text-xs" style={{ color: table.status === 'available' ? '#166534' : table.status === 'occupied' ? '#991b1b' : '#92400e' }}>{table.capacity} seat{table.capacity !== 1 ? 's' : ''}</div>
               {/* Reserve toggle for available/reserved */}
               {(table.status === 'available' || table.status === 'reserved') && (
                 <button
                   onClick={(e) => handleQuickReserve(table, e)}
                   className={`mt-1.5 text-[10px] px-2 py-0.5 rounded font-semibold ${
                     table.status === 'reserved'
-                      ? 'bg-yellow-200 text-yellow-800 hover:bg-yellow-300'
-                      : 'bg-green-200 text-green-800 hover:bg-green-300'
+                      ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-200'
+                      : 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-200'
                   }`}
                 >
                   {table.status === 'reserved' ? 'Unreserve' : 'Reserve'}
@@ -643,7 +644,7 @@ export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, 
                       <>
                         <table className="w-full text-sm mb-4">
                           <thead>
-                            <tr className="text-gray-500 border-b">
+                            <tr className="text-gray-400 text-xs uppercase tracking-wider border-b border-gray-100">
                               <th className="text-left py-1.5 font-medium">Item</th>
                               <th className="text-right py-1.5 font-medium">Qty</th>
                               <th className="text-right py-1.5 font-medium">Price</th>
