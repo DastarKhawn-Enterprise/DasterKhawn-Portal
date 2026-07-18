@@ -43,6 +43,8 @@ export interface ViewConfig {
   title: string;
   orderType: string | null;
   showCustomerFields: boolean;
+  statusFilter?: string | null;
+  hideNewOrder?: boolean;
 }
 
 interface Props {
@@ -226,9 +228,11 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
 
   // Fetch orders (initial load via supa)
   const fetchOrdersInitial = useCallback(async () => {
-    const result = await supa(slug, { table: 'orders', select: SELECT_ORDER_FIELDS });
+    const opts: any = { table: 'orders', select: SELECT_ORDER_FIELDS };
+    if (cfg.statusFilter) opts.eq = ['status', cfg.statusFilter];
+    const result = await supa(slug, opts);
     if (result.ok && result.data) setOrders(result.data as unknown as Order[]);
-  }, [slug]);
+  }, [slug, cfg.statusFilter]);
 
   // Realtime subscription (still uses Supabase client, falls back silently on tenants where JWT is invalid)
   useEffect(() => {
@@ -239,9 +243,11 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
       const client = await getSupabaseClient().catch(() => null);
       if (!client) return;
 
-      const insertFilter = cfg.orderType
-        ? `order_type=eq.${cfg.orderType}`
-        : 'status=neq.completed';
+      const insertFilter = cfg.statusFilter
+        ? `status=eq.${cfg.statusFilter}`
+        : cfg.orderType
+          ? `order_type=eq.${cfg.orderType}`
+          : 'status=neq.completed';
 
       channel = client
         .channel(cfg.orderType ? `orders-${cfg.orderType}` : 'current-orders')
@@ -276,7 +282,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
 
     init();
     return () => { if (channel) channel.unsubscribe(); };
-  }, [authReady, getSupabaseClient, slug, cfg.orderType]);
+  }, [authReady, getSupabaseClient, slug, cfg.orderType, cfg.statusFilter]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -521,17 +527,19 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
       <div className={`${pc('list', 'w-full md:w-72 flex-shrink-0 bg-white border-r border-gray-200 flex-col overflow-hidden')}`}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">{cfg.title}</h2>
-          <button
-            onClick={() => { handleNewOrder(); setMobilePanel('new-order'); }}
-            className="text-xs px-3 py-1.5 rounded text-white font-semibold"
-            style={{ backgroundColor: theme.primaryColor }}
-          >
-            + New Order
-          </button>
+          {!cfg.hideNewOrder && (
+            <button
+              onClick={() => { handleNewOrder(); setMobilePanel('new-order'); }}
+              className="text-xs px-3 py-1.5 rounded text-white font-semibold"
+              style={{ backgroundColor: theme.primaryColor }}
+            >
+              + New Order
+            </button>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto scrollbar-hide p-3 space-y-2">
           {orders.length === 0 && (
-            <p className="text-gray-400 text-sm text-center pt-8">No active orders</p>
+            <p className="text-gray-400 text-sm text-center pt-8">{cfg.statusFilter ? `No ${cfg.title.toLowerCase()}` : 'No active orders'}</p>
           )}
           {orders.map((order) => (
             <button
@@ -704,6 +712,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
       </div>
 
       {/* ── RIGHT PANEL: New order builder ── */}
+      {!cfg.hideNewOrder && (
       <div className={`${pc('new-order', 'w-full md:w-[480px] flex-shrink-0 bg-white border-l border-gray-200 flex-col overflow-hidden')}`}>
         {/* Mobile back button */}
         <button
@@ -901,6 +910,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
           currencySymbol={settings?.currencySymbol}
         />
       </div>
+      )}
     </div>
     {receiptOrder && (
       <ReceiptView

@@ -112,17 +112,17 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
       case 'dashboard':
         return <DashboardView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} slug={slug} currencySymbol={currencySymbol} />;
       case 'orders-completed':
-        return placeholder('Completed Orders');
+        return <CurrentOrdersView slug={slug} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} brandName={brandName} viewConfig={{ title: 'Completed Orders', statusFilter: 'completed', hideNewOrder: true }} />;
       case 'orders-cancelled':
-        return placeholder('Cancelled Orders');
+        return <CurrentOrdersView slug={slug} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} brandName={brandName} viewConfig={{ title: 'Cancelled Orders', statusFilter: 'cancelled', hideNewOrder: true }} />;
       case 'orders-draft':
         return placeholder('Draft Orders');
       case 'dine-in':
         return <DineInView slug={slug} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} brandName={brandName} />;
       case 'delivery':
-        return placeholder('Delivery');
+        return <CurrentOrdersView slug={slug} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} brandName={brandName} viewConfig={{ title: 'Delivery', orderType: 'delivery', showCustomerFields: true }} />;
       case 'drive-thru':
-        return placeholder('Drive Thru');
+        return <CurrentOrdersView slug={slug} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} brandName={brandName} viewConfig={{ title: 'Drive Thru', orderType: 'drive_thru', showCustomerFields: true }} />;
       case 'third-party':
         return <ThirdPartyView />;
       case 'reservations':

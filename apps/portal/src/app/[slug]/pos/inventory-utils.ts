@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { supa } from './supa-query';
+import { supa, supaBatch } from './supa-query';
 
 interface CartItem {
   id: string;
@@ -64,20 +64,26 @@ export async function deductInventorySupa(slug: string, cart: CartItem[]): Promi
     deductions.set(ing.inventory_item_id, current + deductAmount);
   }
 
-  for (const [inventoryItemId, amount] of deductions) {
-    const itemResult = await supa(slug, {
-      table: 'inventory_items',
-      select: 'current_stock',
-      eq: ['id', inventoryItemId],
-      single: true,
+  const inventoryIds = [...deductions.keys()];
+  if (inventoryIds.length === 0) return;
+  const itemsResult = await supa(slug, {
+    table: 'inventory_items',
+    select: 'id, current_stock',
+    in: ['id', inventoryIds],
+    limit: 5000,
+  });
+  if (!itemsResult.ok || !itemsResult.data) return;
+  const stockMap = new Map<string, number>(itemsResult.data.map((r: any) => [r.id, Number(r.current_stock)]));
+  const updates = [...deductions.entries()]
+    .filter(([id]) => stockMap.has(id))
+    .map(([id, amount]) => {
+      const stock = stockMap.get(id) ?? 0;
+      return supa(slug, {
+        table: 'inventory_items',
+        method: 'update',
+        eq: ['id', id],
+        body: { current_stock: Math.max(0, stock - amount) },
+      });
     });
-    if (!itemResult.ok || !itemResult.data) continue;
-    const newStock = Math.max(0, Number(itemResult.data.current_stock) - amount);
-    await supa(slug, {
-      table: 'inventory_items',
-      method: 'update',
-      eq: ['id', inventoryItemId],
-      body: { current_stock: newStock },
-    });
-  }
+  await Promise.all(updates);
 }

@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { hasPermission } from './permissions';
-import { supa } from './supa-query';
+import { supa, supaBatch } from './supa-query';
 
 interface Props {
   slug: string;
@@ -63,18 +63,9 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
     const { start, end } = getDateRange(preset, customStart, customEnd);
     setLoading(true);
     try {
-      const [ordersRes, topItemsRes] = await Promise.all([
-        supa(slug, { table: 'orders', select: 'id, total, order_type, created_at', eq: ['status', 'completed'], gte: ['created_at', start], lte: ['created_at', end] }),
-        supa(slug, {
-          table: 'order_items',
-          select: 'quantity, price_at_order, menu_items!inner(name), orders!inner(status, created_at)',
-          filter: { 'orders.status': 'completed' },
-          gte: ['orders.created_at', start],
-          lte: ['orders.created_at', end],
-          order: { column: 'quantity', ascending: false },
-          limit: 1000,
-        }),
-        supa(slug, { table: 'orders', select: 'created_at, total', eq: ['status', 'completed'], gte: ['created_at', start], lte: ['created_at', end], order: { column: 'created_at', ascending: true } }),
+      const [ordersRes, topItemsRes] = await supaBatch(slug, [
+        { table: 'orders', select: 'id, total, order_type, created_at', eq: ['status', 'completed'], gte: ['created_at', start], lte: ['created_at', end] },
+        { table: 'order_items', select: 'quantity, price_at_order, menu_items!inner(name), orders!inner(status, created_at)', filter: { 'orders.status': 'completed' }, gte: ['orders.created_at', start], lte: ['orders.created_at', end], limit: 1000 },
       ]);
 
       if (ordersRes.ok && ordersRes.data) {

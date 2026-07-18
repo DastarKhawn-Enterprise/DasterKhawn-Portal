@@ -62,7 +62,7 @@ export default function MenuManagementView({ slug, theme }: Props) {
   const [ingredients, setIngredients] = useState<{ inventory_item_id: string; inventory_name: string; quantity_used: number }[]>([]);
   const [inventoryItems, setInventoryItems] = useState<{ id: string; name: string; unit: string }[]>([]);
   const [ingLoadError, setIngLoadError] = useState('');
-  const [currencySymbol, setCurrencySymbol] = useState('$');
+  const [currencySymbol, setCurrencySymbol] = useState('Rs.');
 
   // Check edit permission via server action (reads staff_roles)
   useEffect(() => {

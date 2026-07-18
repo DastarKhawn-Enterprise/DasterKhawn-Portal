@@ -4,7 +4,7 @@ import { useAuth } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { supa } from './supa-query';
+import { supa, supaBatch } from './supa-query';
 
 interface Props {
   supabaseUrl: string;
@@ -50,12 +50,12 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
       const start = todayStart.toISOString();
       const end = todayEnd.toISOString();
 
-      const [completedOrdersRes, activeRes, kitchenRes, tablesRes, recentRes] = await Promise.all([
-        supa(slug, { table: 'orders', select: 'total, order_type', eq: ['status', 'completed'], gte: ['created_at', start], lte: ['created_at', end] }),
-        supa(slug, { table: 'orders', select: 'id', notIn: ['status', ['completed', 'cancelled']], head: true }),
-        supa(slug, { table: 'orders', select: 'status', in: ['status', ['pending', 'in_kitchen', 'ready']] }),
-        supa(slug, { table: 'tables', select: 'id, status' }),
-        supa(slug, { table: 'orders', select: 'id, order_number, order_type, total, status, created_at', order: { column: 'created_at', ascending: false }, limit: 10 }),
+      const [completedOrdersRes, activeRes, kitchenRes, tablesRes, recentRes] = await supaBatch(slug, [
+        { table: 'orders', select: 'total, order_type', eq: ['status', 'completed'], gte: ['created_at', start], lte: ['created_at', end] },
+        { table: 'orders', select: 'id', notIn: ['status', ['completed', 'cancelled']], head: true },
+        { table: 'orders', select: 'status', in: ['status', ['pending', 'in_kitchen', 'ready']] },
+        { table: 'tables', select: 'id, status' },
+        { table: 'orders', select: 'id, order_number, order_type, total, status, created_at', order: { column: 'created_at', ascending: false }, limit: 10 },
       ]);
 
       const activeCount = activeRes.ok ? (activeRes.count ?? 0) : 0;

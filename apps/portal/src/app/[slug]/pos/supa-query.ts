@@ -175,92 +175,93 @@ function buildUrl(baseUrl: string, table: string, opts: QueryOptions) {
   return `${base}/rest/v1/${table}?${params.join('&')}`;
 }
 
+async function execQuery(baseUrl: string, key: string, opts: QueryOptions): Promise<QueryResult> {
+  const headers: Record<string, string> = {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+    'Content-Type': 'application/json',
+  };
+  const url = buildUrl(baseUrl, opts.table, opts);
+
+  if (!opts.method || opts.method === 'select') {
+    const prefer: string[] = [];
+    if (opts.single) prefer.push('return=representation');
+    if (opts.head) prefer.push('count=exact');
+    const res = await fetch(url, {
+      headers: { ...headers, ...(prefer.length ? { Prefer: prefer.join(',') } : {}) },
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      return { ok: false, error: `${res.status}: ${txt.slice(0, 200)}` };
+    }
+    const ct = res.headers.get('content-range');
+    const count = ct?.split('/')?.[1] ? parseInt(ct.split('/')[1]) : undefined;
+    if (opts.head) return { ok: true, data: null, count };
+    const data = await res.json();
+    if (opts.single) return { ok: true, data: data?.[0] ?? null };
+    return { ok: true, data, count };
+  }
+
+  if (opts.method === 'insert') {
+    const res = await fetch(url, {
+      method: 'POST', headers: { ...headers, Prefer: 'return=representation' },
+      body: JSON.stringify(opts.body),
+    });
+    if (!res.ok) { const t = await res.text(); return { ok: false, error: `${res.status}: ${t.slice(0, 200)}` }; }
+    const data = await res.json();
+    return { ok: true, data: opts.single ? data?.[0] ?? null : data };
+  }
+
+  if (opts.method === 'update') {
+    const res = await fetch(url, { method: 'PATCH', headers, body: JSON.stringify(opts.body) });
+    if (!res.ok) { const t = await res.text(); return { ok: false, error: `${res.status}: ${t.slice(0, 200)}` }; }
+    return { ok: true, data: null };
+  }
+
+  if (opts.method === 'delete') {
+    const res = await fetch(url, { method: 'DELETE', headers });
+    if (!res.ok) { const t = await res.text(); return { ok: false, error: `${res.status}: ${t.slice(0, 200)}` }; }
+    return { ok: true, data: null };
+  }
+
+  return { ok: false, error: 'Unknown method' };
+}
+
 export async function supa(slug: string, opts: QueryOptions): Promise<QueryResult> {
   try {
     const write = opts.method === 'insert' || opts.method === 'update' || opts.method === 'delete';
     const access = await checkAccess(slug, opts.table, write);
-    if (!access.authorized) {
-      return { ok: false, error: access.reason || 'Forbidden' };
+    if (!access.authorized) return { ok: false, error: access.reason || 'Forbidden' };
+    const key = await getSvcKey(slug);
+    return execQuery(access.tenant.supabase_url, key, opts);
+  } catch (e: any) {
+    return { ok: false, error: e.message || 'Internal error' };
+  }
+}
+
+export async function supaBatch(slug: string, queries: QueryOptions[]): Promise<QueryResult[]> {
+  try {
+    const { userId } = auth();
+    if (!userId) return queries.map(() => ({ ok: false, error: 'Unauthorized' }));
+    const tenant = await getTenantBySlug(slug);
+    if (!tenant) return queries.map(() => ({ ok: false, error: 'Tenant not found' }));
+
+    const staff = await getStaffByTenant(tenant.id);
+    const me = staff.find((s) => s.clerk_user_id === userId);
+    if (!me) {
+      const user = await currentUser();
+      const role = (user?.publicMetadata as Record<string, any> | undefined)?.role;
+      if (role !== 'super_admin') return queries.map(() => ({ ok: false, error: 'Forbidden: no access to this tenant' }));
+    }
+
+    for (const q of queries) {
+      if (!ALLOWED_TABLES.has(q.table)) return queries.map(() => ({ ok: false, error: `Table '${q.table}' not allowed` }));
     }
 
     const key = await getSvcKey(slug);
-    const headers: Record<string, string> = {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-    };
-
-    const baseUrl = access.tenant.supabase_url;
-    const url = buildUrl(baseUrl, opts.table, opts);
-
-    // SELECT
-    if (!opts.method || opts.method === 'select') {
-      const prefer: string[] = [];
-      if (opts.single) prefer.push('return=representation');
-      if (opts.head) prefer.push('count=exact');
-      const res = await fetch(url, {
-        headers: { ...headers, ...(prefer.length ? { Prefer: prefer.join(',') } : {}) },
-      });
-      if (!res.ok) {
-        const txt = await res.text();
-        return { ok: false, error: `${res.status}: ${txt.slice(0, 200)}` };
-      }
-      const ct = res.headers.get('content-range');
-      const count = ct?.split('/')?.[1] ? parseInt(ct.split('/')[1]) : undefined;
-      if (opts.head) {
-        return { ok: true, data: null, count };
-      }
-      const data = await res.json();
-      if (opts.single) {
-        return { ok: true, data: data?.[0] ?? null };
-      }
-      return { ok: true, data, count };
-    }
-
-    // INSERT
-    if (opts.method === 'insert') {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { ...headers, Prefer: 'return=representation' },
-        body: JSON.stringify(opts.body),
-      });
-      if (!res.ok) {
-        const txt = await res.text();
-        return { ok: false, error: `${res.status}: ${txt.slice(0, 200)}` };
-      }
-      const data = await res.json();
-      return { ok: true, data: opts.single ? data?.[0] ?? null : data };
-    }
-
-    // UPDATE
-    if (opts.method === 'update') {
-      const res = await fetch(url, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify(opts.body),
-      });
-      if (!res.ok) {
-        const txt = await res.text();
-        return { ok: false, error: `${res.status}: ${txt.slice(0, 200)}` };
-      }
-      return { ok: true, data: null };
-    }
-
-    // DELETE
-    if (opts.method === 'delete') {
-      const res = await fetch(url, {
-        method: 'DELETE',
-        headers,
-      });
-      if (!res.ok) {
-        const txt = await res.text();
-        return { ok: false, error: `${res.status}: ${txt.slice(0, 200)}` };
-      }
-      return { ok: true, data: null };
-    }
-
-    return { ok: false, error: 'Unknown method' };
+    const baseUrl = tenant.supabase_url;
+    return Promise.all(queries.map(q => execQuery(baseUrl, key, q)));
   } catch (e: any) {
-    return { ok: false, error: e.message || 'Internal error' };
+    return queries.map(() => ({ ok: false, error: e.message || 'Internal error' }));
   }
 }
