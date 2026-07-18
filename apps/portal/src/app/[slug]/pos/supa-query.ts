@@ -239,6 +239,32 @@ export async function supa(slug: string, opts: QueryOptions): Promise<QueryResul
   }
 }
 
+/**
+ * Returns a Supabase JWT (service key) for client-side Realtime subscriptions.
+ * Only callable server-side; the key is scoped to the current tenant and only
+ * returned to authenticated, authorized users. The service key bypasses RLS,
+ * making Realtime subscriptions work on any tenant regardless of Clerk JWT config.
+ */
+export async function getSupabaseRealtimeToken(slug: string): Promise<string | null> {
+  try {
+    const { userId } = auth();
+    if (!userId) return null;
+    const tenant = await getTenantBySlug(slug);
+    if (!tenant) return null;
+    const staff = await getStaffByTenant(tenant.id);
+    const me = staff.find((s) => s.clerk_user_id === userId);
+    if (!me) {
+      const user = await currentUser();
+      const role = (user?.publicMetadata as Record<string, any> | undefined)?.role;
+      if (role !== 'super_admin') return null;
+    }
+    const creds = await getTenantServiceCredentials(slug);
+    return creds?.supabase_service_key ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function supaBatch(slug: string, queries: QueryOptions[]): Promise<QueryResult[]> {
   try {
     const { userId } = auth();

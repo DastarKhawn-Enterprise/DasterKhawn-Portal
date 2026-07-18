@@ -4,7 +4,7 @@ import { useAuth } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { supa, supaBatch } from './supa-query';
+import { supa, supaBatch, getSupabaseRealtimeToken } from './supa-query';
 
 interface Props {
   supabaseUrl: string;
@@ -33,7 +33,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slug, currencySymbol }: Props) {
-  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
   const [authReady, setAuthReady] = useState(false);
 
   const [summary, setSummary] = useState<SummaryData>({ totalOrders: 0, totalRevenue: 0, activeOrders: 0, avgOrderValue: 0 });
@@ -106,7 +106,7 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
     if (!authReady) return;
     let channel: ReturnType<SupabaseClient['channel']> | null = null;
 
-    getToken({ template: 'supabase' }).then((token) => {
+    getSupabaseRealtimeToken(slug).then((token) => {
       if (!token) return;
       const client = createClient(supabaseUrl, supabaseAnonKey, {
         global: { headers: { Authorization: `Bearer ${token}` } },
@@ -120,7 +120,7 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
     }).catch(() => {});
 
     return () => { if (channel) channel.unsubscribe(); };
-  }, [authReady, getToken, supabaseUrl, supabaseAnonKey, fetchAll]);
+  }, [authReady, slug, supabaseUrl, supabaseAnonKey, fetchAll]);
 
   if (!isLoaded || !authReady) {
     return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;

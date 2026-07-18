@@ -9,7 +9,7 @@ import type { SupabaseClient, RealtimePostgresChangesPayload } from '@supabase/s
 import ReceiptView from './ReceiptView';
 import { deductInventorySupa } from './inventory-utils';
 import { updateCustomerLoyaltySupa, searchCustomersSupa } from './customer-utils';
-import { supa } from './supa-query';
+import { supa, getSupabaseRealtimeToken } from './supa-query';
 
 interface OrderItem {
   menu_item_id: string;
@@ -135,13 +135,13 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
   const selectedOrder = orders.find((o) => o.id === selectedId) ?? null;
 
   const getSupabaseClient = useCallback(async () => {
-    const token = await getToken({ template: 'supabase' });
-    if (!token) throw new Error('No auth token');
+    const token = await getSupabaseRealtimeToken(slug);
+    if (!token) return null;
     return createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
       auth: { persistSession: false },
     });
-  }, [getToken, supabaseUrl, supabaseAnonKey]);
+  }, [slug, supabaseUrl, supabaseAnonKey]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
