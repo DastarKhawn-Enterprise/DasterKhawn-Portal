@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth, useUser, UserButton } from '@clerk/nextjs';
-import { createClient } from '@supabase/supabase-js';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import Sidebar, { type ViewId } from './Sidebar';
 import DashboardView from './DashboardView';
@@ -17,7 +16,7 @@ import CustomersView from './CustomersView';
 import ExpensesView from './ExpensesView';
 import ReservationsView from './ReservationsView';
 import ThirdPartyView from './ThirdPartyView';
-import type { ViewId as StaffViewId } from './Sidebar';
+import { supa } from './supa-query';
 
 interface POSClientProps {
   supabaseUrl: string;
@@ -46,8 +45,14 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [activeView, setActiveView] = useState<ViewId>('dashboard');
+  const [currencySymbol, setCurrencySymbol] = useState('Rs.');
 
-
+  useEffect(() => {
+    if (!authReady) return;
+    supa(slug, { table: 'settings', select: 'currency_symbol', limit: 1 }).then((r) => {
+      if (r.ok && r.data?.[0]?.currency_symbol) setCurrencySymbol(r.data[0].currency_symbol);
+    }).catch(() => {});
+  }, [authReady, slug]);
 
   const hiddenViews = useMemo(() => {
     const meta = user?.publicMetadata as Record<string, any> | undefined;
@@ -105,7 +110,7 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
       case 'take-away':
         return <CurrentOrdersView slug={slug} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} brandName={brandName} viewConfig={{ title: 'Take Away', orderType: 'takeaway', showCustomerFields: true }} />;
       case 'dashboard':
-        return <DashboardView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} slug={slug} />;
+        return <DashboardView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} slug={slug} currencySymbol={currencySymbol} />;
       case 'orders-completed':
         return placeholder('Completed Orders');
       case 'orders-cancelled':
@@ -127,11 +132,11 @@ export default function POSClient({ supabaseUrl, supabaseAnonKey, brandName, the
       case 'inventory':
         return <InventoryView slug={slug} theme={theme} />;
       case 'customers':
-        return <CustomersView slug={slug} theme={theme} loyaltyPointsEnabled={enabledModules.loyalty_points !== false} />;
+        return <CustomersView slug={slug} theme={theme} loyaltyPointsEnabled={enabledModules.loyalty_points !== false} currencySymbol={currencySymbol} />;
       case 'reports':
-        return <ReportsView slug={slug} theme={theme} />;
+        return <ReportsView slug={slug} theme={theme} currencySymbol={currencySymbol} />;
       case 'expenses':
-        return <ExpensesView slug={slug} theme={theme} />;
+        return <ExpensesView slug={slug} theme={theme} currencySymbol={currencySymbol} />;
       case 'staff':
         return <StaffManagementView slug={slug} />;
       case 'settings':

@@ -10,6 +10,7 @@ interface Props {
   slug: string;
   theme: ThemeConfig;
   loyaltyPointsEnabled?: boolean;
+  currencySymbol: string;
 }
 
 interface Customer {
@@ -32,7 +33,7 @@ interface PastOrder {
   created_at: string;
 }
 
-export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true }: Props) {
+export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true, currencySymbol }: Props) {
   const { user, isLoaded } = useUser();
   const meta = user?.publicMetadata as Record<string, any> | undefined;
   const perms = (meta?.permissions ?? []) as string[];
@@ -188,7 +189,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
                       <div className="text-sm text-gray-500 mb-2">{c.phone || 'No phone'}</div>
                       <div className="flex gap-4 text-sm text-gray-600">
                         <div><span className="text-gray-400">Orders:</span> {c.total_orders}</div>
-                        <div><span className="text-gray-400">Spent:</span> ${Number(c.total_spent).toFixed(2)}</div>
+                        <div><span className="text-gray-400">Spent:</span> {currencySymbol}{Number(c.total_spent).toFixed(2)}</div>
                       </div>
                       {canEdit && (
                         <button onClick={(e) => { e.stopPropagation(); openEditForm(c); }} className="mt-2 px-3 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100">Edit</button>
@@ -214,7 +215,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
                           <td className="px-4 py-3 font-medium text-gray-800">{c.name}</td>
                           <td className="px-4 py-3 text-gray-500">{c.phone || '-'}</td>
                           <td className="px-4 py-3 text-right text-gray-700">{c.total_orders}</td>
-                          <td className="px-4 py-3 text-right text-gray-700">${Number(c.total_spent).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right text-gray-700">{currencySymbol}{Number(c.total_spent).toFixed(2)}</td>
                           {loyaltyPointsEnabled && <td className="px-4 py-3 text-right font-medium" style={{ color: theme.primaryColor }}>{c.loyalty_points}</td>}
                           {canEdit && <td className="px-4 py-3 text-right"><button onClick={(e) => { e.stopPropagation(); openEditForm(c); }} className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100">Edit</button></td>}
                         </tr>
@@ -242,7 +243,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
               </div>
               <div className={`grid ${loyaltyPointsEnabled ? 'grid-cols-3' : 'grid-cols-2'} gap-2 mb-4 text-center`}>
                 <div className="bg-gray-50 rounded p-2"><div className="text-lg font-bold text-gray-800">{selectedCustomer.total_orders}</div><div className="text-xs text-gray-400">Orders</div></div>
-                <div className="bg-gray-50 rounded p-2"><div className="text-lg font-bold text-gray-800">${Number(selectedCustomer.total_spent).toFixed(2)}</div><div className="text-xs text-gray-400">Spent</div></div>
+                <div className="bg-gray-50 rounded p-2"><div className="text-lg font-bold text-gray-800">{currencySymbol}{Number(selectedCustomer.total_spent).toFixed(2)}</div><div className="text-xs text-gray-400">Spent</div></div>
                 {loyaltyPointsEnabled && <div className="bg-gray-50 rounded p-2"><div className="text-lg font-bold" style={{ color: theme.primaryColor }}>{selectedCustomer.loyalty_points}</div><div className="text-xs text-gray-400">Points</div></div>}
               </div>
               <h3 className="text-sm font-semibold text-gray-700 mb-2">Order History</h3>
@@ -255,7 +256,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
                   {orderHistory.map((o) => (
                     <div key={o.id} className="flex items-center justify-between text-xs py-1.5 px-2 rounded hover:bg-gray-50">
                       <div><span className="font-medium text-gray-700">#{o.order_number}</span><span className="text-gray-400 ml-2">{new Date(o.created_at).toLocaleDateString()}</span></div>
-                      <div className="flex items-center gap-2"><span className={statusColor[o.status] || 'text-gray-500'}>{o.status}</span><span className="font-medium text-gray-700">${Number(o.total).toFixed(2)}</span></div>
+                      <div className="flex items-center gap-2"><span className={statusColor[o.status] || 'text-gray-500'}>{o.status}</span><span className="font-medium text-gray-700">{currencySymbol}{Number(o.total).toFixed(2)}</span></div>
                     </div>
                   ))}
                 </div>
@@ -281,7 +282,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
               </div>
               <div className={`grid ${loyaltyPointsEnabled ? 'grid-cols-3' : 'grid-cols-2'} gap-2 mb-4 text-center`}>
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3"><div className="text-lg font-bold text-gray-800">{selectedCustomer.total_orders}</div><div className="text-xs text-gray-400">Orders</div></div>
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3"><div className="text-lg font-bold text-gray-800">${Number(selectedCustomer.total_spent).toFixed(2)}</div><div className="text-xs text-gray-400">Spent</div></div>
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3"><div className="text-lg font-bold text-gray-800">{currencySymbol}{Number(selectedCustomer.total_spent).toFixed(2)}</div><div className="text-xs text-gray-400">Spent</div></div>
                 {loyaltyPointsEnabled && <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3"><div className="text-lg font-bold" style={{ color: theme.primaryColor }}>{selectedCustomer.loyalty_points}</div><div className="text-xs text-gray-400">Points</div></div>}
               </div>
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
@@ -293,7 +294,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
                     {orderHistory.map((o) => (
                       <div key={o.id} className="flex items-center justify-between text-sm py-2 border-b border-gray-100 last:border-0">
                         <div><span className="font-medium text-gray-700">#{o.order_number}</span><span className="text-gray-400 ml-2">{new Date(o.created_at).toLocaleDateString()}</span></div>
-                        <div className="flex items-center gap-2"><span className={statusColor[o.status] || 'text-gray-500'}>{o.status}</span><span className="font-medium text-gray-700">${Number(o.total).toFixed(2)}</span></div>
+                        <div className="flex items-center gap-2"><span className={statusColor[o.status] || 'text-gray-500'}>{o.status}</span><span className="font-medium text-gray-700">{currencySymbol}{Number(o.total).toFixed(2)}</span></div>
                       </div>
                     ))}
                   </div>

@@ -8,6 +8,7 @@ import { supa } from './supa-query';
 interface Props {
   slug: string;
   theme: ThemeConfig;
+  currencySymbol: string;
 }
 
 type DateRangePreset = 'today' | 'week' | 'month' | 'custom';
@@ -37,7 +38,7 @@ const ORDER_TYPE_LABELS: Record<string, string> = {
   dine_in: 'Dine In', takeaway: 'Take Away', delivery: 'Delivery', drive_thru: 'Drive Thru',
 };
 
-export default function ReportsView({ slug, theme }: Props) {
+export default function ReportsView({ slug, theme, currencySymbol }: Props) {
   const { user, isLoaded } = useUser();
   const meta = user?.publicMetadata as Record<string, any> | undefined;
   const perms = (meta?.permissions ?? []) as string[];
@@ -53,7 +54,6 @@ export default function ReportsView({ slug, theme }: Props) {
   const [topItems, setTopItems] = useState<TopItem[]>([]);
   const [dailyRevenue, setDailyRevenue] = useState<DailyRevenue[]>([]);
   const [loading, setLoading] = useState(false);
-  const currencySymbol = '$';
 
   useEffect(() => {
     if (isLoaded) setPermissionChecked(true);
@@ -63,9 +63,8 @@ export default function ReportsView({ slug, theme }: Props) {
     const { start, end } = getDateRange(preset, customStart, customEnd);
     setLoading(true);
     try {
-      const [summaryRes, orderTypeRes, topItemsRes, dailyRes] = await Promise.all([
-        supa(slug, { table: 'orders', select: 'id, total', eq: ['status', 'completed'], gte: ['created_at', start], lte: ['created_at', end] }),
-        supa(slug, { table: 'orders', select: 'order_type, total', eq: ['status', 'completed'], gte: ['created_at', start], lte: ['created_at', end] }),
+      const [ordersRes, topItemsRes] = await Promise.all([
+        supa(slug, { table: 'orders', select: 'id, total, order_type, created_at', eq: ['status', 'completed'], gte: ['created_at', start], lte: ['created_at', end] }),
         supa(slug, {
           table: 'order_items',
           select: 'quantity, price_at_order, menu_items!inner(name), orders!inner(status, created_at)',
@@ -78,24 +77,31 @@ export default function ReportsView({ slug, theme }: Props) {
         supa(slug, { table: 'orders', select: 'created_at, total', eq: ['status', 'completed'], gte: ['created_at', start], lte: ['created_at', end], order: { column: 'created_at', ascending: true } }),
       ]);
 
-      if (summaryRes.ok && summaryRes.data) {
-        const orders = summaryRes.data;
+      if (ordersRes.ok && ordersRes.data) {
+        const orders = ordersRes.data;
         const totalOrders = orders.length;
         const totalRevenue = orders.reduce((s: number, o: any) => s + (Number(o.total) || 0), 0);
         setSummary({ totalOrders, totalRevenue, avgOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0 });
-      }
 
-      if (orderTypeRes.ok && orderTypeRes.data) {
-        const grouped = new Map<string, { count: number; revenue: number }>();
-        for (const o of orderTypeRes.data) {
+        const typeGrouped = new Map<string, { count: number; revenue: number }>();
+        for (const o of orders) {
           const key = o.order_type || 'unknown';
-          const prev = grouped.get(key) || { count: 0, revenue: 0 };
+          const prev = typeGrouped.get(key) || { count: 0, revenue: 0 };
           prev.count += 1; prev.revenue += Number(o.total) || 0;
-          grouped.set(key, prev);
+          typeGrouped.set(key, prev);
         }
         setOrderTypeBreakdown(
-          Array.from(grouped.entries()).map(([order_type, v]) => ({ order_type, count: v.count, revenue: v.revenue })).sort((a, b) => b.revenue - a.revenue)
+          Array.from(typeGrouped.entries()).map(([order_type, v]) => ({ order_type, count: v.count, revenue: v.revenue })).sort((a, b) => b.revenue - a.revenue)
         );
+      }
+
+      if (ordersRes.ok && ordersRes.data) {
+        const dailyGrouped = new Map<string, number>();
+        for (const o of ordersRes.data) {
+          const date = o.created_at?.split('T')[0] || 'unknown';
+          dailyGrouped.set(date, (dailyGrouped.get(date) || 0) + (Number(o.total) || 0));
+        }
+        setDailyRevenue(Array.from(dailyGrouped.entries()).map(([date, revenue]) => ({ date, revenue })).sort((a, b) => a.date.localeCompare(b.date)));
       }
 
       if (topItemsRes.ok && topItemsRes.data) {
@@ -109,15 +115,6 @@ export default function ReportsView({ slug, theme }: Props) {
         setTopItems(
           Array.from(grouped.entries()).map(([name, v]) => ({ name, quantity_sold: v.qty, revenue: v.rev })).sort((a, b) => b.quantity_sold - a.quantity_sold).slice(0, 10)
         );
-      }
-
-      if (dailyRes.ok && dailyRes.data) {
-        const grouped = new Map<string, number>();
-        for (const o of dailyRes.data) {
-          const date = o.created_at?.split('T')[0] || 'unknown';
-          grouped.set(date, (grouped.get(date) || 0) + (Number(o.total) || 0));
-        }
-        setDailyRevenue(Array.from(grouped.entries()).map(([date, revenue]) => ({ date, revenue })).sort((a, b) => a.date.localeCompare(b.date)));
       }
     } catch (e) { console.error('[Reports] fetch error:', e); }
     setLoading(false);

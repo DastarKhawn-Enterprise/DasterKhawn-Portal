@@ -124,7 +124,7 @@ export async function getSettingsCurrency(slug: string) {
       .single();
     if (!error && data?.currency_symbol) return data.currency_symbol as string;
   } catch {}
-  return '$';
+  return 'Rs.';
 }
 
 export async function checkMenuEditPermission(slug: string): Promise<boolean> {

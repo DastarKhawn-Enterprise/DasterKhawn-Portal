@@ -89,7 +89,7 @@ export default function ReceiptView({ data, brandName, theme, onClose, footerTex
 }
 
 function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData, subtotal: number, footerText?: string, currencySymbol?: string) {
-  const curr = currencySymbol || '$';
+  const curr = currencySymbol || 'Rs.';
   const tax = data.taxAmount ?? 0;
   const orderTypeLabel = data.orderType
     ? ({ dine_in: 'Dine In', takeaway: 'Take Away', delivery: 'Delivery', drive_thru: 'Drive Thru' } as Record<string, string>)[data.orderType] || data.orderType

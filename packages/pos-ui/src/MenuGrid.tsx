@@ -16,7 +16,7 @@ export default function MenuGrid({ menuItems, onAddToCart, theme, currencySymbol
   const [focused, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const cs = currencySymbol || '$';
+  const cs = currencySymbol || 'Rs.';
   const categories = [...new Set(menuItems.map((item) => item.category ?? 'Uncategorized'))].sort();
 
   const hasMostOrdered = focused && !searchQuery && mostOrderedItems && mostOrderedItems.length > 0;

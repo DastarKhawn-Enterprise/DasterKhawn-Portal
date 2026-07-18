@@ -49,7 +49,7 @@ export default function CartSidebar({
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate">{item.name}</div>
               <div className="text-xs" style={{ color: theme.primaryColor }}>
-                {currencySymbol || '$'}{(item.price * item.quantity).toFixed(2)}
+                {currencySymbol || 'Rs.'}{(item.price * item.quantity).toFixed(2)}
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -79,7 +79,7 @@ export default function CartSidebar({
       <div className="p-4 border-t" style={{ borderColor: theme.secondaryColor + '20' }}>
         <div className="flex justify-between font-bold mb-3">
           <span>Total</span>
-          <span>{currencySymbol || '$'}{total.toFixed(2)}</span>
+          <span>{currencySymbol || 'Rs.'}{total.toFixed(2)}</span>
         </div>
         <CheckoutButton onCheckout={onCheckout} disabled={disabled} theme={theme} />
       </div>
@@ -118,7 +118,7 @@ export default function CartSidebar({
           style={{ backgroundColor: theme.primaryColor }}
         >
           <span>View Cart ({itemCount} item{itemCount !== 1 ? 's' : ''})</span>
-          <span>{currencySymbol || '$'}{total.toFixed(2)}</span>
+          <span>{currencySymbol || 'Rs.'}{total.toFixed(2)}</span>
         </button>
       )}
 

@@ -72,6 +72,7 @@ export async function searchCustomersSupa(slug: string, term: string): Promise<{
     select: 'id, name, phone',
     order: 'name',
     limit: 10,
+    or: `name.ilike.${q},phone.ilike.${q}`,
   });
   if (!result.ok) return [];
   return (result.data ?? []) as { id: string; name: string; phone: string | null }[];

@@ -1,5 +1,3 @@
-'use client';
-
 export default function ThirdPartyView() {
   const platforms = [
     { name: 'Foodpanda', initial: 'F', color: '#D70F64' },

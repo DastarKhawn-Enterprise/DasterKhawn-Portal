@@ -11,6 +11,7 @@ interface Props {
   supabaseAnonKey: string;
   theme: ThemeConfig;
   slug: string;
+  currencySymbol: string;
 }
 
 interface SummaryData { totalOrders: number; totalRevenue: number; activeOrders: number; avgOrderValue: number; }
@@ -31,7 +32,7 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-red-100 text-red-800 border-red-300',
 };
 
-export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slug }: Props) {
+export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slug, currencySymbol }: Props) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [authReady, setAuthReady] = useState(false);
 
@@ -41,7 +42,6 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
   const [orderTypes, setOrderTypes] = useState<OrderTypeRow[]>([]);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const currencySymbol = '$';
 
   const fetchAll = useCallback(async () => {
     try {
@@ -50,22 +50,31 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
       const start = todayStart.toISOString();
       const end = todayEnd.toISOString();
 
-      const [completedRes, activeRes, kitchenRes, tablesRes, orderTypeRes, recentRes] = await Promise.all([
-        supa(slug, { table: 'orders', select: 'total', eq: ['status', 'completed'], gte: ['created_at', start], lte: ['created_at', end] }),
+      const [completedOrdersRes, activeRes, kitchenRes, tablesRes, recentRes] = await Promise.all([
+        supa(slug, { table: 'orders', select: 'total, order_type', eq: ['status', 'completed'], gte: ['created_at', start], lte: ['created_at', end] }),
         supa(slug, { table: 'orders', select: 'id', notIn: ['status', ['completed', 'cancelled']], head: true }),
         supa(slug, { table: 'orders', select: 'status', in: ['status', ['pending', 'in_kitchen', 'ready']] }),
         supa(slug, { table: 'tables', select: 'id, status' }),
-        supa(slug, { table: 'orders', select: 'order_type, total', eq: ['status', 'completed'], gte: ['created_at', start], lte: ['created_at', end] }),
         supa(slug, { table: 'orders', select: 'id, order_number, order_type, total, status, created_at', order: { column: 'created_at', ascending: false }, limit: 10 }),
       ]);
 
       const activeCount = activeRes.ok ? (activeRes.count ?? 0) : 0;
-      if (completedRes.ok && completedRes.data) {
-        const orders = completedRes.data;
+
+      if (completedOrdersRes.ok && completedOrdersRes.data) {
+        const orders = completedOrdersRes.data;
         const totalOrders = orders.length;
         const totalRevenue = orders.reduce((s: number, o: any) => s + (Number(o.total) || 0), 0);
         setSummary({ totalOrders, totalRevenue, activeOrders: activeCount, avgOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0 });
-      }
+
+        const grouped = new Map<string, { count: number; revenue: number }>();
+        for (const o of orders) {
+          const key = o.order_type || 'unknown';
+          const prev = grouped.get(key) || { count: 0, revenue: 0 };
+          prev.count += 1; prev.revenue += Number(o.total) || 0;
+          grouped.set(key, prev);
+        }
+        setOrderTypes(Array.from(grouped.entries()).map(([order_type, v]) => ({ order_type, count: v.count, revenue: v.revenue })).sort((a, b) => b.revenue - a.revenue));
+      } else { setOrderTypes([]); }
 
       if (kitchenRes.ok && kitchenRes.data) {
         const counts: KitchenCounts = { pending: 0, in_kitchen: 0, ready: 0 };
@@ -76,17 +85,6 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
       if (tablesRes.ok && tablesRes.data) {
         setTables({ total: tablesRes.data.length, occupied: tablesRes.data.filter((t: any) => t.status === 'occupied').length });
       }
-
-      if (orderTypeRes.ok && orderTypeRes.data && orderTypeRes.data.length > 0) {
-        const grouped = new Map<string, { count: number; revenue: number }>();
-        for (const o of orderTypeRes.data) {
-          const key = o.order_type || 'unknown';
-          const prev = grouped.get(key) || { count: 0, revenue: 0 };
-          prev.count += 1; prev.revenue += Number(o.total) || 0;
-          grouped.set(key, prev);
-        }
-        setOrderTypes(Array.from(grouped.entries()).map(([order_type, v]) => ({ order_type, count: v.count, revenue: v.revenue })).sort((a, b) => b.revenue - a.revenue));
-      } else { setOrderTypes([]); }
 
       if (recentRes.ok && recentRes.data) setRecentOrders(recentRes.data as RecentOrder[]);
     } catch (e) { console.error('[Dashboard] fetch error:', e); }

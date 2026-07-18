@@ -66,7 +66,7 @@ export default function SettingsView({ slug, theme }: Props) {
         body: {
           tax_enabled: taxEnabled,
           tax_rate: parseFloat(taxRate) || 0,
-          currency_symbol: currencySymbol || '$',
+          currency_symbol: currencySymbol || 'Rs.',
           receipt_footer_text: receiptFooterText || 'Thank you for your order!',
           updated_at: new Date().toISOString(),
         },
