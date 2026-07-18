@@ -108,7 +108,7 @@ export default function AdminDashboard({ tenants }: AdminDashboardProps) {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Link
-                    href={`/${t.slug}/pos`}
+                    href={`/${t.slug}/pos/dashboard`}
                     className="text-sm px-3 py-1.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                   >
                     Open POS
@@ -197,7 +197,7 @@ export default function AdminDashboard({ tenants }: AdminDashboardProps) {
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <Link
-                          href={`/${t.slug}/pos`}
+                          href={`/${t.slug}/pos/dashboard`}
                           className="text-sm px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                         >
                           Open POS

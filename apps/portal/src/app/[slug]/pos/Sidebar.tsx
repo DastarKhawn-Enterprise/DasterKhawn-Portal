@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 export type ViewId =
   | 'dashboard'
@@ -26,57 +28,71 @@ interface NavItem {
   id: ViewId;
   label: string;
   icon: string;
-  children?: { id: ViewId; label: string }[];
+  path: string;
+  children?: { id: ViewId; label: string; path: string }[];
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '▦' },
+  { id: 'dashboard', label: 'Dashboard', icon: '▦', path: '/dashboard' },
   {
     id: 'current-orders',
     label: 'Orders',
     icon: '☰',
+    path: '/orders',
     children: [
-      { id: 'current-orders', label: 'Current Orders' },
-      { id: 'orders-completed', label: 'Completed' },
-      { id: 'orders-cancelled', label: 'Cancelled' },
-      { id: 'orders-draft', label: 'Draft' },
+      { id: 'current-orders', label: 'Current Orders', path: '/orders' },
+      { id: 'orders-completed', label: 'Completed', path: '/orders/completed' },
+      { id: 'orders-cancelled', label: 'Cancelled', path: '/orders/cancelled' },
+      { id: 'orders-draft', label: 'Draft', path: '/orders/draft' },
     ],
   },
-  { id: 'dine-in', label: 'Dine In', icon: '◈' },
-  { id: 'take-away', label: 'Take Away', icon: '◐' },
-  { id: 'delivery', label: 'Delivery', icon: '⤵' },
-  { id: 'drive-thru', label: 'Drive Thru', icon: '◉' },
-  { id: 'third-party', label: 'Third Party', icon: '⊕' },
-  { id: 'reservations', label: 'Reservations', icon: '☷' },
-  { id: 'menu', label: 'Menu', icon: '☰' },
-  { id: 'inventory', label: 'Inventory', icon: '▣' },
-  { id: 'customers', label: 'Customers', icon: '◉' },
-  { id: 'reports', label: 'Reports', icon: '▤' },
-  { id: 'expenses', label: 'Expenses', icon: '⟐' },
-  { id: 'staff', label: 'Staff', icon: '◒' },
-  { id: 'settings', label: 'Settings', icon: '⚙' },
+  { id: 'dine-in', label: 'Dine In', icon: '◈', path: '/dine-in' },
+  { id: 'take-away', label: 'Take Away', icon: '◐', path: '/take-away' },
+  { id: 'delivery', label: 'Delivery', icon: '⤵', path: '/delivery' },
+  { id: 'drive-thru', label: 'Drive Thru', icon: '◉', path: '/drive-thru' },
+  { id: 'third-party', label: 'Third Party', icon: '⊕', path: '/third-party' },
+  { id: 'reservations', label: 'Reservations', icon: '☷', path: '/reservations' },
+  { id: 'menu', label: 'Menu', icon: '☰', path: '/menu' },
+  { id: 'inventory', label: 'Inventory', icon: '▣', path: '/inventory' },
+  { id: 'customers', label: 'Customers', icon: '◉', path: '/customers' },
+  { id: 'reports', label: 'Reports', icon: '▤', path: '/reports' },
+  { id: 'expenses', label: 'Expenses', icon: '⟐', path: '/expenses' },
+  { id: 'staff', label: 'Staff', icon: '◒', path: '/staff' },
+  { id: 'settings', label: 'Settings', icon: '⚙', path: '/settings' },
 ];
 
+const PATH_TO_VIEW: Record<string, ViewId> = {};
+for (const item of NAV_ITEMS) {
+  PATH_TO_VIEW[item.path] = item.id;
+  if (item.children) {
+    for (const child of item.children) {
+      PATH_TO_VIEW[child.path] = child.id;
+    }
+  }
+}
+
 interface SidebarProps {
-  activeView: ViewId;
-  onNavigate: (view: ViewId) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
   accentColor: string;
   mobileOpen?: boolean;
   onMobileClose?: () => void;
   hiddenViews?: ViewId[];
+  slug: string;
 }
 
-export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCollapse, accentColor, mobileOpen, onMobileClose, hiddenViews }: SidebarProps) {
+function navLink(path: string, slug: string) {
+  return `/${slug}/pos${path}`;
+}
+
+export default function Sidebar({ collapsed, onToggleCollapse, accentColor, mobileOpen, onMobileClose, hiddenViews, slug }: SidebarProps) {
+  const pathname = usePathname();
+  const posPath = '/' + pathname.split('/').slice(3).join('/');
+  const activeView = PATH_TO_VIEW[posPath] || 'dashboard';
+
   const [ordersOpen, setOrdersOpen] = useState(true);
 
   const isActive = (id: ViewId) => activeView === id;
-
-  const handleNavigate = (id: ViewId) => {
-    onNavigate(id);
-    onMobileClose?.();
-  };
 
   const visibleItems = NAV_ITEMS.filter((item) => {
     if (!hiddenViews || hiddenViews.length === 0) return true;
@@ -87,9 +103,10 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
     return !hiddenViews.includes(item.id);
   });
 
+  const handleMobileClose = () => onMobileClose?.();
+
   const content = (
     <>
-      {/* Collapse toggle — hidden on mobile */}
       <button
         onClick={onToggleCollapse}
         className="hidden md:flex items-center justify-center h-12 text-[#B8B6B0] hover:text-white hover:bg-[#252525]"
@@ -97,7 +114,6 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
         <span className="text-lg">{collapsed ? '▶' : '◀'}</span>
       </button>
 
-      {/* Nav items */}
       <div className="flex-1 overflow-y-auto scrollbar-hide">
         {visibleItems.map((item) => {
           if (item.children) {
@@ -121,9 +137,10 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
                   )}
                 </button>
                 {ordersOpen && !collapsed && item.children.map((child) => (
-                  <button
+                  <Link
                     key={child.id}
-                    onClick={() => handleNavigate(child.id)}
+                    href={navLink(child.path, slug)}
+                    onClick={handleMobileClose}
                     className={`flex items-center w-full pl-12 pr-4 py-2 text-sm transition-colors ${
                       isActive(child.id)
                         ? 'font-semibold'
@@ -132,16 +149,17 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
                     style={isActive(child.id) ? { backgroundColor: accentColor + '26', color: accentColor } : {}}
                   >
                     {child.label}
-                  </button>
+                  </Link>
                 ))}
               </div>
             );
           }
 
           return (
-            <button
+            <Link
               key={item.id}
-              onClick={() => handleNavigate(item.id)}
+              href={navLink(item.path, slug)}
+              onClick={handleMobileClose}
               className={`flex items-center w-full px-4 py-2.5 text-sm transition-colors ${
                 isActive(item.id)
                   ? 'font-semibold'
@@ -149,9 +167,9 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
               }`}
               style={isActive(item.id) ? { backgroundColor: accentColor + '26', color: accentColor } : {}}
             >
-              <span className="text-base w-6 text-center flex-shrink-0">{item.icon}</span>
+              <span className="text-[17px] w-6 text-center flex-shrink-0">{item.icon}</span>
               {!collapsed && <span className="ml-3">{item.label}</span>}
-            </button>
+            </Link>
           );
         })}
       </div>
@@ -160,12 +178,10 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
 
   return (
     <>
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-40 bg-black/40" onClick={onMobileClose} />
       )}
 
-      {/* Desktop sidebar */}
       <nav
         className={`hidden md:flex flex-col bg-[#1A1A1A] text-white transition-all duration-200 ${
           collapsed ? 'w-16' : 'w-56'
@@ -174,13 +190,11 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
         {content}
       </nav>
 
-      {/* Mobile drawer */}
       <nav
         className={`md:hidden fixed top-0 left-0 z-50 h-full bg-[#1A1A1A] text-white transition-all duration-300 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         } w-64`}
       >
-        {/* Close button */}
         <button
           onClick={onMobileClose}
           className="flex items-center justify-center h-12 w-full text-[#B8B6B0] hover:text-white hover:bg-[#252525]"
