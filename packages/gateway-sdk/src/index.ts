@@ -190,6 +190,83 @@ export async function getTenantServiceCredentials(slug: string): Promise<{ supab
   return { supabase_service_key: (data as { supabase_service_key: string }).supabase_service_key };
 }
 
+export interface MenuItemTemplate {
+  name: string;
+  description: string | null;
+  category: string | null;
+  available: boolean;
+}
+
+export async function insertTenant(
+  data: {
+    slug: string;
+    brand_name: string;
+    supabase_url: string;
+    supabase_anon_key: string;
+    supabase_service_key: string;
+    theme_config: ThemeConfig;
+    enabled_modules: Record<string, boolean>;
+  },
+): Promise<{ success: boolean; error?: string; tenantId?: string }> {
+  const client = getGatewayClient();
+  const { data: inserted, error } = await client
+    .from('tenants')
+    .insert({
+      slug: data.slug,
+      brand_name: data.brand_name,
+      supabase_url: data.supabase_url,
+      supabase_anon_key: data.supabase_anon_key,
+      supabase_service_key: data.supabase_service_key,
+      theme_config: data.theme_config as any,
+      enabled_modules: data.enabled_modules as any,
+      status: 'active',
+      owner_clerk_id: '',
+    })
+    .select('id')
+    .single();
+  if (error) return { success: false, error: error.message };
+  return { success: true, tenantId: inserted?.id };
+}
+
+export async function updateTenantOwnerClerkId(
+  tenantId: string,
+  clerkUserId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const client = getGatewayClient();
+  const { error } = await client
+    .from('tenants')
+    .update({ owner_clerk_id: clerkUserId })
+    .eq('id', tenantId);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+export async function getTenantMenuItemsForTemplate(
+  slug: string,
+): Promise<MenuItemTemplate[]> {
+  try {
+    const tenant = await getTenantBySlug(slug);
+    if (!tenant) return [];
+
+    const creds = await getTenantServiceCredentials(slug);
+    if (!creds) return [];
+
+    const client = createClient(tenant.supabase_url, creds.supabase_service_key, {
+      auth: { persistSession: false },
+    });
+
+    const { data, error } = await client
+      .from('menu_items')
+      .select('name, description, category, available')
+      .order('name');
+
+    if (error || !data) return [];
+    return data as MenuItemTemplate[];
+  } catch {
+    return [];
+  }
+}
+
 export interface StaffRoleRow {
   id: string;
   clerk_user_id: string;

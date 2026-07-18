@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { toggleTenantStatus, saveTenantTheme, saveTenantModules, getRevenueStats } from './actions';
 import type { ThemeConfig } from '@sat-sys/gateway-sdk';
+import CreateTenantModal from './CreateTenantModal';
 
 interface TenantRow {
   id: string;
@@ -35,6 +36,7 @@ export default function AdminDashboard({ tenants }: AdminDashboardProps) {
   const [themeTarget, setThemeTarget] = useState<TenantRow | null>(null);
   const [revenueTarget, setRevenueTarget] = useState<TenantRow | null>(null);
   const [modulesTarget, setModulesTarget] = useState<TenantRow | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
@@ -69,7 +71,15 @@ export default function AdminDashboard({ tenants }: AdminDashboardProps) {
 
       <main className="min-h-screen bg-gray-50 p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-6">Super Admin Dashboard</h1>
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-800">Super Admin Dashboard</h1>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="px-4 py-2 rounded text-white bg-green-600 hover:bg-green-700 text-sm font-medium"
+            >
+              + Create New Tenant
+            </button>
+          </div>
 
           {/* Mobile: stacked cards */}
           <div className="md:hidden space-y-3">
@@ -288,6 +298,17 @@ export default function AdminDashboard({ tenants }: AdminDashboardProps) {
             }
           }}
           onClose={() => setModulesTarget(null)}
+        />
+      )}
+
+      {showCreate && (
+        <CreateTenantModal
+          tenants={localTenants.map((t) => ({ id: t.id, slug: t.slug, brand_name: t.brand_name, theme_config: t.theme_config }))}
+          onClose={() => setShowCreate(false)}
+          onCreated={() => {
+            // Trigger a page reload to reflect new tenant in the list
+            window.location.reload();
+          }}
         />
       )}
     </>
