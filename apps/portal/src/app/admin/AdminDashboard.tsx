@@ -81,6 +81,17 @@ export default function AdminDashboard({ tenants }: AdminDashboardProps) {
             </button>
           </div>
 
+          {/* Quick-action card — always visible */}
+          <button
+            onClick={() => setShowCreate(true)}
+            className="w-full mb-4 p-4 rounded-lg border-2 border-dashed border-green-300 bg-green-50 hover:bg-green-100 transition-colors cursor-pointer text-center"
+          >
+            <span className="text-green-700 font-semibold text-base">+ Create New Tenant</span>
+            <span className="block text-green-600 text-sm mt-0.5">
+              Add a new POS instance with its own Supabase project
+            </span>
+          </button>
+
           {/* Mobile: stacked cards */}
           <div className="md:hidden space-y-3">
             {localTenants.map((t) => (
