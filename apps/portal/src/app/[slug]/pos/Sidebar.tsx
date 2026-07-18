@@ -33,7 +33,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '▦', path: '/dashboard' },
+  { id: 'dashboard', label: 'Dashboard', icon: '⊞', path: '/dashboard' },
   {
     id: 'current-orders',
     label: 'Orders',
@@ -46,18 +46,18 @@ const NAV_ITEMS: NavItem[] = [
       { id: 'orders-draft', label: 'Draft', path: '/orders/draft' },
     ],
   },
-  { id: 'dine-in', label: 'Dine In', icon: '◈', path: '/dine-in' },
-  { id: 'take-away', label: 'Take Away', icon: '◐', path: '/take-away' },
-  { id: 'delivery', label: 'Delivery', icon: '⤵', path: '/delivery' },
-  { id: 'drive-thru', label: 'Drive Thru', icon: '◉', path: '/drive-thru' },
-  { id: 'third-party', label: 'Third Party', icon: '⊕', path: '/third-party' },
-  { id: 'reservations', label: 'Reservations', icon: '☷', path: '/reservations' },
-  { id: 'menu', label: 'Menu', icon: '☰', path: '/menu' },
-  { id: 'inventory', label: 'Inventory', icon: '▣', path: '/inventory' },
-  { id: 'customers', label: 'Customers', icon: '◉', path: '/customers' },
-  { id: 'reports', label: 'Reports', icon: '▤', path: '/reports' },
-  { id: 'expenses', label: 'Expenses', icon: '⟐', path: '/expenses' },
-  { id: 'staff', label: 'Staff', icon: '◒', path: '/staff' },
+  { id: 'dine-in', label: 'Dine In', icon: '🍽', path: '/dine-in' },
+  { id: 'take-away', label: 'Take Away', icon: '🛍', path: '/take-away' },
+  { id: 'delivery', label: 'Delivery', icon: '🚚', path: '/delivery' },
+  { id: 'drive-thru', label: 'Drive Thru', icon: '🚗', path: '/drive-thru' },
+  { id: 'third-party', label: 'Third Party', icon: '🤝', path: '/third-party' },
+  { id: 'reservations', label: 'Reservations', icon: '📋', path: '/reservations' },
+  { id: 'menu', label: 'Menu', icon: '📖', path: '/menu' },
+  { id: 'inventory', label: 'Inventory', icon: '📦', path: '/inventory' },
+  { id: 'customers', label: 'Customers', icon: '👥', path: '/customers' },
+  { id: 'reports', label: 'Reports', icon: '📊', path: '/reports' },
+  { id: 'expenses', label: 'Expenses', icon: '💰', path: '/expenses' },
+  { id: 'staff', label: 'Staff', icon: '👤', path: '/staff' },
   { id: 'settings', label: 'Settings', icon: '⚙', path: '/settings' },
 ];
 
