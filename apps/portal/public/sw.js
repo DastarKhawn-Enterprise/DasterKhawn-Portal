@@ -17,10 +17,8 @@ self.addEventListener('fetch', (event) => {
 
   if (url.origin !== self.location.origin) return;
 
-  const path = url.pathname;
-
-  // Cache-first for Next.js static chunks (content-hashed) and static assets
-  if (path.startsWith('/_next/static/') || path.match(/\.(js|css|woff2?|ttf|otf|svg|png|ico|webp)$/)) {
+  // Only intercept content-hashed static assets — never pages, API, or auth
+  if (url.pathname.startsWith('/_next/static/') || url.pathname.match(/\.(js|css|woff2?|ttf|otf|svg|png|ico|webp)$/)) {
     event.respondWith(
       caches.match(request).then((cached) => {
         if (cached) return cached;
@@ -36,8 +34,5 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first for everything else (pages, API calls)
-  event.respondWith(
-    fetch(request).catch(() => caches.match(request))
-  );
+  // All other requests (pages, API, Clerk auth, server actions) pass through unhandled
 });
