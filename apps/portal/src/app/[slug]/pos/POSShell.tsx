@@ -30,7 +30,7 @@ function computeHiddenViews(user: any, enabledModules: Record<string, boolean>):
     if (!perms.includes('settings:edit')) { hidden.push('settings'); hidden.push('expenses'); }
   }
   const moduleToViews: Record<string, ViewId[]> = {
-    orders: ['current-orders', 'orders-completed', 'orders-cancelled', 'orders-draft'],
+    orders: ['current-orders', 'orders-new', 'orders-completed', 'orders-cancelled', 'orders-draft'],
     dine_in: ['dine-in'],
     take_away: ['take-away'],
     delivery: ['delivery'],

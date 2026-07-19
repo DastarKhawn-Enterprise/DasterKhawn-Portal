@@ -6,6 +6,7 @@ import { usePOS } from './pos-context';
 const PATH_TO_VIEW: Record<string, string> = {
   '/dashboard': 'dashboard',
   '/orders': 'current-orders',
+  '/orders/new': 'orders-new',
   '/orders/completed': 'orders-completed',
   '/orders/cancelled': 'orders-cancelled',
   '/orders/draft': 'orders-draft',

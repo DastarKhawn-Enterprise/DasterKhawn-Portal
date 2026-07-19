@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
 import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
@@ -49,6 +50,7 @@ export interface ViewConfig {
   showCustomerFields: boolean;
   statusFilter?: string | null;
   hideNewOrder?: boolean;
+  newOrderMode?: boolean;
   excludeStatus?: string[];
 }
 
@@ -89,6 +91,7 @@ const statusColor: Record<string, string> = {
 const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, vehicle_type, vehicle_plate_number, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
 
 export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, theme, brandName, viewConfig }: Props) {
+  const router = useRouter();
   const cfg: ViewConfig = { title: 'Active Orders', orderType: null, showCustomerFields: false, ...viewConfig };
 
   const { getToken, isLoaded, isSignedIn } = useAuth();
@@ -408,9 +411,10 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
       setCustomerSearch('');
       setCustomerResults([]);
       resetCustomerFields();
+      if (cfg.newOrderMode) router.push(`/${slug}/pos/orders`);
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
-  }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, vehicleType, vehiclePlateNumber, settings, slug, resetCustomerFields]);
+  }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, vehicleType, vehiclePlateNumber, settings, slug, resetCustomerFields, cfg.newOrderMode, router]);
 
   // Status update
   const updateStatus = useCallback(async (orderId: string, newStatus: string) => {
@@ -541,20 +545,19 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
     `${mobilePanel === panel ? 'flex' : 'hidden md:flex'} ${base}`;
 
   return (
-    <><div className="flex-1 flex overflow-hidden min-w-0">
+    <><div className={`flex-1 ${cfg.newOrderMode ? 'flex flex-col overflow-hidden' : 'flex overflow-hidden min-w-0'}`}>
+      {!cfg.newOrderMode && (<>
       {/* ── LEFT PANEL: Order list ── */}
       <div className={`${pc('list', 'w-full md:w-72 flex-shrink-0 bg-white border-r border-gray-200 flex-col overflow-hidden')}`}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">{cfg.title}</h2>
-          {!cfg.hideNewOrder && (
-            <button
-              onClick={() => { handleNewOrder(); setMobilePanel('new-order'); }}
-              className="text-xs px-3 py-1.5 rounded text-white font-semibold"
-              style={{ backgroundColor: theme.primaryColor }}
-            >
-              + New Order
-            </button>
-          )}
+          <button
+            onClick={() => { handleNewOrder(); router.push(`/${slug}/pos/orders/new`); }}
+            className="text-xs px-3 py-1.5 rounded text-white font-semibold"
+            style={{ backgroundColor: theme.primaryColor }}
+          >
+            + New Order
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto scrollbar-hide p-3 space-y-3">
           {orders.length === 0 && (
@@ -778,19 +781,20 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
           </div>
         )}
       </div>
+      </>)}{/* end left+center panels */}
 
       {/* ── RIGHT PANEL: New order builder ── */}
       {!cfg.hideNewOrder && (
-      <div className={`${pc('new-order', 'w-full md:w-[480px] flex-shrink-0 bg-white border-l border-gray-200 flex-col overflow-hidden')}`}>
+      <div className={`${cfg.newOrderMode ? 'flex-1 flex flex-col overflow-hidden' : pc('new-order', 'w-full md:w-[480px] flex-shrink-0 bg-white border-l border-gray-200 flex-col overflow-hidden')}`}>
         {/* Mobile back button */}
         <button
-          onClick={() => setMobilePanel('list')}
+          onClick={() => cfg.newOrderMode ? router.push(`/${slug}/pos/orders`) : setMobilePanel('list')}
           className="md:hidden flex items-center gap-1 px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 border-b border-gray-200"
         >
           ← Back
         </button>
         <div className="px-4 py-3 border-b border-gray-200">
-          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">New {cfg.title}</h3>
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">{cfg.newOrderMode ? 'New Order' : `New ${cfg.title}`}</h3>
         </div>
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Order type selector (all-orders view only) */}
@@ -1017,6 +1021,42 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
             <div className="flex-1 flex items-center justify-center"><p className="text-gray-400">Loading menu...</p></div>
           )}
         </div>
+        {cfg.newOrderMode && cart.length > 0 && (
+          <div className="border-t border-gray-200 bg-white flex flex-col flex-shrink-0 max-h-[45vh]">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
+              <span className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                Cart ({cart.reduce((s, i) => s + i.quantity, 0)})
+              </span>
+              <span className="text-sm font-bold">{settings?.currencySymbol || 'Rs.'}{cart.reduce((s, i) => s + i.price * i.quantity, 0).toFixed(2)}</span>
+            </div>
+            <div className="flex-1 overflow-y-auto scrollbar-hide px-4 py-2 space-y-2 min-h-0">
+              {cart.map((item) => (
+                <div key={item.id} className="flex items-center gap-2 p-2 rounded border border-gray-200">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{item.name}</div>
+                    <div className="text-xs text-gray-400">{settings?.currencySymbol || 'Rs.'}{item.price.toFixed(2)} each</div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">−</button>
+                    <span className="w-6 text-center text-sm">{item.quantity}</span>
+                    <button onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">+</button>
+                  </div>
+                  <button onClick={() => handleRemoveItem(item.id)} className="text-gray-400 hover:text-red-500 text-sm">✕</button>
+                </div>
+              ))}
+            </div>
+            <div className="px-4 py-3 border-t border-gray-100">
+              <button
+                onClick={handleCheckout}
+                disabled={cart.length === 0 || checkingOut}
+                className="w-full py-2.5 rounded-lg text-sm font-bold text-white disabled:opacity-50"
+                style={{ backgroundColor: theme.primaryColor }}
+              >
+                {checkingOut ? 'Processing...' : `Place Order — ${settings?.currencySymbol || 'Rs.'}${cart.reduce((s, i) => s + i.price * i.quantity, 0).toFixed(2)}`}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       )}
     </div>

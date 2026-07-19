@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation';
 export type ViewId =
   | 'dashboard'
   | 'current-orders'
+  | 'orders-new'
   | 'orders-completed'
   | 'orders-cancelled'
   | 'orders-draft'
@@ -41,6 +42,7 @@ const NAV_ITEMS: NavItem[] = [
     path: '/orders',
     children: [
       { id: 'current-orders', label: 'Current Orders', path: '/orders' },
+      { id: 'orders-new', label: 'New Order', path: '/orders/new' },
       { id: 'orders-completed', label: 'Completed', path: '/orders/completed' },
       { id: 'orders-cancelled', label: 'Cancelled', path: '/orders/cancelled' },
       { id: 'orders-draft', label: 'Draft', path: '/orders/draft' },

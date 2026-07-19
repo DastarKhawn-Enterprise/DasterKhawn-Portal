@@ -7,5 +7,5 @@ import CurrentOrdersView from '../CurrentOrdersView';
 export default function OrdersPage() {
   const { supabaseUrl, supabaseAnonKey, theme, slug, brandName } = usePOS();
   if (usePageGuard()) return null;
-  return <CurrentOrdersView slug={slug} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} brandName={brandName} viewConfig={{ excludeStatus: ['cancelled', 'completed'] }} />;
+  return <CurrentOrdersView slug={slug} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} brandName={brandName} viewConfig={{ excludeStatus: ['cancelled', 'completed'], hideNewOrder: true }} />;
 }
