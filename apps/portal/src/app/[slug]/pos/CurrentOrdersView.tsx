@@ -561,7 +561,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
         </div>
       </div>
 
-      {/* ── CENTER PANEL: Selected order detail ── */}
+      {/* ── CENTER PANEL: Order detail / placeholder + cart at bottom ── */}
       <div className={`${pc('detail', 'flex-1 bg-gray-50 flex-col overflow-hidden')}`}>
         {/* Mobile back button */}
         <button
@@ -570,140 +570,135 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
         >
           ← Orders
         </button>
-        {selectedOrder ? (
-          <div className="flex-1 overflow-y-auto scrollbar-hide p-4 md:p-6 space-y-4">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-xl font-bold">Order #{selectedOrder.order_number}</h2>
-                <p className="text-sm text-gray-500">
-                  {new Date(selectedOrder.created_at).toLocaleString()}
-                  {selectedOrder.customer_name ? ` · ${selectedOrder.customer_name}` : ''}
-                  {selectedOrder.customer_phone ? ` · ${selectedOrder.customer_phone}` : ''}
-                  {selectedOrder.pickup_time
-                    ? ` · Pickup ${new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                    : selectedOrder.order_type === 'takeaway' ? ' · ASAP' : ''}
-                </p>
-              </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${statusColor[selectedOrder.status] || ''}`}>
-                {statusDisplay[selectedOrder.status] || selectedOrder.status}
-              </span>
-            </div>
-
-            {editingOrder ? (
-              <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Edit header */}
-                <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200">
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Editing Order #{selectedOrder.order_number}</h3>
-                  <div className="flex gap-2">
-                    <button onClick={handleCancelEdit} className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-200 rounded">Cancel</button>
-                    <button onClick={handleSaveEdit} disabled={updating === selectedOrder.id} className="px-3 py-1.5 text-xs font-semibold text-white rounded disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>
-                      {updating === selectedOrder.id ? '...' : 'Save'}
-                    </button>
-                  </div>
+        {/* Top: order detail when selected, otherwise placeholder */}
+        <div className="flex-1 overflow-y-auto scrollbar-hide min-h-0">
+          {selectedOrder ? (
+            <div className="p-4 md:p-6 space-y-4">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h2 className="text-xl font-bold">Order #{selectedOrder.order_number}</h2>
+                  <p className="text-sm text-gray-500">
+                    {new Date(selectedOrder.created_at).toLocaleString()}
+                    {selectedOrder.customer_name ? ` · ${selectedOrder.customer_name}` : ''}
+                    {selectedOrder.customer_phone ? ` · ${selectedOrder.customer_phone}` : ''}
+                    {selectedOrder.pickup_time
+                      ? ` · Pickup ${new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : selectedOrder.order_type === 'takeaway' ? ' · ASAP' : ''}
+                  </p>
                 </div>
-                {/* Edit cart items */}
-                <div className="px-4 py-3 border-b border-gray-100 space-y-2 max-h-60 overflow-y-auto">
-                  {editCart.length === 0 && <p className="text-xs text-gray-400 text-center py-4">No items in order.</p>}
-                  {editCart.map((ci) => (
-                    <div key={ci.id} className="flex items-center gap-2 p-1.5 rounded border border-gray-200">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{ci.name}</div>
-                        <div className="text-xs text-gray-400">{settings?.currencySymbol}{ci.price.toFixed(2)} each</div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => handleEditUpdateQty(ci.id, ci.quantity - 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">−</button>
-                        <span className="w-6 text-center text-sm">{ci.quantity}</span>
-                        <button onClick={() => handleEditUpdateQty(ci.id, ci.quantity + 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">+</button>
-                      </div>
-                      <button onClick={() => handleEditRemove(ci.id)} className="text-gray-400 hover:text-red-500 text-sm">✕</button>
+                <div className="flex items-center gap-2">
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${statusColor[selectedOrder.status] || ''}`}>
+                    {statusDisplay[selectedOrder.status] || selectedOrder.status}
+                  </span>
+                  <button onClick={() => setSelectedId(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+                </div>
+              </div>
+
+              {editingOrder ? (
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200">
+                    <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Editing Order #{selectedOrder.order_number}</h3>
+                    <div className="flex gap-2">
+                      <button onClick={handleCancelEdit} className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-200 rounded">Cancel</button>
+                      <button onClick={handleSaveEdit} disabled={updating === selectedOrder.id} className="px-3 py-1.5 text-xs font-semibold text-white rounded disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>
+                        {updating === selectedOrder.id ? '...' : 'Save'}
+                      </button>
                     </div>
-                  ))}
-                </div>
-                {/* Edit total */}
-                <div className="px-4 py-2 border-b border-gray-100 text-right text-sm font-bold">
-                  Total: {settings?.currencySymbol}{editCart.reduce((s, ci) => s + ci.price * ci.quantity, 0).toFixed(2)}
-                </div>
-                {/* Menu grid for adding items */}
-                {menuItems.length > 0 ? (
-                  <MenuGrid menuItems={menuItems} onAddToCart={handleEditAdd} theme={theme} />
-                ) : (
-                  <div className="flex-1 flex items-center justify-center"><p className="text-gray-400">Loading menu...</p></div>
-                )}
-              </div>
-            ) : (
-              <>
-                <table className="w-full text-sm mb-6">
-                  <thead>
-                    <tr className="text-gray-400 text-xs uppercase tracking-wider border-b border-gray-100">
-                      <th className="text-left py-2 font-medium">Item</th>
-                      <th className="text-right py-2 font-medium">Qty</th>
-                      <th className="text-right py-2 font-medium">Price</th>
-                      <th className="text-right py-2 font-medium">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedOrder.order_items.map((item, i) => (
-                      <tr key={i} className="border-b border-gray-50">
-                        <td className="py-2">{item.menu_items?.name || 'Unknown'}</td>
-                        <td className="text-right py-2">{item.quantity}</td>
-                        <td className="text-right py-2">{settings?.currencySymbol}{Number(item.price_at_order).toFixed(2)}</td>
-                        <td className="text-right py-2 font-medium">{settings?.currencySymbol}{(item.quantity * Number(item.price_at_order)).toFixed(2)}</td>
-                      </tr>
+                  </div>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {editCart.length === 0 && <p className="text-xs text-gray-400 text-center py-4">No items in order.</p>}
+                    {editCart.map((ci) => (
+                      <div key={ci.id} className="flex items-center gap-2 p-1.5 rounded border border-gray-200">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{ci.name}</div>
+                          <div className="text-xs text-gray-400">{settings?.currencySymbol}{ci.price.toFixed(2)} each</div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => handleEditUpdateQty(ci.id, ci.quantity - 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">−</button>
+                          <span className="w-6 text-center text-sm">{ci.quantity}</span>
+                          <button onClick={() => handleEditUpdateQty(ci.id, ci.quantity + 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">+</button>
+                        </div>
+                        <button onClick={() => handleEditRemove(ci.id)} className="text-gray-400 hover:text-red-500 text-sm">✕</button>
+                      </div>
                     ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="font-semibold text-base">
-                      <td colSpan={3} className="text-right py-2">Total</td>
-                      <td className="text-right py-2">{settings?.currencySymbol}{Number(selectedOrder.total).toFixed(2)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
+                  </div>
+                  <div className="text-right text-sm font-bold">
+                    Total: {settings?.currencySymbol}{editCart.reduce((s, ci) => s + ci.price * ci.quantity, 0).toFixed(2)}
+                  </div>
+                  {menuItems.length > 0 ? (
+                    <MenuGrid menuItems={menuItems} onAddToCart={handleEditAdd} theme={theme} />
+                  ) : (
+                    <div className="flex items-center justify-center py-8"><p className="text-gray-400">Loading menu...</p></div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <table className="w-full text-sm mb-6">
+                    <thead>
+                      <tr className="text-gray-400 text-xs uppercase tracking-wider border-b border-gray-100">
+                        <th className="text-left py-2 font-medium">Item</th>
+                        <th className="text-right py-2 font-medium">Qty</th>
+                        <th className="text-right py-2 font-medium">Price</th>
+                        <th className="text-right py-2 font-medium">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedOrder.order_items.map((item, i) => (
+                        <tr key={i} className="border-b border-gray-50">
+                          <td className="py-2">{item.menu_items?.name || 'Unknown'}</td>
+                          <td className="text-right py-2">{item.quantity}</td>
+                          <td className="text-right py-2">{settings?.currencySymbol}{Number(item.price_at_order).toFixed(2)}</td>
+                          <td className="text-right py-2 font-medium">{settings?.currencySymbol}{(item.quantity * Number(item.price_at_order)).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="font-semibold text-base">
+                        <td colSpan={3} className="text-right py-2">Total</td>
+                        <td className="text-right py-2">{settings?.currencySymbol}{Number(selectedOrder.total).toFixed(2)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
 
-                <div className="flex flex-wrap gap-3">
-                  {selectedOrder.status === 'pending' && (
-                    <ActionButton label="Start Cooking" color="bg-blue-600 hover:bg-blue-700" disabled={updating === selectedOrder.id} onClick={() => updateStatus(selectedOrder.id, 'in_kitchen')} updating={updating === selectedOrder.id} />
-                  )}
-                  {selectedOrder.status === 'in_kitchen' && (
-                    <ActionButton label="Mark Ready" color="bg-amber-600 hover:bg-amber-700" disabled={updating === selectedOrder.id} onClick={() => updateStatus(selectedOrder.id, 'ready')} updating={updating === selectedOrder.id} />
-                  )}
-                  {selectedOrder.status === 'ready' && (
-                    <ActionButton label="Complete Order" color="bg-green-600 hover:bg-green-700" disabled={updating === selectedOrder.id} onClick={() => updateStatus(selectedOrder.id, 'completed')} updating={updating === selectedOrder.id} />
-                  )}
-                  <ActionButton label="Print Bill" color="bg-gray-600 hover:bg-gray-700" disabled={false} onClick={() => handlePrintBill(selectedOrder)} updating={false} />
-                  {selectedOrder.status !== 'completed' && selectedOrder.status !== 'cancelled' && (
-                    <ActionButton label="Edit Order" color="bg-indigo-600 hover:bg-indigo-700" disabled={false} onClick={handleStartEdit} updating={false} />
-                  )}
-                  {selectedOrder.status !== 'cancelled' && (
-                    <ActionButton label="Cancel Order" color="bg-red-600 hover:bg-red-700" disabled={updating === selectedOrder.id} onClick={() => updateStatus(selectedOrder.id, 'cancelled')} updating={updating === selectedOrder.id} />
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        ) : (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {cart.length > 0 ? (
-              <>
-                <div className="px-4 py-3 border-b border-gray-200 bg-white">
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Cart</h3>
-                </div>
-                <div className="flex-1 overflow-y-auto scrollbar-hide">
-                  <CartSidebar
-                    cartItems={cart}
-                    onUpdateQuantity={handleUpdateQuantity}
-                    onRemoveItem={handleRemoveItem}
-                    onCheckout={handleCheckout}
-                    disabled={cart.length === 0 || checkingOut}
-                    theme={theme}
-                    currencySymbol={settings?.currencySymbol}
-                  />
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <p className="text-gray-400 text-lg">Select an order from the list to view details</p>
-              </div>
-            )}
+                  <div className="flex flex-wrap gap-3">
+                    {selectedOrder.status === 'pending' && (
+                      <ActionButton label="Start Cooking" color="bg-blue-600 hover:bg-blue-700" disabled={updating === selectedOrder.id} onClick={() => updateStatus(selectedOrder.id, 'in_kitchen')} updating={updating === selectedOrder.id} />
+                    )}
+                    {selectedOrder.status === 'in_kitchen' && (
+                      <ActionButton label="Mark Ready" color="bg-amber-600 hover:bg-amber-700" disabled={updating === selectedOrder.id} onClick={() => updateStatus(selectedOrder.id, 'ready')} updating={updating === selectedOrder.id} />
+                    )}
+                    {selectedOrder.status === 'ready' && (
+                      <ActionButton label="Complete Order" color="bg-green-600 hover:bg-green-700" disabled={updating === selectedOrder.id} onClick={() => updateStatus(selectedOrder.id, 'completed')} updating={updating === selectedOrder.id} />
+                    )}
+                    <ActionButton label="Print Bill" color="bg-gray-600 hover:bg-gray-700" disabled={false} onClick={() => handlePrintBill(selectedOrder)} updating={false} />
+                    {selectedOrder.status !== 'completed' && selectedOrder.status !== 'cancelled' && (
+                      <ActionButton label="Edit Order" color="bg-indigo-600 hover:bg-indigo-700" disabled={false} onClick={handleStartEdit} updating={false} />
+                    )}
+                    {selectedOrder.status !== 'cancelled' && (
+                      <ActionButton label="Cancel Order" color="bg-red-600 hover:bg-red-700" disabled={updating === selectedOrder.id} onClick={() => updateStatus(selectedOrder.id, 'cancelled')} updating={updating === selectedOrder.id} />
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="flex-1 flex items-center justify-center min-h-[200px]">
+              <p className="text-gray-400 text-lg">Select an order from the list to view details</p>
+            </div>
+          )}
+        </div>
+        {/* Bottom: cart (always visible at bottom when items in cart) */}
+        {cart.length > 0 && (
+          <div className="border-t border-gray-200 bg-white max-h-64 overflow-y-auto scrollbar-hide">
+            <CartSidebar
+              cartItems={cart}
+              onUpdateQuantity={handleUpdateQuantity}
+              onRemoveItem={handleRemoveItem}
+              onCheckout={handleCheckout}
+              disabled={cart.length === 0 || checkingOut}
+              theme={theme}
+              currencySymbol={settings?.currencySymbol}
+            />
           </div>
         )}
       </div>
