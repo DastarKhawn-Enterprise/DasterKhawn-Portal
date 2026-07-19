@@ -681,8 +681,29 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
             )}
           </div>
         ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-gray-400 text-lg">Select an order from the list to view details</p>
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {cart.length > 0 ? (
+              <>
+                <div className="px-4 py-3 border-b border-gray-200 bg-white">
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Cart</h3>
+                </div>
+                <div className="flex-1 overflow-y-auto scrollbar-hide">
+                  <CartSidebar
+                    cartItems={cart}
+                    onUpdateQuantity={handleUpdateQuantity}
+                    onRemoveItem={handleRemoveItem}
+                    onCheckout={handleCheckout}
+                    disabled={cart.length === 0 || checkingOut}
+                    theme={theme}
+                    currencySymbol={settings?.currencySymbol}
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-gray-400 text-lg">Select an order from the list to view details</p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -876,15 +897,6 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
             <div className="flex-1 flex items-center justify-center"><p className="text-gray-400">Loading menu...</p></div>
           )}
         </div>
-        <CartSidebar
-          cartItems={cart}
-          onUpdateQuantity={handleUpdateQuantity}
-          onRemoveItem={handleRemoveItem}
-          onCheckout={handleCheckout}
-          disabled={cart.length === 0 || checkingOut}
-          theme={theme}
-          currencySymbol={settings?.currencySymbol}
-        />
       </div>
       )}
     </div>
