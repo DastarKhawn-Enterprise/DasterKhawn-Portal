@@ -10,6 +10,8 @@ import ReceiptView from './ReceiptView';
 import { deductInventorySupa } from './inventory-utils';
 import { updateCustomerLoyaltySupa, searchCustomersSupa } from './customer-utils';
 import { supa } from './supa-query';
+import useOfflineSync from '@/hooks/useOfflineSync';
+import { getCachedMenuItems, getCachedSettings } from '@/lib/offline-db';
 
 interface OrderItem {
   menu_item_id: string;
@@ -145,13 +147,28 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
     setAuthReady(true);
   }, [isLoaded, isSignedIn]);
 
-  // Fetch menu
+  // Background sync — keeps IndexedDB up to date for offline use
+  useOfflineSync(slug, authReady);
+
+  // Fetch menu (with offline fallback to IndexedDB)
   useEffect(() => {
     if (!authReady) return;
     let cancelled = false;
     supa(slug, { table: 'menu_items', select: 'id, name, description, price, category, available', order: 'name', limit: 500 })
-      .then((r) => { if (!cancelled && r.ok) setMenuItems(r.data ?? []); })
-      .catch(() => {});
+      .then(async (r) => {
+        if (cancelled) return;
+        if (r.ok) { setMenuItems(r.data ?? []); return; }
+        if (!navigator.onLine) {
+          const cached = await getCachedMenuItems(slug);
+          if (!cancelled && cached.length > 0) setMenuItems(cached);
+        }
+      })
+      .catch(async () => {
+        if (!cancelled && !navigator.onLine) {
+          const cached = await getCachedMenuItems(slug);
+          if (cached.length > 0) setMenuItems(cached);
+        }
+      });
     return () => { cancelled = true; };
   }, [authReady, slug]);
 
@@ -165,17 +182,29 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
     return () => { cancelled = true; };
   }, [authReady, slug]);
 
-  // Fetch settings
+  // Fetch settings (with offline fallback to IndexedDB)
   useEffect(() => {
     if (!authReady) return;
     let cancelled = false;
     supa(slug, { table: 'settings', select: 'tax_enabled, tax_rate, currency_symbol, receipt_footer_text', limit: 1 })
-      .then((r) => {
-        if (cancelled || !r.ok || !r.data?.[0]) return;
-        const d = r.data[0];
-        setSettings({ taxEnabled: d.tax_enabled, taxRate: Number(d.tax_rate), currencySymbol: d.currency_symbol, footerText: d.receipt_footer_text });
+      .then(async (r) => {
+        if (cancelled) return;
+        if (r.ok && r.data?.[0]) {
+          const d = r.data[0];
+          setSettings({ taxEnabled: d.tax_enabled, taxRate: Number(d.tax_rate), currencySymbol: d.currency_symbol, footerText: d.receipt_footer_text });
+          return;
+        }
+        if (!navigator.onLine) {
+          const cached = await getCachedSettings(slug);
+          if (!cancelled && cached) setSettings({ taxEnabled: cached.tax_enabled, taxRate: cached.tax_rate, currencySymbol: cached.currency_symbol, footerText: cached.receipt_footer_text });
+        }
       })
-      .catch(() => {});
+      .catch(async () => {
+        if (!cancelled && !navigator.onLine) {
+          const cached = await getCachedSettings(slug);
+          if (cached) setSettings({ taxEnabled: cached.tax_enabled, taxRate: cached.tax_rate, currencySymbol: cached.currency_symbol, footerText: cached.receipt_footer_text });
+        }
+      });
     return () => { cancelled = true; };
   }, [authReady, slug]);
 
