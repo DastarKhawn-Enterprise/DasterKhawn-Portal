@@ -445,14 +445,14 @@ export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, 
   return (
     <><div className="flex-1 flex overflow-hidden min-w-0">
       {/* ── FLOOR PLAN ── */}
-      <div className={`${mobilePanelOpen ? 'hidden md:flex' : 'flex'} flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6`}>
-        <h2 className="text-lg font-bold text-gray-700 mb-4 uppercase tracking-wider">Floor Plan</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
+      <div className={`${mobilePanelOpen ? 'hidden md:flex' : 'flex'} flex-col flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6`}>
+        <h2 className="text-lg font-bold text-gray-700 mb-4 uppercase tracking-wider flex-shrink-0">Floor Plan</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5 auto-rows-fr">
           {tables.map((table) => (
             <button
               key={table.id}
               onClick={() => handleSelectTable(table)}
-              className={`relative p-3 md:p-4 rounded-xl border-2 text-center transition-all hover:shadow-md ${tableBorder[table.status] || 'border-gray-300'} ${
+              className={`relative flex flex-col items-center p-3 md:p-4 rounded-xl border-2 text-center transition-all hover:shadow-md ${tableBorder[table.status] || 'border-gray-300'} ${
                 selectedTable?.id === table.id ? 'ring-2 ring-offset-2 ring-blue-400' : ''
               }`}
               style={{ backgroundColor: (() => { if (table.status === 'available') return 'rgba(34,197,94,0.08)'; if (table.status === 'occupied') return 'rgba(239,68,68,0.08)'; if (table.status === 'reserved') return 'rgba(245,158,11,0.08)'; return 'transparent'; })() }}
@@ -461,11 +461,11 @@ export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, 
               <span className={`absolute top-1 right-1 text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${tableBadge[table.status] || 'bg-gray-100 text-gray-600'}`}>
                 {table.status}
               </span>
-              {/* Table shape */}
-              <div className="mx-auto mb-1 flex items-center justify-center w-12 h-9 md:w-14 md:h-10 rounded border-2 text-xs font-bold" style={{ borderColor: table.status === 'available' ? '#86efac' : table.status === 'occupied' ? '#fca5a5' : '#fcd34d', backgroundColor: table.status === 'available' ? 'rgba(34,197,94,0.15)' : table.status === 'occupied' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)', color: table.status === 'available' ? '#166534' : table.status === 'occupied' ? '#991b1b' : '#92400e' }}>
+              {/* Table shape — square box */}
+              <div className="mx-auto mb-1.5 flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-xl border-2 text-sm md:text-base font-bold" style={{ borderColor: table.status === 'available' ? '#86efac' : table.status === 'occupied' ? '#fca5a5' : '#fcd34d', backgroundColor: table.status === 'available' ? 'rgba(34,197,94,0.15)' : table.status === 'occupied' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)', color: table.status === 'available' ? '#166534' : table.status === 'occupied' ? '#991b1b' : '#92400e' }}>
                 {table.table_number}
               </div>
-              <div className="text-xs" style={{ color: table.status === 'available' ? '#166534' : table.status === 'occupied' ? '#991b1b' : '#92400e' }}>{table.capacity} seat{table.capacity !== 1 ? 's' : ''}</div>
+              <div className="text-xs font-medium" style={{ color: table.status === 'available' ? '#166534' : table.status === 'occupied' ? '#991b1b' : '#92400e' }}>{table.capacity} seat{table.capacity !== 1 ? 's' : ''}</div>
               {/* Reserve toggle for available/reserved */}
               {(table.status === 'available' || table.status === 'reserved') && (
                 <button

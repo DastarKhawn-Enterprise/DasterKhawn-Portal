@@ -634,7 +634,7 @@ function ModulesModal({
   const [saving, setSaving] = useState(false);
 
   const toggle = (key: string) => {
-    setModules((prev) => ({ ...prev, [key]: !prev[key] }));
+    setModules((prev) => ({ ...prev, [key]: prev[key] === undefined ? false : !prev[key] }));
   };
 
   const handleSave = async () => {

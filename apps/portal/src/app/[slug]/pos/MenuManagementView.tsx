@@ -12,7 +12,6 @@ import {
   toggleMenuItem as toggleMenuItemAction,
   getMenuItemIngredients,
   getInventoryItems,
-  getSettingsCurrency,
   saveIngredients,
   checkMenuEditPermission,
 } from './menu-actions';
@@ -29,6 +28,7 @@ interface MenuItemRecord {
 interface Props {
   slug: string;
   theme: ThemeConfig;
+  currencySymbol?: string;
 }
 
 const defaultForm: Omit<MenuItemRecord, 'id'> = {
@@ -39,7 +39,7 @@ const defaultForm: Omit<MenuItemRecord, 'id'> = {
   available: true,
 };
 
-export default function MenuManagementView({ slug, theme }: Props) {
+export default function MenuManagementView({ slug, theme, currencySymbol: _currencySymbol }: Props) {
   const { isLoaded, isSignedIn } = useAuth();
   const [authReady, setAuthReady] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
@@ -62,7 +62,7 @@ export default function MenuManagementView({ slug, theme }: Props) {
   const [ingredients, setIngredients] = useState<{ inventory_item_id: string; inventory_name: string; quantity_used: number }[]>([]);
   const [inventoryItems, setInventoryItems] = useState<{ id: string; name: string; unit: string }[]>([]);
   const [ingLoadError, setIngLoadError] = useState('');
-  const [currencySymbol, setCurrencySymbol] = useState('Rs.');
+  const currencySymbol = _currencySymbol || 'Rs.';
 
   // Check edit permission via server action (reads staff_roles)
   useEffect(() => {
@@ -80,11 +80,6 @@ export default function MenuManagementView({ slug, theme }: Props) {
     } catch (e) { console.error('[Menu] fetch error', e); }
     setLoading(false);
   }, [slug]);
-
-  useEffect(() => {
-    if (!authReady) return;
-    getSettingsCurrency(slug).then(setCurrencySymbol);
-  }, [authReady, slug]);
 
   useEffect(() => {
     if (!authReady) return;
