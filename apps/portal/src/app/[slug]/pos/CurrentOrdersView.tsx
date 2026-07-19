@@ -32,6 +32,8 @@ interface Order {
   customer_phone?: string | null;
   pickup_time?: string | null;
   customer_id?: string | null;
+  vehicle_type?: string | null;
+  vehicle_plate_number?: string | null;
   order_items: OrderItem[];
 }
 
@@ -84,7 +86,7 @@ const statusColor: Record<string, string> = {
   cancelled: 'bg-red-50 text-red-700 border border-red-200',
 };
 
-const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
+const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, vehicle_type, vehicle_plate_number, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
 
 export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, theme, brandName, viewConfig }: Props) {
   const cfg: ViewConfig = { title: 'Active Orders', orderType: null, showCustomerFields: false, ...viewConfig };
@@ -132,6 +134,10 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
   const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string; phone: string | null } | null>(null);
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
   const [creatingCustomer, setCreatingCustomer] = useState(false);
+
+  // Drive Thru vehicle fields
+  const [vehicleType, setVehicleType] = useState('');
+  const [vehiclePlateNumber, setVehiclePlateNumber] = useState('');
 
   const isScoped = cfg.orderType !== null;
   const effectiveOrderType: string = cfg.orderType || selectedOrderType;
@@ -318,6 +324,8 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
     setCustomerPhone('');
     setPickupASAP(true);
     setPickupScheduledTime('');
+    setVehicleType('');
+    setVehiclePlateNumber('');
   }, []);
 
   const handleCheckout = useCallback(async () => {
@@ -352,6 +360,10 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
       if (effectiveOrderType === 'dine_in' && selectedTableId) {
         orderPayload.table_id = selectedTableId;
       }
+      if (effectiveOrderType === 'drive_thru') {
+        if (vehicleType) orderPayload.vehicle_type = vehicleType;
+        if (vehiclePlateNumber) orderPayload.vehicle_plate_number = vehiclePlateNumber;
+      }
 
       const orderResult = await supa(slug, { table: 'orders', method: 'insert', select: 'id, order_number, created_at', single: true, body: orderPayload });
       if (!orderResult.ok || !orderResult.data) { console.error('[Checkout]', orderResult.error); setCheckingOut(false); return; }
@@ -380,6 +392,8 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
         customer_name: shouldCaptureCustomer ? (customerName || null) : undefined,
         customer_phone: shouldCaptureCustomer ? (customerPhone || null) : undefined,
         pickup_time: shouldCaptureCustomer && effectiveOrderType === 'takeaway' ? pickupTime : undefined,
+        vehicle_type: effectiveOrderType === 'drive_thru' ? (vehicleType || null) : undefined,
+        vehicle_plate_number: effectiveOrderType === 'drive_thru' ? (vehiclePlateNumber || null) : undefined,
         order_items: cart.map((item) => ({
           menu_item_id: item.id,
           quantity: item.quantity,
@@ -396,7 +410,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
       resetCustomerFields();
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
-  }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, slug, resetCustomerFields]);
+  }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, vehicleType, vehiclePlateNumber, settings, slug, resetCustomerFields]);
 
   // Status update
   const updateStatus = useCallback(async (orderId: string, newStatus: string) => {
@@ -578,6 +592,11 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
                   {new Date(order.created_at).toLocaleTimeString()}
                 </div>
               )}
+              {order.vehicle_plate_number && (
+                <div className="text-[10px] text-gray-400 mt-0.5">
+                  {order.vehicle_type || 'Vehicle'} · {order.vehicle_plate_number}
+                </div>
+              )}
               <div className="flex text-xs text-gray-400">
                 {order.pickup_time
                   ? `Pickup ${new Date(order.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · `
@@ -614,6 +633,11 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
                       ? ` · Pickup ${new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
                       : selectedOrder.order_type === 'takeaway' ? ' · ASAP' : ''}
                   </p>
+                  {selectedOrder.vehicle_plate_number && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      {selectedOrder.vehicle_type || 'Vehicle'} · {selectedOrder.vehicle_plate_number}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${statusColor[selectedOrder.status] || ''}`}>
@@ -852,8 +876,8 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
               </div>
             </div>
           )}
-          {/* Delivery / Drive Thru: customer name + phone only */}
-          {(effectiveOrderType === 'delivery' || effectiveOrderType === 'drive_thru') && (
+          {/* Delivery: customer name + phone only */}
+          {effectiveOrderType === 'delivery' && (
             <div className="px-4 py-3 border-b border-gray-200 space-y-2">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Customer Name</label>
@@ -872,6 +896,55 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
                   placeholder="(Optional)"
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+            </div>
+          )}
+          {/* Drive Thru: customer name + phone + vehicle details */}
+          {effectiveOrderType === 'drive_thru' && (
+            <div className="px-4 py-3 border-b border-gray-200 space-y-2">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Customer Name</label>
+                <input
+                  type="text"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="Walk-in"
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number</label>
+                <input
+                  type="tel"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  placeholder="(Optional)"
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Vehicle Type</label>
+                <select
+                  value={vehicleType}
+                  onChange={(e) => setVehicleType(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                >
+                  <option value="">-- Select --</option>
+                  <option value="Car">Car</option>
+                  <option value="Motorcycle">Motorcycle</option>
+                  <option value="Van">Van</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Plate Number</label>
+                <input
+                  type="text"
+                  value={vehiclePlateNumber}
+                  onChange={(e) => setVehiclePlateNumber(e.target.value)}
+                  placeholder="e.g. ABC-1234"
                   className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
                 />
               </div>
