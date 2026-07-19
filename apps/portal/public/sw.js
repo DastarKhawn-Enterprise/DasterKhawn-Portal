@@ -12,27 +12,29 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  const { request } = event;
-  const url = new URL(request.url);
-
+  const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Only intercept content-hashed static assets — never pages, API, or auth
-  if (url.pathname.startsWith('/_next/static/') || url.pathname.match(/\.(js|css|woff2?|ttf|otf|svg|png|ico|webp)$/)) {
+  const path = url.pathname;
+
+  if (
+    path.startsWith('/_next/static/') ||
+    path.startsWith('/icons/') ||
+    path === '/manifest.json' ||
+    path === '/favicon' ||
+    path.startsWith('/favicon.')
+  ) {
     event.respondWith(
-      caches.match(request).then((cached) => {
+      caches.match(event.request).then((cached) => {
         if (cached) return cached;
-        return fetch(request).then((res) => {
+        return fetch(event.request).then((res) => {
           if (res.ok) {
             const clone = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(request, clone));
+            caches.open(CACHE).then((cache) => cache.put(event.request, clone));
           }
           return res;
         });
       })
     );
-    return;
   }
-
-  // All other requests (pages, API, Clerk auth, server actions) pass through unhandled
 });
