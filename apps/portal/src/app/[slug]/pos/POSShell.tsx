@@ -25,7 +25,7 @@ function computeHiddenViews(user: any, enabledModules: Record<string, boolean>):
   const hidden: ViewId[] = [];
   if (role !== 'super_admin') {
     if (!perms.includes('staff:manage')) hidden.push('staff');
-    if (!perms.includes('menu:edit')) { hidden.push('menu'); hidden.push('inventory'); }
+    if (!perms.includes('menu:edit')) { hidden.push('menu'); hidden.push('inventory'); hidden.push('item-ledger'); }
     if (!perms.includes('reports:view')) hidden.push('reports');
     if (!perms.includes('settings:edit')) { hidden.push('settings'); hidden.push('expenses'); }
   }
@@ -38,7 +38,7 @@ function computeHiddenViews(user: any, enabledModules: Record<string, boolean>):
     third_party: ['third-party'],
     reservations: ['reservations'],
     menu: ['menu'],
-    inventory: ['inventory'],
+    inventory: ['inventory', 'item-ledger'],
     customers: ['customers'],
     reports: ['reports'],
     expenses: ['expenses'],

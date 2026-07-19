@@ -43,6 +43,7 @@ export default function InventoryView({ slug, theme }: Props) {
   const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null);
   const [adjustDelta, setAdjustDelta] = useState('');
   const [adjustNote, setAdjustNote] = useState('');
+  const [adjustType, setAdjustType] = useState<'adjustment' | 'wastage'>('adjustment');
   const [adjusting, setAdjusting] = useState(false);
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -131,6 +132,21 @@ export default function InventoryView({ slug, theme }: Props) {
       const result = await supa(slug, { table: 'inventory_items', method: 'update', eq: ['id', adjustItem.id], body: { current_stock: newStock } });
       if (!result.ok) { setError(result.error); setAdjusting(false); return; }
       setItems((prev) => prev.map((i) => (i.id === adjustItem.id ? { ...i, current_stock: newStock } : i)));
+
+      const movementType = delta < 0 && adjustType === 'wastage' ? 'wastage' : 'adjustment';
+      const movementLabel = movementType === 'wastage' ? 'wastage' : 'adjustment';
+      await supa(slug, {
+        table: 'item_ledger',
+        method: 'insert',
+        body: {
+          inventory_item_id: adjustItem.id,
+          movement_type: movementType,
+          quantity_change: delta,
+          notes: adjustNote.trim() || `${movementLabel}: ${delta > 0 ? '+' : ''}${delta} ${adjustItem.unit}`,
+          created_by: user?.id || null,
+        },
+      });
+
       setAdjustItem(null);
       setAdjustDelta('');
       setAdjustNote('');
@@ -202,7 +218,7 @@ export default function InventoryView({ slug, theme }: Props) {
                     </div>
                     {canEdit && (
                       <div className="flex gap-2">
-                        <button onClick={() => { setAdjustItem(item); setAdjustDelta(''); setAdjustNote(''); setError(''); }} className="flex-1 px-3 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100">Adjust</button>
+                        <button onClick={() => { setAdjustItem(item); setAdjustDelta(''); setAdjustNote(''); setAdjustType('adjustment'); setError(''); }} className="flex-1 px-3 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100">Adjust</button>
                         <button onClick={() => openEditForm(item)} className="flex-1 px-3 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100">Edit</button>
                         <button onClick={() => { setDeleteId(item.id); setError(''); }} className="flex-1 px-3 py-1.5 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50">Delete</button>
                       </div>
@@ -297,6 +313,19 @@ export default function InventoryView({ slug, theme }: Props) {
             </div>
             <p className="text-sm text-gray-500 mb-4">{adjustItem.name} (current: {Number(adjustItem.current_stock)} {adjustItem.unit})</p>
             <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Movement Type</label>
+                <div className="flex gap-3">
+                  <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                    <input type="radio" name="adjType" checked={adjustType === 'adjustment'} onChange={() => setAdjustType('adjustment')} />
+                    Adjustment
+                  </label>
+                  <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                    <input type="radio" name="adjType" checked={adjustType === 'wastage'} onChange={() => setAdjustType('wastage')} />
+                    Wastage
+                  </label>
+                </div>
+              </div>
               <div><label className="block text-sm text-gray-600 mb-1">Amount (+ add / − remove)</label><input type="number" step="any" value={adjustDelta} onChange={(e) => setAdjustDelta(e.target.value)} placeholder="e.g. 10 or -5" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
               <div><label className="block text-sm text-gray-600 mb-1">Note (optional)</label><input type="text" value={adjustNote} onChange={(e) => setAdjustNote(e.target.value)} placeholder="e.g. restock, wastage" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
               {error && <p className="text-red-600 text-sm">{error}</p>}

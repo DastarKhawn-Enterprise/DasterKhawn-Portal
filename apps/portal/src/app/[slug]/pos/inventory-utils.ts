@@ -44,7 +44,8 @@ export async function deductInventory(client: SupabaseClient, cart: CartItem[]):
 }
 
 // New version using supa proxy (works on any tenant)
-export async function deductInventorySupa(slug: string, cart: CartItem[]): Promise<void> {
+// When orderId and createdBy are provided, also logs 'sale' ledger rows
+export async function deductInventorySupa(slug: string, cart: CartItem[], orderId?: string, createdBy?: string): Promise<void> {
   const menuItemIds = [...new Set(cart.map((c) => c.id))];
 
   const ingResult = await supa(slug, {
@@ -74,16 +75,30 @@ export async function deductInventorySupa(slug: string, cart: CartItem[]): Promi
   });
   if (!itemsResult.ok || !itemsResult.data) return;
   const stockMap = new Map<string, number>(itemsResult.data.map((r: any) => [r.id, Number(r.current_stock)]));
-  const updates = [...deductions.entries()]
-    .filter(([id]) => stockMap.has(id))
-    .map(([id, amount]) => {
-      const stock = stockMap.get(id) ?? 0;
-      return supa(slug, {
-        table: 'inventory_items',
-        method: 'update',
-        eq: ['id', id],
-        body: { current_stock: Math.max(0, stock - amount) },
-      });
-    });
-  await Promise.all(updates);
+  const ops: Promise<any>[] = [];
+  for (const [id, amount] of deductions.entries()) {
+    if (!stockMap.has(id)) continue;
+    const stock = stockMap.get(id) ?? 0;
+    ops.push(supa(slug, {
+      table: 'inventory_items',
+      method: 'update',
+      eq: ['id', id],
+      body: { current_stock: Math.max(0, stock - amount) },
+    }));
+    if (orderId && createdBy) {
+      ops.push(supa(slug, {
+        table: 'item_ledger',
+        method: 'insert',
+        body: {
+          inventory_item_id: id,
+          movement_type: 'sale',
+          quantity_change: -amount,
+          reference_order_id: orderId,
+          notes: `Order deduction: ${amount} units`,
+          created_by: createdBy,
+        },
+      }));
+    }
+  }
+  await Promise.all(ops);
 }

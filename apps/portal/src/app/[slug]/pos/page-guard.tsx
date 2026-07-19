@@ -18,6 +18,7 @@ const PATH_TO_VIEW: Record<string, string> = {
   '/reservations': 'reservations',
   '/menu': 'menu',
   '/inventory': 'inventory',
+  '/item-ledger': 'item-ledger',
   '/customers': 'customers',
   '/reports': 'reports',
   '/expenses': 'expenses',

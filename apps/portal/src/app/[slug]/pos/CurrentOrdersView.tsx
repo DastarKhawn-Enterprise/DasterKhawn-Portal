@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@clerk/nextjs';
+import { useAuth, useUser } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
 import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
 import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
@@ -95,6 +95,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
   const cfg: ViewConfig = { title: 'Active Orders', orderType: null, showCustomerFields: false, ...viewConfig };
 
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
   const [authReady, setAuthReady] = useState(false);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -376,7 +377,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
       const itemsResult = await supa(slug, { table: 'order_items', method: 'insert', body: items });
       if (!itemsResult.ok) { console.error('[Checkout items]', itemsResult.error); setCheckingOut(false); return; }
 
-      await deductInventorySupa(slug, cart).catch((e) => console.error('[Inventory deduct]', e));
+      await deductInventorySupa(slug, cart, order.id, user?.id).catch((e) => console.error('[Inventory deduct]', e));
 
       if (effectiveOrderType === 'dine_in' && selectedTableId) {
         await supa(slug, { table: 'tables', method: 'update', eq: ['id', selectedTableId], body: { status: 'occupied', current_order_id: order.id } });
@@ -414,7 +415,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
       if (cfg.newOrderMode) router.push(`/${slug}/pos/orders`);
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
-  }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, vehicleType, vehiclePlateNumber, settings, slug, resetCustomerFields, cfg.newOrderMode, router]);
+  }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, vehicleType, vehiclePlateNumber, settings, slug, resetCustomerFields, cfg.newOrderMode, router, user]);
 
   // Status update
   const updateStatus = useCallback(async (orderId: string, newStatus: string) => {

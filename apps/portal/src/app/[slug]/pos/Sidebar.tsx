@@ -19,6 +19,7 @@ export type ViewId =
   | 'reservations'
   | 'menu'
   | 'inventory'
+  | 'item-ledger'
   | 'customers'
   | 'reports'
   | 'expenses'
@@ -56,6 +57,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'reservations', label: 'Reservations', icon: '📋', path: '/reservations' },
   { id: 'menu', label: 'Menu', icon: '📖', path: '/menu' },
   { id: 'inventory', label: 'Inventory', icon: '📦', path: '/inventory' },
+  { id: 'item-ledger', label: 'Item Ledger', icon: '📋', path: '/item-ledger' },
   { id: 'customers', label: 'Customers', icon: '👥', path: '/customers' },
   { id: 'reports', label: 'Reports', icon: '📊', path: '/reports' },
   { id: 'expenses', label: 'Expenses', icon: '💰', path: '/expenses' },
