@@ -42,6 +42,7 @@ const ALLOWED_TABLES = new Set([
   'menu_items', 'orders', 'order_items', 'tables',
   'settings', 'customers', 'inventory_items',
   'menu_item_ingredients', 'expenses', 'reservations',
+  'item_ledger',
 ]);
 
 const TABLE_WRITE_PERMISSION: Record<string, string> = {
@@ -55,6 +56,7 @@ const TABLE_WRITE_PERMISSION: Record<string, string> = {
   settings: 'settings:edit',
   expenses: 'settings:edit',
   reservations: 'orders:create',
+  item_ledger: 'menu:edit',
 };
 
 const PERMISSIONS_OWNER = [
