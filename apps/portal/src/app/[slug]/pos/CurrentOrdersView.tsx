@@ -45,6 +45,7 @@ export interface ViewConfig {
   showCustomerFields: boolean;
   statusFilter?: string | null;
   hideNewOrder?: boolean;
+  excludeStatus?: string[];
 }
 
 interface Props {
@@ -77,6 +78,7 @@ const statusColor: Record<string, string> = {
   pending: 'bg-blue-50 text-blue-700 border border-blue-200',
   in_kitchen: 'bg-amber-50 text-amber-700 border border-amber-200',
   ready: 'bg-green-50 text-green-700 border border-green-200',
+  completed: 'bg-gray-50 text-gray-700 border border-gray-200',
   cancelled: 'bg-red-50 text-red-700 border border-red-200',
 };
 
@@ -224,10 +226,14 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
   // Fetch orders (initial load via supa)
   const fetchOrdersInitial = useCallback(async () => {
     const opts: any = { table: 'orders', select: SELECT_ORDER_FIELDS };
-    if (cfg.statusFilter) opts.eq = ['status', cfg.statusFilter];
+    if (cfg.statusFilter) {
+      opts.eq = ['status', cfg.statusFilter];
+    } else if (cfg.excludeStatus && cfg.excludeStatus.length > 0) {
+      opts.notIn = ['status', cfg.excludeStatus];
+    }
     const result = await supa(slug, opts);
     if (result.ok && result.data) setOrders(result.data as unknown as Order[]);
-  }, [slug, cfg.statusFilter]);
+  }, [slug, cfg.statusFilter, cfg.excludeStatus]);
 
   // Realtime subscription (notification-only via anon key — best-effort)
   // Actual data re-fetch always uses secure supa() server actions.

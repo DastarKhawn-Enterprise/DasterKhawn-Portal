@@ -22,12 +22,13 @@ function computeHiddenViews(user: any, enabledModules: Record<string, boolean>):
   const meta = user?.publicMetadata as Record<string, any> | undefined;
   const perms: string[] = meta?.permissions ?? [];
   const role: string = meta?.role ?? '';
-  if (role === 'super_admin') return [];
   const hidden: ViewId[] = [];
-  if (!perms.includes('staff:manage')) hidden.push('staff');
-  if (!perms.includes('menu:edit')) { hidden.push('menu'); hidden.push('inventory'); }
-  if (!perms.includes('reports:view')) hidden.push('reports');
-  if (!perms.includes('settings:edit')) { hidden.push('settings'); hidden.push('expenses'); }
+  if (role !== 'super_admin') {
+    if (!perms.includes('staff:manage')) hidden.push('staff');
+    if (!perms.includes('menu:edit')) { hidden.push('menu'); hidden.push('inventory'); }
+    if (!perms.includes('reports:view')) hidden.push('reports');
+    if (!perms.includes('settings:edit')) { hidden.push('settings'); hidden.push('expenses'); }
+  }
   const moduleToViews: Record<string, ViewId[]> = {
     orders: ['current-orders', 'orders-completed', 'orders-cancelled', 'orders-draft'],
     dine_in: ['dine-in'],

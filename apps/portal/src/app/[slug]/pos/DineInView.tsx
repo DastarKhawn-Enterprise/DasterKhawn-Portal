@@ -58,6 +58,7 @@ const statusColor: Record<string, string> = {
   pending: 'bg-blue-50 text-blue-700 border border-blue-200',
   in_kitchen: 'bg-amber-50 text-amber-700 border border-amber-200',
   ready: 'bg-green-50 text-green-700 border border-green-200',
+  completed: 'bg-gray-50 text-gray-700 border border-gray-200',
   cancelled: 'bg-red-50 text-red-700 border border-red-200',
 };
 
