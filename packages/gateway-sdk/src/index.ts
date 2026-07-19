@@ -113,6 +113,7 @@ export async function getAllTenantsWithBilling(): Promise<TenantWithBilling[]> {
     supabase_anon_key: t.supabase_anon_key,
     status: t.status,
     theme_config: t.theme_config,
+    enabled_modules: t.enabled_modules,
     created_at: t.created_at,
     billing: t.billing?.[0] ?? null,
   }));
