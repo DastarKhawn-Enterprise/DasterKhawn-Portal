@@ -61,7 +61,6 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
   const canEditDate = canEdit && (isToday || isSuperAdmin);
 
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [selectedItemId, setSelectedItemId] = useState('');
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [ledgerLoading, setLedgerLoading] = useState(false);
@@ -77,6 +76,8 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const itemsMap = new Map(items.map(i => [i.id, i]));
+
   const fetchItems = useCallback(async () => {
     if (!isLoaded) return;
     setLoading(true);
@@ -87,8 +88,7 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
     setLoading(false);
   }, [isLoaded, slug]);
 
-  const fetchLedger = useCallback(async (itemId: string, date: string) => {
-    if (!itemId) { setLedger([]); return; }
+  const fetchLedger = useCallback(async (date: string) => {
     setLedgerLoading(true);
     try {
       const dayStart = `${date}T00:00:00`;
@@ -96,7 +96,6 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
       const result = await supa(slug, {
         table: 'item_ledger',
         select: '*',
-        eq: ['inventory_item_id', itemId],
         gte: ['created_at', dayStart],
         lte: ['created_at', dayEnd],
         order: { column: 'created_at', ascending: false },
@@ -110,33 +109,33 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
   useEffect(() => {
-    fetchLedger(selectedItemId, selectedDate);
-  }, [fetchLedger, selectedItemId, selectedDate]);
+    fetchLedger(selectedDate);
+  }, [fetchLedger, selectedDate]);
 
-  const selectedItem = items.find((i) => i.id === selectedItemId) || null;
-
-  // Running balance — calculate cumulative stock over entries ascending
-  const ascending = [...ledger].sort((a, b) =>
-    new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  );
-  let running = selectedItem ? Number(selectedItem.current_stock) : 0;
+  // Running balance per item — walk each item's entries backwards from current stock
   const runningBalance = new Map<string, number>();
-  for (let i = ascending.length - 1; i >= 0; i--) {
-    runningBalance.set(ascending[i].id, running);
-    running -= Number(ascending[i].quantity_change);
+  const ledgerByItem = new Map<string, LedgerEntry[]>();
+  for (const e of ledger) {
+    if (!ledgerByItem.has(e.inventory_item_id)) ledgerByItem.set(e.inventory_item_id, []);
+    ledgerByItem.get(e.inventory_item_id)!.push(e);
+  }
+  for (const [itemId, entries] of ledgerByItem) {
+    const item = itemsMap.get(itemId);
+    if (!item) continue;
+    let bal = Number(item.current_stock);
+    const asc = [...entries].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    for (let i = asc.length - 1; i >= 0; i--) {
+      runningBalance.set(asc[i].id, bal);
+      bal -= Number(asc[i].quantity_change);
+    }
   }
 
   const totalCost = purchaseQty && purchaseUnitCost
     ? (parseFloat(purchaseQty) * parseFloat(purchaseUnitCost))
     : 0;
 
-  // Day stats for selected item
-  const dayStats = {
-    purchase: 0,
-    sale: 0,
-    adjustment: 0,
-    wastage: 0,
-  };
+  // Day stats across all items
+  const dayStats = { purchase: 0, sale: 0, adjustment: 0, wastage: 0 };
   for (const e of ledger) {
     dayStats[e.movement_type] += Number(e.quantity_change);
   }
@@ -153,7 +152,6 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
       const theItem = items.find((i) => i.id === purchaseItemId);
       if (!theItem) { setError('Item not found'); setSaving(false); return; }
 
-      // 1. Update stock
       const stockResult = await supa(slug, {
         table: 'inventory_items',
         method: 'update',
@@ -162,7 +160,6 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
       });
       if (!stockResult.ok) { setError(stockResult.error); setSaving(false); return; }
 
-      // 2. Insert ledger row
       const vendor = purchaseVendor.trim() || null;
       const notes = purchaseNotes.trim() || null;
       const ledgerResult = await supa(slug, {
@@ -182,7 +179,6 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
       });
       if (!ledgerResult.ok) { setError(ledgerResult.error); setSaving(false); return; }
 
-      // 3. Optionally log as expense
       if (purchaseLogExpense) {
         const desc = `Purchase: ${theItem.name} x${qty} ${theItem.unit}${vendor ? ` from ${vendor}` : ''}`;
         const expResult = await supa(slug, {
@@ -199,11 +195,10 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
         if (!expResult.ok) console.error('[Ledger] expense log failed', expResult.error);
       }
 
-      // 4. Refresh
       setItems((prev) => prev.map((i) =>
         i.id === purchaseItemId ? { ...i, current_stock: Number(i.current_stock) + qty } : i
       ));
-      await fetchLedger(purchaseItemId, selectedDate);
+      await fetchLedger(selectedDate);
       setShowPurchaseForm(false);
       setPurchaseQty('');
       setPurchaseUnitCost('');
@@ -250,10 +245,10 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
           </div>
         </div>
 
-        {/* Day stats for selected item */}
-        {selectedItemId && ledger.length > 0 && (
+        {/* Day stats across all items */}
+        {ledger.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
-            <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">Day Stats — {selectedDate}</div>
+            <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">Day Stats — All Items — {selectedDate}</div>
             <div className="grid grid-cols-4 gap-3 text-center">
               <div className="bg-green-50 rounded-lg p-2 border border-green-200">
                 <div className="text-lg font-bold text-green-700">+{dayStats.purchase}</div>
@@ -277,116 +272,24 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
 
         {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm mb-4">{error}</div>}
 
-        {/* Item list */}
-        {loading ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-            <p className="text-gray-400 text-sm">Loading items...</p>
+        {/* Transaction history — all items */}
+        {ledgerLoading ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center mb-4">
+            <p className="text-gray-400 text-sm">Loading ledger...</p>
           </div>
-        ) : items.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-            <p className="text-gray-400 text-sm">No inventory items found. Add items in the Inventory tab first.</p>
+        ) : ledger.length === 0 ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center mb-4">
+            <p className="text-gray-400 text-sm">No transactions on {selectedDate}.</p>
           </div>
         ) : (
           <>
-            {/* Desktop item table */}
+            <h2 className="text-sm font-semibold text-gray-700 mb-2">Transaction History — {selectedDate}</h2>
+            {/* Desktop table */}
             <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-hidden mb-4">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-gray-400 text-xs uppercase tracking-wider">
-                    <th className="text-left px-4 py-3 font-medium">Item Name</th>
-                    <th className="text-right px-4 py-3 font-medium">Current Stock</th>
-                    <th className="text-center px-4 py-3 font-medium">Unit</th>
-                    <th className="text-center px-4 py-3 font-medium w-[140px]">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => {
-                    const isSelected = item.id === selectedItemId;
-                    return (
-                      <tr
-                        key={item.id}
-                        className={`border-b border-gray-100 cursor-pointer transition-colors ${isSelected ? 'bg-gray-50' : 'hover:bg-gray-50'}`}
-                        onClick={() => setSelectedItemId(item.id)}
-                      >
-                        <td className="px-4 py-3 font-medium text-gray-800">{item.name}</td>
-                        <td className="px-4 py-3 text-right font-mono text-gray-700">{Number(item.current_stock)}</td>
-                        <td className="px-4 py-3 text-center text-gray-500">{item.unit}</td>
-                        <td className="px-4 py-3 text-center">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); openPurchaseForm(item.id); }}
-                            disabled={!canEditDate}
-                            className="px-3 py-1.5 text-xs rounded text-white font-medium transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-                            style={{ backgroundColor: theme.primaryColor }}
-                          >
-                            + Add Purchase
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile item cards */}
-            <div className="md:hidden space-y-2 mb-4">
-              {items.map((item) => {
-                const isSelected = item.id === selectedItemId;
-                return (
-                  <div
-                    key={item.id}
-                    className={`bg-white rounded-xl border p-3 cursor-pointer transition-colors ${isSelected ? 'border-gray-400 bg-gray-50' : 'border-gray-200 hover:bg-gray-50'}`}
-                    onClick={() => setSelectedItemId(item.id)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-gray-800 text-sm truncate">{item.name}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">
-                          Stock: <span className="font-mono font-semibold text-gray-700">{Number(item.current_stock)}</span> {item.unit}
-                        </div>
-                      </div>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openPurchaseForm(item.id); }}
-                        disabled={!canEditDate}
-                        className="ml-2 px-3 py-1.5 text-xs rounded text-white font-medium shrink-0 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-                        style={{ backgroundColor: theme.primaryColor }}
-                      >
-                        + Purchase
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-
-        {/* Transaction history for selected item */}
-        {!selectedItemId ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-            <p className="text-gray-400 text-sm">Click an item above to view its transaction history for the selected date.</p>
-          </div>
-        ) : ledgerLoading ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-            <p className="text-gray-400 text-sm">Loading ledger...</p>
-          </div>
-        ) : ledger.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-            <p className="text-gray-400 text-sm">No transactions on {selectedDate} for <strong>{selectedItem?.name}</strong>.</p>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold text-gray-700">
-                Transactions for <span style={{ color: theme.primaryColor }}>{selectedItem?.name}</span>
-                <span className="text-gray-400 font-normal"> — {selectedDate}</span>
-              </h2>
-            </div>
-            {/* Desktop table */}
-            <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50 text-gray-400 text-xs uppercase tracking-wider">
+                    <th className="text-left px-4 py-3 font-medium">Item</th>
                     <th className="text-left px-4 py-3 font-medium">Time</th>
                     <th className="text-left px-4 py-3 font-medium">Type</th>
                     <th className="text-right px-4 py-3 font-medium">Qty Change</th>
@@ -398,10 +301,12 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
                 </thead>
                 <tbody>
                   {ledger.map((entry) => {
+                    const item = itemsMap.get(entry.inventory_item_id);
                     const bal = runningBalance.get(entry.id) ?? 0;
                     const qty = Number(entry.quantity_change);
                     return (
                       <tr key={entry.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-800 whitespace-nowrap">{item?.name || 'Unknown'}</td>
                         <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
                           {new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </td>
@@ -428,15 +333,17 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
               </table>
             </div>
             {/* Mobile cards */}
-            <div className="md:hidden space-y-3">
+            <div className="md:hidden space-y-3 mb-4">
               {ledger.map((entry) => {
+                const item = itemsMap.get(entry.inventory_item_id);
                 const bal = runningBalance.get(entry.id) ?? 0;
                 const qty = Number(entry.quantity_change);
                 return (
                   <div key={entry.id} className="bg-white rounded-xl border border-gray-200 p-4">
                     <div className="flex items-start justify-between mb-2">
                       <div>
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${MOVEMENT_STYLES[entry.movement_type] || ''}`}>
+                        <div className="text-sm font-medium text-gray-800">{item?.name || 'Unknown'}</div>
+                        <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold ${MOVEMENT_STYLES[entry.movement_type] || ''}`}>
                           {MOVEMENT_LABELS[entry.movement_type] || entry.movement_type}
                         </span>
                         <div className="text-xs text-gray-400 mt-1">
@@ -457,6 +364,76 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
                   </div>
                 );
               })}
+            </div>
+          </>
+        )}
+
+        {/* Item list with Add Purchase */}
+        {loading ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+            <p className="text-gray-400 text-sm">Loading items...</p>
+          </div>
+        ) : items.length === 0 ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+            <p className="text-gray-400 text-sm">No inventory items found. Add items in the Inventory tab first.</p>
+          </div>
+        ) : (
+          <>
+            <h2 className="text-sm font-semibold text-gray-700 mb-2">Items — Add Purchase</h2>
+            {/* Desktop item table */}
+            <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-hidden mb-4">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-gray-400 text-xs uppercase tracking-wider">
+                    <th className="text-left px-4 py-3 font-medium">Item Name</th>
+                    <th className="text-right px-4 py-3 font-medium">Current Stock</th>
+                    <th className="text-center px-4 py-3 font-medium">Unit</th>
+                    <th className="text-center px-4 py-3 font-medium w-[140px]">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-3 font-medium text-gray-800">{item.name}</td>
+                      <td className="px-4 py-3 text-right font-mono text-gray-700">{Number(item.current_stock)}</td>
+                      <td className="px-4 py-3 text-center text-gray-500">{item.unit}</td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => openPurchaseForm(item.id)}
+                          disabled={!canEditDate}
+                          className="px-3 py-1.5 text-xs rounded text-white font-medium transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+                          style={{ backgroundColor: theme.primaryColor }}
+                        >
+                          + Add Purchase
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Mobile item cards */}
+            <div className="md:hidden space-y-2 mb-4">
+              {items.map((item) => (
+                <div key={item.id} className="bg-white rounded-xl border border-gray-200 p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-800 text-sm truncate">{item.name}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        Stock: <span className="font-mono font-semibold text-gray-700">{Number(item.current_stock)}</span> {item.unit}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => openPurchaseForm(item.id)}
+                      disabled={!canEditDate}
+                      className="ml-2 px-3 py-1.5 text-xs rounded text-white font-medium shrink-0 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: theme.primaryColor }}
+                    >
+                      + Purchase
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </>
         )}
