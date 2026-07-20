@@ -53,6 +53,12 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
   const perms = (meta?.permissions ?? []) as string[];
   const role = (meta?.role ?? '') as string;
   const canEdit = hasPermission(perms, role, 'menu:edit');
+  const isSuperAdmin = role === 'super_admin';
+
+  const today = new Date().toISOString().split('T')[0];
+  const [selectedDate, setSelectedDate] = useState(today);
+  const isToday = selectedDate === today;
+  const canEditDate = canEdit && (isToday || isSuperAdmin);
 
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
@@ -65,7 +71,7 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
   const [purchaseQty, setPurchaseQty] = useState('');
   const [purchaseUnitCost, setPurchaseUnitCost] = useState('');
   const [purchaseVendor, setPurchaseVendor] = useState('');
-  const [purchaseDate, setPurchaseDate] = useState('');
+  const [purchaseDate, setPurchaseDate] = useState(today);
   const [purchaseNotes, setPurchaseNotes] = useState('');
   const [purchaseLogExpense, setPurchaseLogExpense] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -75,20 +81,45 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
     if (!isLoaded) return;
     setLoading(true);
     try {
-      const result = await supa(slug, { table: 'inventory_items', select: 'id, name, unit, current_stock', order: 'name' });
-      if (result.ok && result.data) setItems(result.data as InventoryItem[]);
+      // Get distinct inventory_item_ids used as ingredients
+      const ingResult = await supa(slug, {
+        table: 'menu_item_ingredients',
+        select: 'inventory_item_id',
+        limit: 10000,
+      });
+      if (!ingResult.ok || !ingResult.data) {
+        setLoading(false);
+        return;
+      }
+      const ids = [...new Set<string>((ingResult.data as { inventory_item_id: string }[]).map(r => r.inventory_item_id))];
+      if (ids.length === 0) {
+        setItems([]);
+        setLoading(false);
+        return;
+      }
+      const itemResult = await supa(slug, {
+        table: 'inventory_items',
+        select: 'id, name, unit, current_stock',
+        in: ['id', ids],
+        order: 'name',
+      });
+      if (itemResult.ok && itemResult.data) setItems(itemResult.data as InventoryItem[]);
     } catch (e) { console.error('[Ledger] fetch items', e); }
     setLoading(false);
   }, [isLoaded, slug]);
 
-  const fetchLedger = useCallback(async (itemId: string) => {
+  const fetchLedger = useCallback(async (itemId: string, date: string) => {
     if (!itemId) { setLedger([]); return; }
     setLedgerLoading(true);
     try {
+      const dayStart = `${date}T00:00:00`;
+      const dayEnd = `${date}T23:59:59.999`;
       const result = await supa(slug, {
         table: 'item_ledger',
         select: '*',
         eq: ['inventory_item_id', itemId],
+        gte: ['created_at', dayStart],
+        lte: ['created_at', dayEnd],
         order: { column: 'created_at', ascending: false },
         limit: 1000,
       });
@@ -99,7 +130,9 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
-  useEffect(() => { fetchLedger(selectedItemId); }, [fetchLedger, selectedItemId]);
+  useEffect(() => {
+    fetchLedger(selectedItemId, selectedDate);
+  }, [fetchLedger, selectedItemId, selectedDate]);
 
   const selectedItem = items.find((i) => i.id === selectedItemId) || null;
 
@@ -108,18 +141,26 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
     new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   );
   let running = selectedItem ? Number(selectedItem.current_stock) : 0;
-  // Walk backwards from the last entry: subtract each change to get prior stock
-  // Actually: start from current and subtract changes from newest to oldest
   const runningBalance = new Map<string, number>();
-  let bal = running;
   for (let i = ascending.length - 1; i >= 0; i--) {
-    runningBalance.set(ascending[i].id, bal);
-    bal -= Number(ascending[i].quantity_change);
+    runningBalance.set(ascending[i].id, running);
+    running -= Number(ascending[i].quantity_change);
   }
 
   const totalCost = purchaseQty && purchaseUnitCost
     ? (parseFloat(purchaseQty) * parseFloat(purchaseUnitCost))
     : 0;
+
+  // Day stats for selected item
+  const dayStats = {
+    purchase: 0,
+    sale: 0,
+    adjustment: 0,
+    wastage: 0,
+  };
+  for (const e of ledger) {
+    dayStats[e.movement_type] += Number(e.quantity_change);
+  }
 
   const handlePurchase = async () => {
     if (!purchaseItemId) { setError('Select an item'); return; }
@@ -172,7 +213,7 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
             category: 'purchases',
             description: desc,
             amount: totalCost,
-            expense_date: purchaseDate || new Date().toISOString().split('T')[0],
+            expense_date: purchaseDate || today,
             created_by: user?.id || null,
           },
         });
@@ -183,7 +224,7 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
       setItems((prev) => prev.map((i) =>
         i.id === purchaseItemId ? { ...i, current_stock: Number(i.current_stock) + qty } : i
       ));
-      await fetchLedger(purchaseItemId);
+      await fetchLedger(purchaseItemId, selectedDate);
       setShowPurchaseForm(false);
       setPurchaseQty('');
       setPurchaseUnitCost('');
@@ -193,12 +234,12 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
     setSaving(false);
   };
 
-  const openPurchaseForm = (itemId?: string) => {
-    setPurchaseItemId(itemId || selectedItemId || (items.length > 0 ? items[0].id : ''));
+  const openPurchaseForm = (itemId: string) => {
+    setPurchaseItemId(itemId);
     setPurchaseQty('');
     setPurchaseUnitCost('');
     setPurchaseVendor('');
-    setPurchaseDate(new Date().toISOString().split('T')[0]);
+    setPurchaseDate(today);
     setPurchaseNotes('');
     setPurchaseLogExpense(true);
     setError('');
@@ -212,72 +253,162 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
   return (
     <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
       <div className="max-w-5xl mx-auto">
+        {/* Header + Date selector */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h1 className="text-2xl font-bold text-gray-800">Item Ledger</h1>
-          {canEdit && (
-            <button onClick={() => openPurchaseForm()} className="px-4 py-2 text-white rounded text-sm font-medium transition-colors" style={{ backgroundColor: theme.primaryColor }}>
-              + Add Purchase
-            </button>
-          )}
-        </div>
-
-        {/* Item selector */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex-1 min-w-[200px]">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Select Inventory Item</label>
-              <select
-                value={selectedItemId}
-                onChange={(e) => setSelectedItemId(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-              >
-                <option value="">-- Select an item --</option>
-                {items.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} ({Number(item.current_stock)} {item.unit})
-                  </option>
-                ))}
-              </select>
-            </div>
-            {selectedItem && (
-              <div className="flex items-center gap-4 text-sm">
-                <div className="bg-gray-50 px-4 py-2 rounded-lg border border-gray-200">
-                  <span className="text-gray-400 text-xs uppercase tracking-wider">Current Stock</span>
-                  <p className="text-xl font-bold" style={{ color: theme.primaryColor }}>
-                    {Number(selectedItem.current_stock)} {selectedItem.unit}
-                  </p>
-                </div>
-                {canEdit && (
-                  <button onClick={() => openPurchaseForm(selectedItem.id)} className="px-3 py-2 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100">
-                    + Purchase for this item
-                  </button>
-                )}
-              </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="px-3 py-2 text-sm border border-gray-300 rounded-lg"
+            />
+            {!canEditDate && canEdit && (
+              <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200">
+                Past date — read only
+              </span>
             )}
           </div>
         </div>
 
+        {/* Day stats for selected item */}
+        {selectedItemId && ledger.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
+            <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">Day Stats — {selectedDate}</div>
+            <div className="grid grid-cols-4 gap-3 text-center">
+              <div className="bg-green-50 rounded-lg p-2 border border-green-200">
+                <div className="text-lg font-bold text-green-700">+{dayStats.purchase}</div>
+                <div className="text-[10px] text-green-600 uppercase tracking-wider">Purchases</div>
+              </div>
+              <div className="bg-blue-50 rounded-lg p-2 border border-blue-200">
+                <div className="text-lg font-bold text-blue-700">{dayStats.sale}</div>
+                <div className="text-[10px] text-blue-600 uppercase tracking-wider">Sales</div>
+              </div>
+              <div className="bg-amber-50 rounded-lg p-2 border border-amber-200">
+                <div className="text-lg font-bold text-amber-700">{dayStats.adjustment > 0 ? '+' : ''}{dayStats.adjustment}</div>
+                <div className="text-[10px] text-amber-600 uppercase tracking-wider">Adjustments</div>
+              </div>
+              <div className="bg-red-50 rounded-lg p-2 border border-red-200">
+                <div className="text-lg font-bold text-red-700">{dayStats.wastage}</div>
+                <div className="text-[10px] text-red-600 uppercase tracking-wider">Wastage</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm mb-4">{error}</div>}
 
-        {/* Transaction history */}
-        {!selectedItemId ? (
+        {/* Item list */}
+        {loading ? (
           <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-            <p className="text-gray-400 text-sm">Select an inventory item to view its transaction history.</p>
+            <p className="text-gray-400 text-sm">Loading items...</p>
           </div>
-        ) : ledgerLoading ? (
-          <p className="text-gray-400 text-sm">Loading ledger...</p>
-        ) : ledger.length === 0 ? (
+        ) : items.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-            <p className="text-gray-400 text-sm">No transactions yet for this item.</p>
+            <p className="text-gray-400 text-sm">No ingredient items found. Add items to inventory and link them as ingredients in menu items.</p>
           </div>
         ) : (
           <>
+            {/* Desktop item table */}
+            <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-hidden mb-4">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-gray-400 text-xs uppercase tracking-wider">
+                    <th className="text-left px-4 py-3 font-medium">Item Name</th>
+                    <th className="text-right px-4 py-3 font-medium">Current Stock</th>
+                    <th className="text-center px-4 py-3 font-medium">Unit</th>
+                    <th className="text-center px-4 py-3 font-medium w-[140px]">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => {
+                    const isSelected = item.id === selectedItemId;
+                    return (
+                      <tr
+                        key={item.id}
+                        className={`border-b border-gray-100 cursor-pointer transition-colors ${isSelected ? 'bg-gray-50' : 'hover:bg-gray-50'}`}
+                        onClick={() => setSelectedItemId(item.id)}
+                      >
+                        <td className="px-4 py-3 font-medium text-gray-800">{item.name}</td>
+                        <td className="px-4 py-3 text-right font-mono text-gray-700">{Number(item.current_stock)}</td>
+                        <td className="px-4 py-3 text-center text-gray-500">{item.unit}</td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openPurchaseForm(item.id); }}
+                            disabled={!canEditDate}
+                            className="px-3 py-1.5 text-xs rounded text-white font-medium transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+                            style={{ backgroundColor: theme.primaryColor }}
+                          >
+                            + Add Purchase
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile item cards */}
+            <div className="md:hidden space-y-2 mb-4">
+              {items.map((item) => {
+                const isSelected = item.id === selectedItemId;
+                return (
+                  <div
+                    key={item.id}
+                    className={`bg-white rounded-xl border p-3 cursor-pointer transition-colors ${isSelected ? 'border-gray-400 bg-gray-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                    onClick={() => setSelectedItemId(item.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-gray-800 text-sm truncate">{item.name}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          Stock: <span className="font-mono font-semibold text-gray-700">{Number(item.current_stock)}</span> {item.unit}
+                        </div>
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openPurchaseForm(item.id); }}
+                        disabled={!canEditDate}
+                        className="ml-2 px-3 py-1.5 text-xs rounded text-white font-medium shrink-0 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ backgroundColor: theme.primaryColor }}
+                      >
+                        + Purchase
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {/* Transaction history for selected item */}
+        {!selectedItemId ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+            <p className="text-gray-400 text-sm">Click an item above to view its transaction history for the selected date.</p>
+          </div>
+        ) : ledgerLoading ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+            <p className="text-gray-400 text-sm">Loading ledger...</p>
+          </div>
+        ) : ledger.length === 0 ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+            <p className="text-gray-400 text-sm">No transactions on {selectedDate} for <strong>{selectedItem?.name}</strong>.</p>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-semibold text-gray-700">
+                Transactions for <span style={{ color: theme.primaryColor }}>{selectedItem?.name}</span>
+                <span className="text-gray-400 font-normal"> — {selectedDate}</span>
+              </h2>
+            </div>
             {/* Desktop table */}
             <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-gray-400 text-xs uppercase tracking-wider">
-                    <th className="text-left px-4 py-3 font-medium">Date</th>
+                    <th className="text-left px-4 py-3 font-medium">Time</th>
                     <th className="text-left px-4 py-3 font-medium">Type</th>
                     <th className="text-right px-4 py-3 font-medium">Qty Change</th>
                     <th className="text-right px-4 py-3 font-medium">Running Stock</th>
@@ -293,7 +424,6 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
                     return (
                       <tr key={entry.id} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
-                          {new Date(entry.created_at).toLocaleDateString()}{' '}
                           {new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </td>
                         <td className="px-4 py-3">
@@ -331,7 +461,6 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
                           {MOVEMENT_LABELS[entry.movement_type] || entry.movement_type}
                         </span>
                         <div className="text-xs text-gray-400 mt-1">
-                          {new Date(entry.created_at).toLocaleDateString()}{' '}
                           {new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
                       </div>
