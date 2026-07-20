@@ -81,29 +81,8 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
     if (!isLoaded) return;
     setLoading(true);
     try {
-      // Get distinct inventory_item_ids used as ingredients
-      const ingResult = await supa(slug, {
-        table: 'menu_item_ingredients',
-        select: 'inventory_item_id',
-        limit: 10000,
-      });
-      if (!ingResult.ok || !ingResult.data) {
-        setLoading(false);
-        return;
-      }
-      const ids = [...new Set<string>((ingResult.data as { inventory_item_id: string }[]).map(r => r.inventory_item_id))];
-      if (ids.length === 0) {
-        setItems([]);
-        setLoading(false);
-        return;
-      }
-      const itemResult = await supa(slug, {
-        table: 'inventory_items',
-        select: 'id, name, unit, current_stock',
-        in: ['id', ids],
-        order: 'name',
-      });
-      if (itemResult.ok && itemResult.data) setItems(itemResult.data as InventoryItem[]);
+      const result = await supa(slug, { table: 'inventory_items', select: 'id, name, unit, current_stock', order: 'name' });
+      if (result.ok && result.data) setItems(result.data as InventoryItem[]);
     } catch (e) { console.error('[Ledger] fetch items', e); }
     setLoading(false);
   }, [isLoaded, slug]);
@@ -305,7 +284,7 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
           </div>
         ) : items.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-            <p className="text-gray-400 text-sm">No ingredient items found. Add items to inventory and link them as ingredients in menu items.</p>
+            <p className="text-gray-400 text-sm">No inventory items found. Add items in the Inventory tab first.</p>
           </div>
         ) : (
           <>
