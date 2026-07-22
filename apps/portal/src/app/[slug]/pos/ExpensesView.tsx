@@ -5,6 +5,7 @@ import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
+import { processExpense } from './payment-actions';
 
 interface Props {
   slug: string;
@@ -18,7 +19,14 @@ interface Expense {
   description: string | null;
   amount: number;
   expense_date: string;
+  account_id: string | null;
   created_at: string;
+}
+
+interface Account {
+  id: string;
+  name: string;
+  current_balance: number;
 }
 
 const CATEGORIES = ['electricity', 'rent', 'salaries', 'repairs', 'purchases', 'other'] as const;
@@ -44,12 +52,16 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
   const [customEnd, setCustomEnd] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
 
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accountsMap, setAccountsMap] = useState<Record<string, string>>({});
+
   const [showForm, setShowForm] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [formCategory, setFormCategory] = useState('other');
   const [formDescription, setFormDescription] = useState('');
   const [formAmount, setFormAmount] = useState('');
   const [formDate, setFormDate] = useState('');
+  const [formAccountId, setFormAccountId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -91,16 +103,26 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
     setLoading(false);
   }, [isLoaded, slug, getDateRange, categoryFilter]);
 
-  useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
+  useEffect(() => {
+    fetchExpenses();
+    supa(slug, { table: 'accounts', select: 'id, name', eq: ['is_active', true], order: 'name' }).then((r) => {
+      if (r.ok && r.data) {
+        setAccounts(r.data as Account[]);
+        const m: Record<string, string> = {};
+        (r.data as Account[]).forEach((a) => { m[a.id] = a.name; });
+        setAccountsMap(m);
+      }
+    });
+  }, [fetchExpenses, slug]);
 
   const openAddForm = () => {
     setEditingExpense(null); setFormCategory('other'); setFormDescription(''); setFormAmount('');
-    setFormDate(new Date().toISOString().split('T')[0]); setError(''); setShowForm(true);
+    setFormDate(new Date().toISOString().split('T')[0]); setFormAccountId(accounts[0]?.id || ''); setError(''); setShowForm(true);
   };
 
   const openEditForm = (exp: Expense) => {
     setEditingExpense(exp); setFormCategory(exp.category); setFormDescription(exp.description || '');
-    setFormAmount(String(exp.amount)); setFormDate(exp.expense_date); setError(''); setShowForm(true);
+    setFormAmount(String(exp.amount)); setFormDate(exp.expense_date); setFormAccountId(exp.account_id || ''); setError(''); setShowForm(true);
   };
 
   const handleSave = async () => {
@@ -108,15 +130,22 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
     if (!formDate) { setError('Date is required'); return; }
     setSaving(true); setError('');
     try {
-      const payload = { category: formCategory, description: formDescription.trim() || null, amount: parseFloat(formAmount), expense_date: formDate };
       if (editingExpense) {
+        // Edit: update expense row only (account link via RPC is already set)
+        const payload = { category: formCategory, description: formDescription.trim() || null, amount: parseFloat(formAmount), expense_date: formDate };
+        if (formAccountId) (payload as any).account_id = formAccountId;
         const result = await supa(slug, { table: 'expenses', method: 'update', eq: ['id', editingExpense.id], body: payload });
         if (!result.ok) { setError(result.error); setSaving(false); return; }
         setExpenses((prev) => prev.map((e) => (e.id === editingExpense.id ? { ...e, ...payload } as Expense : e)));
       } else {
-        const result = await supa(slug, { table: 'expenses', method: 'insert', body: payload, single: true });
-        if (!result.ok) { setError(result.error); setSaving(false); return; }
-        if (result.data) setExpenses((prev) => [result.data as Expense, ...prev]);
+        if (!formAccountId) { setError('Select an account'); setSaving(false); return; }
+        const r = await processExpense(slug, formAccountId, formCategory, formDescription.trim() || null, parseFloat(formAmount), formDate);
+        if (!r.success) { setError(r.error); setSaving(false); return; }
+        const newExp: Expense = {
+          id: r.expense_id, category: formCategory, description: formDescription.trim() || null,
+          amount: parseFloat(formAmount), expense_date: formDate, account_id: formAccountId, created_at: new Date().toISOString(),
+        };
+        setExpenses((prev) => [newExp, ...prev]);
       }
       setShowForm(false);
     } catch (e: any) { setError(e.message || 'Save failed'); }
@@ -282,6 +311,13 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
               <button onClick={() => setShowForm(false)} className="md:hidden text-gray-400 text-xl">✕</button>
             </div>
             <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Pay From Account</label>
+                <select value={formAccountId} onChange={(e) => setFormAccountId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                  <option value="">— Select account —</option>
+                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
               <div><label className="block text-sm text-gray-600 mb-1">Category</label>
                 <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm">
                   {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}

@@ -42,7 +42,7 @@ const ALLOWED_TABLES = new Set([
   'menu_items', 'orders', 'order_items', 'tables',
   'settings', 'customers', 'inventory_items',
   'menu_item_ingredients', 'expenses', 'reservations',
-  'item_ledger',
+  'item_ledger', 'accounts', 'payments', 'account_transactions',
 ]);
 
 const TABLE_WRITE_PERMISSION: Record<string, string> = {
@@ -57,12 +57,17 @@ const TABLE_WRITE_PERMISSION: Record<string, string> = {
   expenses: 'settings:edit',
   reservations: 'orders:create',
   item_ledger: 'menu:edit',
+  accounts: 'accounts:manage',
+  payments: 'orders:create',
+  account_transactions: 'accounts:manage',
 };
 
 const PERMISSIONS_OWNER = [
   'orders:create', 'orders:view', 'orders:update',
   'menu:view', 'menu:edit', 'reports:view',
   'staff:manage', 'settings:edit',
+  'accounts:view', 'accounts:manage', 'accounts:transactions',
+  'accounts:transfer', 'accounts:adjust',
 ];
 
 type CheckAccessResult = { authorized: false; reason: string } | { authorized: true; tenant: { id: string; supabase_url: string; slug: string } };
@@ -265,5 +270,48 @@ export async function supaBatch(slug: string, queries: QueryOptions[]): Promise<
     return Promise.all(queries.map(q => execQuery(baseUrl, key, q)));
   } catch (e: any) {
     return queries.map(() => ({ ok: false, error: e.message || 'Internal error' }));
+  }
+}
+
+type RpcResult = { ok: true; data: any } | { ok: false; error: string };
+
+export async function supaRpc(slug: string, fnName: string, params: Record<string, any>): Promise<RpcResult> {
+  try {
+    const { userId } = auth();
+    if (!userId) return { ok: false, error: 'Unauthorized' };
+
+    const tenant = await getTenantBySlug(slug);
+    if (!tenant) return { ok: false, error: 'Tenant not found' };
+
+    const staff = await getStaffByTenant(tenant.id);
+    const me = staff.find((s) => s.clerk_user_id === userId);
+    if (!me) {
+      const user = await currentUser();
+      const role = (user?.publicMetadata as Record<string, any> | undefined)?.role;
+      if (role !== 'super_admin') return { ok: false, error: 'Forbidden: no access to this tenant' };
+    }
+
+    const key = await getSvcKey(slug);
+    const url = `${tenant.supabase_url.replace(/\/+$/, '')}/rest/v1/rpc/${encodeURIComponent(fnName)}`;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      return { ok: false, error: `${res.status}: ${txt.slice(0, 300)}` };
+    }
+
+    const data = await res.json();
+    return { ok: true, data };
+  } catch (e: any) {
+    return { ok: false, error: e.message || 'RPC call failed' };
   }
 }

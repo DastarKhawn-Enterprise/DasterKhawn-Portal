@@ -22,6 +22,7 @@ const PATH_TO_VIEW: Record<string, string> = {
   '/customers': 'customers',
   '/reports': 'reports',
   '/expenses': 'expenses',
+  '/accounts': 'accounts',
   '/staff': 'staff',
   '/settings': 'settings',
 };

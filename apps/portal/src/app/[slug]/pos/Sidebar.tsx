@@ -23,6 +23,7 @@ export type ViewId =
   | 'customers'
   | 'reports'
   | 'expenses'
+  | 'accounts'
   | 'staff'
   | 'settings';
 
@@ -61,6 +62,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'customers', label: 'Customers', icon: '👥', path: '/customers' },
   { id: 'reports', label: 'Reports', icon: '📊', path: '/reports' },
   { id: 'expenses', label: 'Expenses', icon: '💰', path: '/expenses' },
+  { id: 'accounts', label: 'Accounts', icon: '🏦', path: '/accounts' },
   { id: 'staff', label: 'Staff', icon: '👤', path: '/staff' },
   { id: 'settings', label: 'Settings', icon: '⚙', path: '/settings' },
 ];

@@ -8,6 +8,7 @@ import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
 import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import ReceiptView from './ReceiptView';
+import PaymentModal from './PaymentModal';
 import { deductInventorySupa } from './inventory-utils';
 import { updateCustomerLoyaltySupa, searchCustomersSupa } from './customer-utils';
 import { supa } from './supa-query';
@@ -120,6 +121,8 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
 
   // Print bill
   const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
+  // Payment
+  const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
   // Edit order
   const [editingOrder, setEditingOrder] = useState(false);
   const [editCart, setEditCart] = useState<CartItem[]>([]);
@@ -413,6 +416,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
       setCustomerResults([]);
       resetCustomerFields();
       if (cfg.newOrderMode) router.push(`/${slug}/pos/orders`);
+      setPaymentOrder(newOrder);
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
   }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, vehicleType, vehiclePlateNumber, settings, slug, resetCustomerFields, cfg.newOrderMode, router, user]);
@@ -1291,6 +1295,31 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
       </div>
       )}
     </div>
+    {paymentOrder && !receiptOrder && (
+      <PaymentModal
+        slug={slug}
+        theme={theme}
+        currencySymbol={settings?.currencySymbol || 'Rs.'}
+        orderId={paymentOrder.id}
+        orderNumber={paymentOrder.order_number}
+        orderTotal={Number(paymentOrder.total)}
+        amountPaid={0}
+        amountDue={Number(paymentOrder.total)}
+        customerId={paymentOrder.customer_id}
+        customerName={paymentOrder.customer_name}
+        customerPhone={paymentOrder.customer_phone}
+        orderType={paymentOrder.order_type}
+        items={(paymentOrder.order_items || []).map((oi) => ({
+          name: oi.menu_items?.name || 'Unknown',
+          quantity: oi.quantity,
+          price: Number(oi.price_at_order),
+        }))}
+        taxAmount={Number(paymentOrder.tax_amount ?? 0)}
+        brandName={brandName}
+        onClose={() => setPaymentOrder(null)}
+        onSuccess={() => setPaymentOrder(null)}
+      />
+    )}
     {receiptOrder && (
       <ReceiptView
         data={{

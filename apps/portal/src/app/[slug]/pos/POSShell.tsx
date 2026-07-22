@@ -27,6 +27,7 @@ function computeHiddenViews(user: any, enabledModules: Record<string, boolean>):
     if (!perms.includes('staff:manage')) hidden.push('staff');
     if (!perms.includes('menu:edit')) { hidden.push('menu'); hidden.push('inventory'); hidden.push('item-ledger'); }
     if (!perms.includes('reports:view')) hidden.push('reports');
+    if (!perms.includes('accounts:view')) hidden.push('accounts');
     if (!perms.includes('settings:edit')) { hidden.push('settings'); hidden.push('expenses'); }
   }
   const moduleToViews: Record<string, ViewId[]> = {

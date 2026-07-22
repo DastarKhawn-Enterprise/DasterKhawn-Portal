@@ -27,12 +27,18 @@ export const PERMISSIONS = {
     'reports:view',
     'staff:manage',
     'settings:edit',
+    'accounts:view',
+    'accounts:manage',
+    'accounts:transactions',
+    'accounts:transfer',
+    'accounts:adjust',
   ],
   staff: [
     'orders:create',
     'orders:view',
     'orders:update',
     'menu:view',
+    'accounts:view',
   ],
   customer: [
     'orders:create:own',
@@ -124,7 +130,7 @@ export const DEFAULT_ENABLED_MODULES: Record<string, boolean> = {
   delivery: true, drive_thru: true, third_party: true,
   reservations: true, menu: true, inventory: true,
   customers: true, reports: true, expenses: true, staff: true,
-  settings: true, loyalty_points: true,
+  settings: true, loyalty_points: true, accounts: true,
 };
 
 export async function getTenantEnabledModules(tenantId: string): Promise<Record<string, boolean>> {
