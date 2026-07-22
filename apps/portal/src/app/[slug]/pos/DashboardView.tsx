@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
@@ -42,8 +42,11 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
   const [orderTypes, setOrderTypes] = useState<OrderTypeRow[]>([]);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const fetchingRef = useRef(false);
 
   const fetchAll = useCallback(async () => {
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
     try {
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
       const todayEnd = new Date();
@@ -51,7 +54,7 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
       const end = todayEnd.toISOString();
 
       const [completedOrdersRes, activeRes, kitchenRes, tablesRes, recentRes] = await supaBatch(slug, [
-        { table: 'orders', select: 'total, order_type', eq: ['status', 'completed'], gte: ['created_at', start], lte: ['created_at', end] },
+        { table: 'orders', select: 'total, order_type', eq: ['status', 'completed'], gte: ['created_at', start], lte: ['created_at', end], limit: 5000 },
         { table: 'orders', select: 'id', notIn: ['status', ['completed', 'cancelled']], head: true },
         { table: 'orders', select: 'status', in: ['status', ['pending', 'in_kitchen', 'ready']] },
         { table: 'tables', select: 'id, status' },
@@ -87,8 +90,9 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
       }
 
       if (recentRes.ok && recentRes.data) setRecentOrders(recentRes.data as RecentOrder[]);
-    } catch (e) { console.error('[Dashboard] fetch error:', e); }
+      } catch (e) { console.error('[Dashboard] fetch error:', e); }
     setLoaded(true);
+    fetchingRef.current = false;
   }, [slug]);
 
   useEffect(() => {
@@ -101,9 +105,7 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
     fetchAll();
   }, [authReady, fetchAll]);
 
-  // Realtime subscriptions (notification-only via anon key — best-effort)
-  // Actual data re-fetch always uses secure supa() server actions.
-  // A polling fallback ensures updates on tenants where anon-key Realtime is blocked by RLS.
+  // Realtime subscriptions — refresh on any orders/tables change
   useEffect(() => {
     if (!authReady) return;
     let channel: ReturnType<SupabaseClient['channel']> | null = null;
@@ -118,13 +120,6 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
     return () => { if (channel) channel.unsubscribe(); };
   }, [authReady, supabaseUrl, supabaseAnonKey, fetchAll]);
 
-  // Polling fallback — refreshes every 5s regardless of Realtime status
-  useEffect(() => {
-    if (!authReady) return;
-    const interval = setInterval(() => fetchAll(), 5000);
-    return () => clearInterval(interval);
-  }, [authReady, fetchAll]);
-
   if (!isLoaded || !authReady) {
     return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
   }
@@ -134,7 +129,10 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
   return (
     <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
       <div className="max-w-6xl mx-auto">
-        <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider mb-5">Dashboard</h2>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider">Dashboard</h2>
+          <button onClick={fetchAll} disabled={fetchingRef.current} className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50">Refresh</button>
+        </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <div className="bg-white rounded-xl border border-gray-200 p-4">

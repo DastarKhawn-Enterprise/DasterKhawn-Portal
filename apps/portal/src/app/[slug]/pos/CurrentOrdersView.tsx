@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
@@ -104,6 +104,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
+  const fetchingRef = useRef(false);
 
   // Customer fields (takeaway / delivery / drive_thru)
   const [customerName, setCustomerName] = useState('');
@@ -267,7 +268,9 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
 
   // Fetch orders (initial load via supa)
   const fetchOrdersInitial = useCallback(async () => {
-    const opts: any = { table: 'orders', select: SELECT_ORDER_FIELDS };
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+    const opts: any = { table: 'orders', select: SELECT_ORDER_FIELDS, order: { column: 'created_at', ascending: false }, limit: 200 };
     if (cfg.statusFilter) {
       opts.eq = ['status', cfg.statusFilter];
     } else if (cfg.excludeStatus && cfg.excludeStatus.length > 0) {
@@ -275,6 +278,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
     }
     const result = await supa(slug, opts);
     if (result.ok && result.data) setOrders(result.data as unknown as Order[]);
+    fetchingRef.current = false;
   }, [slug, cfg.statusFilter, cfg.excludeStatus]);
 
   // Realtime subscription (notification-only via anon key — best-effort)
@@ -294,13 +298,6 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
       .subscribe();
     return () => { channel.unsubscribe(); };
   }, [authReady, getSupabaseClient, fetchOrdersInitial]);
-
-  // Polling fallback — refreshes every 5s regardless of Realtime status
-  useEffect(() => {
-    if (!authReady) return;
-    const interval = setInterval(() => fetchOrdersInitial(), 5000);
-    return () => clearInterval(interval);
-  }, [authReady, fetchOrdersInitial]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -556,13 +553,16 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
       <div className={`${pc('list', 'w-full md:w-72 flex-shrink-0 bg-white border-r border-gray-200 flex-col overflow-hidden')}`}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">{cfg.title}</h2>
-          <button
-            onClick={() => { handleNewOrder(); router.push(`/${slug}/pos/orders/new`); }}
-            className="text-xs px-3 py-1.5 rounded text-white font-semibold"
-            style={{ backgroundColor: theme.primaryColor }}
-          >
-            + New Order
-          </button>
+          <div className="flex items-center gap-1">
+            <button onClick={fetchOrdersInitial} disabled={fetchingRef.current} className="text-xs px-2 py-1.5 rounded border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50">↻</button>
+            <button
+              onClick={() => { handleNewOrder(); router.push(`/${slug}/pos/orders/new`); }}
+              className="text-xs px-3 py-1.5 rounded text-white font-semibold"
+              style={{ backgroundColor: theme.primaryColor }}
+            >
+              + New Order
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto scrollbar-hide p-3 space-y-3">
           {orders.length === 0 && (
