@@ -105,6 +105,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
   const fetchingRef = useRef(false);
+  const creatingOrderRef = useRef(false);
 
   // Customer fields (takeaway / delivery / drive_thru)
   const [customerName, setCustomerName] = useState('');
@@ -333,7 +334,8 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
   }, []);
 
   const handleCheckout = useCallback(async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || creatingOrderRef.current) return;
+    creatingOrderRef.current = true;
     setCheckingOut(true);
     try {
       const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -406,17 +408,23 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
         })),
       };
       setOrders((prev) => [newOrder, ...prev]);
-      setCart([]);
-      setSelectedTableId(null);
-      setSelectedCustomer(null);
-      setCustomerSearch('');
-      setCustomerResults([]);
-      resetCustomerFields();
-      if (cfg.newOrderMode) router.push(`/${slug}/pos/orders`);
       setPaymentOrder(newOrder);
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
+    creatingOrderRef.current = false;
   }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, vehicleType, vehiclePlateNumber, settings, slug, resetCustomerFields, cfg.newOrderMode, router, user]);
+
+  const handlePaymentSuccess = useCallback(() => {
+    setPaymentOrder(null);
+    setCart([]);
+    setSelectedTableId(null);
+    setSelectedCustomer(null);
+    setCustomerSearch('');
+    setCustomerResults([]);
+    resetCustomerFields();
+    if (cfg.newOrderMode) router.push(`/${slug}/pos/orders`);
+    fetchOrdersInitial();
+  }, [slug, cfg.newOrderMode, router, resetCustomerFields, fetchOrdersInitial]);
 
   // Status update
   const updateStatus = useCallback(async (orderId: string, newStatus: string) => {
@@ -1317,7 +1325,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
         taxAmount={Number(paymentOrder.tax_amount ?? 0)}
         brandName={brandName}
         onClose={() => setPaymentOrder(null)}
-        onSuccess={() => setPaymentOrder(null)}
+        onSuccess={handlePaymentSuccess}
       />
     )}
     {receiptOrder && (
