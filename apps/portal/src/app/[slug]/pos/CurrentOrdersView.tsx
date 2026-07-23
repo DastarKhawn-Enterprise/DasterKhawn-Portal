@@ -34,8 +34,6 @@ interface Order {
   customer_phone?: string | null;
   pickup_time?: string | null;
   customer_id?: string | null;
-  vehicle_type?: string | null;
-  vehicle_plate_number?: string | null;
   order_items: OrderItem[];
 }
 
@@ -89,7 +87,7 @@ const statusColor: Record<string, string> = {
   cancelled: 'bg-red-50 text-red-700 border border-red-200',
 };
 
-const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, vehicle_type, vehicle_plate_number, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
+const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
 
 export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, theme, brandName, viewConfig }: Props) {
   const router = useRouter();
@@ -102,6 +100,8 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [checkingOut, setCheckingOut] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [fetchError, setFetchError] = useState('');
+  const [fetchLoading, setFetchLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
   const fetchingRef = useRef(false);
@@ -271,6 +271,8 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
   const fetchOrdersInitial = useCallback(async () => {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
+    setFetchLoading(true);
+    setFetchError('');
     const opts: any = { table: 'orders', select: SELECT_ORDER_FIELDS, order: { column: 'created_at', ascending: false }, limit: 200 };
     if (cfg.statusFilter) {
       opts.eq = ['status', cfg.statusFilter];
@@ -278,7 +280,13 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
       opts.notIn = ['status', cfg.excludeStatus];
     }
     const result = await supa(slug, opts);
-    if (result.ok && result.data) setOrders(result.data as unknown as Order[]);
+    if (result.ok && result.data) {
+      setOrders(result.data as unknown as Order[]);
+    } else if (!result.ok) {
+      console.error('[Orders] fetch error:', result.error);
+      setFetchError(result.error || 'Failed to load orders');
+    }
+    setFetchLoading(false);
     fetchingRef.current = false;
   }, [slug, cfg.statusFilter, cfg.excludeStatus]);
 
@@ -366,11 +374,6 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
       if (effectiveOrderType === 'dine_in' && selectedTableId) {
         orderPayload.table_id = selectedTableId;
       }
-      if (effectiveOrderType === 'drive_thru') {
-        if (vehicleType) orderPayload.vehicle_type = vehicleType;
-        if (vehiclePlateNumber) orderPayload.vehicle_plate_number = vehiclePlateNumber;
-      }
-
       const orderResult = await supa(slug, { table: 'orders', method: 'insert', select: 'id, order_number, created_at', single: true, body: orderPayload });
       if (!orderResult.ok || !orderResult.data) { console.error('[Checkout]', orderResult.error); setCheckingOut(false); return; }
       const order = orderResult.data;
@@ -398,8 +401,6 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
         customer_name: shouldCaptureCustomer ? (customerName || null) : undefined,
         customer_phone: shouldCaptureCustomer ? (customerPhone || null) : undefined,
         pickup_time: shouldCaptureCustomer && effectiveOrderType === 'takeaway' ? pickupTime : undefined,
-        vehicle_type: effectiveOrderType === 'drive_thru' ? (vehicleType || null) : undefined,
-        vehicle_plate_number: effectiveOrderType === 'drive_thru' ? (vehiclePlateNumber || null) : undefined,
         order_items: cart.map((item) => ({
           menu_item_id: item.id,
           quantity: item.quantity,
@@ -412,7 +413,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
     creatingOrderRef.current = false;
-  }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, vehicleType, vehiclePlateNumber, settings, slug, resetCustomerFields, cfg.newOrderMode, router, user]);
+  }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, slug, resetCustomerFields, cfg.newOrderMode, router, user]);
 
   const handlePaymentSuccess = useCallback(() => {
     setPaymentOrder(null);
@@ -573,7 +574,18 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
           </div>
         </div>
         <div className="flex-1 overflow-y-auto scrollbar-hide p-3 space-y-3">
-          {orders.length === 0 && (
+          {fetchLoading && (
+            <div className="flex items-center justify-center pt-12">
+              <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+            </div>
+          )}
+          {!fetchLoading && fetchError && (
+            <div className="text-center pt-8 px-4">
+              <p className="text-red-500 text-sm mb-2">{fetchError}</p>
+              <button onClick={fetchOrdersInitial} className="px-3 py-1.5 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50">Retry</button>
+            </div>
+          )}
+          {!fetchLoading && !fetchError && orders.length === 0 && (
             <p className="text-gray-400 text-sm text-center pt-8">{cfg.statusFilter ? `No ${cfg.title.toLowerCase()}` : 'No active orders'}</p>
           )}
           {orders.map((order) => (
@@ -606,11 +618,6 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
               ) : (
                 <div className="text-xs text-gray-500">
                   {new Date(order.created_at).toLocaleTimeString()}
-                </div>
-              )}
-              {order.vehicle_plate_number && (
-                <div className="text-[10px] text-gray-400 mt-0.5">
-                  {order.vehicle_type || 'Vehicle'} · {order.vehicle_plate_number}
                 </div>
               )}
               <div className="flex text-xs text-gray-400">
@@ -649,11 +656,6 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
                       ? ` · Pickup ${new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
                       : selectedOrder.order_type === 'takeaway' ? ' · ASAP' : ''}
                   </p>
-                  {selectedOrder.vehicle_plate_number && (
-                    <p className="text-xs text-gray-400 mt-1">
-                      {selectedOrder.vehicle_type || 'Vehicle'} · {selectedOrder.vehicle_plate_number}
-                    </p>
-                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${statusColor[selectedOrder.status] || ''}`}>
