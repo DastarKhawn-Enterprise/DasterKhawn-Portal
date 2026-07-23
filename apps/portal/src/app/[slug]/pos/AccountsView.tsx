@@ -6,6 +6,7 @@ import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { processTransfer, processExpense, processAdjustment } from './payment-actions';
+import PaymentMethodLogo from './PaymentMethodLogo';
 
 interface Props {
   slug: string;
@@ -62,13 +63,7 @@ const TX_TYPE_LABELS: Record<string, string> = {
 };
 
 function AccountIcon({ type, className }: { type: string; className?: string }) {
-  const cls = `inline-block ${className || ''}`;
-  if (type === 'cash') return <svg className={cls} viewBox="0 0 24 24" width="20" height="20" fill="none" stroke={TYPE_COLORS.cash} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>;
-  if (type === 'bank') return <svg className={cls} viewBox="0 0 24 24" width="20" height="20" fill="none" stroke={TYPE_COLORS.bank} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18"/><path d="M3 10h18"/><path d="M5 6l7-3 7 3"/><path d="M4 10v11"/><path d="M20 10v11"/><path d="M8 14v3"/><path d="M12 14v3"/><path d="M16 14v3"/></svg>;
-  if (type === 'mobile_wallet') return <svg className={cls} viewBox="0 0 24 24" width="20" height="20" fill="none" stroke={TYPE_COLORS.mobile_wallet} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2v2"/><path d="M12 2v4"/><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 11h.01"/><path d="M11 11h.01"/><path d="M8 11h.01"/><path d="M11 15h.01"/><path d="M16 15h.01"/><path d="M8 15h.01"/></svg>;
-  if (type === 'card') return <svg className={cls} viewBox="0 0 24 24" width="20" height="20" fill="none" stroke={TYPE_COLORS.card} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>;
-  if (type === 'credit') return <svg className={cls} viewBox="0 0 24 24" width="20" height="20" fill="none" stroke={TYPE_COLORS.credit} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>;
-  return <svg className={cls} viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>;
+  return <PaymentMethodLogo method={type} size={20} className={className} />;
 }
 
 function SummaryIcon({ icon, className }: { icon: string; className?: string }) {

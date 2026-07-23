@@ -6,6 +6,7 @@ import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { supa, supaRpc } from './supa-query';
 import { processPayments, type PaymentInput } from './payment-actions';
 import ReceiptView from './ReceiptView';
+import PaymentMethodLogo from './PaymentMethodLogo';
 
 interface Props {
   slug: string;
@@ -264,7 +265,10 @@ export default function PaymentModal({
                             'border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-700'
                           }`}
                         >
-                          <div className="font-semibold">{METHOD_LABELS[pm] || pm}</div>
+                          <div className="flex items-center gap-2 font-semibold">
+                            <PaymentMethodLogo method={pm} size={24} />
+                            <span>{METHOD_LABELS[pm] || pm}</span>
+                          </div>
                           {pm === 'credit' && !customerId && <div className="text-[10px] text-amber-600 mt-0.5">Select customer first</div>}
                           {accs.length > 0 && <div className="text-[10px] text-gray-400 mt-0.5 truncate">{accs[0].name}</div>}
                         </button>
@@ -291,7 +295,10 @@ export default function PaymentModal({
                   return (
                     <div key={line.id} className="bg-gray-50 rounded-lg border border-gray-200 p-3 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-gray-500 uppercase">{METHOD_LABELS[line.payment_method] || line.payment_method}</span>
+                        <div className="flex items-center gap-1.5">
+                          <PaymentMethodLogo method={line.payment_method} size={16} />
+                          <span className="text-xs font-semibold text-gray-500 uppercase">{METHOD_LABELS[line.payment_method] || line.payment_method}</span>
+                        </div>
                         {paymentLines.length > 1 && (
                           <button onClick={() => removeLine(line.id)} className="text-xs text-red-500 hover:text-red-700">Remove</button>
                         )}
@@ -390,9 +397,10 @@ export default function PaymentModal({
                           };
                           setPaymentLines((prev) => [...prev, nl]);
                         }}
-                        className="px-2 py-2 text-[10px] rounded border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium min-h-[44px]"
+                        className="px-2 py-2 text-[10px] rounded border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium min-h-[44px] flex items-center justify-center gap-1"
                       >
-                        +{METHOD_LABELS[pm] || pm}
+                        <PaymentMethodLogo method={pm} size={14} />
+                        {METHOD_LABELS[pm] || pm}
                       </button>
                     );
                   })}
