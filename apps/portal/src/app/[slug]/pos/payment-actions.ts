@@ -141,3 +141,33 @@ export async function processRefund(
     p_created_by: userId,
   });
 }
+
+export interface AdjustmentInput {
+  account_id: string;
+  adjustment_type: 'increase' | 'decrease' | 'set_exact';
+  amount?: number;
+  target_balance?: number;
+  reason: string;
+  reference_number?: string | null;
+  notes?: string | null;
+  adjustment_date?: string;
+}
+
+export async function processAdjustment(
+  slug: string,
+  input: AdjustmentInput,
+) {
+  const { userId } = await checkAccess(slug, true);
+  return callRpc(slug, 'process_adjustment', {
+    p_account_id: input.account_id,
+    p_adjustment_type: input.adjustment_type,
+    p_amount: input.amount ?? null,
+    p_target_balance: input.target_balance ?? null,
+    p_reason: input.reason,
+    p_reference_number: input.reference_number ?? null,
+    p_notes: input.notes ?? null,
+    p_adjustment_date: input.adjustment_date ?? null,
+    p_created_by: userId,
+    p_idempotency_key: `${input.account_id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+  });
+}

@@ -5,7 +5,7 @@ import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
-import { processTransfer, processExpense } from './payment-actions';
+import { processTransfer, processExpense, processAdjustment } from './payment-actions';
 
 interface Props {
   slug: string;
@@ -172,6 +172,17 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
   const [ieDesc, setIeDesc] = useState('');
   const [ieSaving, setIeSaving] = useState(false);
 
+  const [showAdjustment, setShowAdjustment] = useState(false);
+  const [adjAccountId, setAdjAccountId] = useState('');
+  const [adjType, setAdjType] = useState<'increase' | 'decrease' | 'set_exact'>('increase');
+  const [adjAmount, setAdjAmount] = useState('');
+  const [adjTargetBalance, setAdjTargetBalance] = useState('');
+  const [adjReason, setAdjReason] = useState('');
+  const [adjDate, setAdjDate] = useState(new Date().toISOString().split('T')[0]);
+  const [adjRef, setAdjRef] = useState('');
+  const [adjNotes, setAdjNotes] = useState('');
+  const [adjSaving, setAdjSaving] = useState(false);
+
   const fetchAccounts = useCallback(async () => {
     if (!isLoaded) return;
     setLoading(true);
@@ -282,6 +293,39 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
       if (selectedAccId) await fetchTxns(selectedAccId);
     } catch (e: any) { setError(e.message); }
     setIeSaving(false);
+  };
+
+  const handleAdjustment = async () => {
+    if (!adjAccountId) { setError('Select an account'); return; }
+    if (adjType === 'set_exact') {
+      const bal = parseFloat(adjTargetBalance);
+      if (isNaN(bal)) { setError('Enter a valid target balance'); return; }
+    } else {
+      const amt = parseFloat(adjAmount);
+      if (isNaN(amt) || amt <= 0) { setError('Enter a valid amount'); return; }
+    }
+    if (!adjReason.trim()) { setError('Reason is required'); return; }
+    setAdjSaving(true); setError('');
+    try {
+      const r = await processAdjustment(slug, {
+        account_id: adjAccountId,
+        adjustment_type: adjType,
+        amount: adjType !== 'set_exact' ? parseFloat(adjAmount) : undefined,
+        target_balance: adjType === 'set_exact' ? parseFloat(adjTargetBalance) : undefined,
+        reason: adjReason.trim(),
+        reference_number: adjRef.trim() || null,
+        notes: adjNotes.trim() || null,
+        adjustment_date: adjDate,
+      });
+      if (!r.success) { setError(r.error); setAdjSaving(false); return; }
+      if (r.duplicate) { setError('Duplicate adjustment detected'); setAdjSaving(false); return; }
+      setSuccessMsg(`Adjustment of ${currencySymbol}${Number(r.amount).toFixed(2)} (${r.direction}) applied to account`);
+      setShowAdjustment(false);
+      setAdjAccountId(''); setAdjAmount(''); setAdjTargetBalance(''); setAdjReason(''); setAdjRef(''); setAdjNotes('');
+      await Promise.all([fetchAccounts(), fetchRecentTxns()]);
+      if (selectedAccId) await fetchTxns(selectedAccId);
+    } catch (e: any) { setError(e.message); }
+    setAdjSaving(false);
   };
 
   if (!isLoaded) {
@@ -615,11 +659,10 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
               <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Actions</h3>
                 <div className="grid grid-cols-2 gap-2">
-                  {canManage && <ActionButton label="Add Account" onClick={() => {}} icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>} />}
                   {canTransfer && <ActionButton label="Transfer Money" onClick={() => { setTfFrom(''); setTfTo(''); setTfAmount(''); setTfRef(''); setTfDesc(''); setError(''); setShowTransfer(true); }} icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>} />}
                   {canManage && <ActionButton label="Add Income" onClick={() => { setIeType('income'); setIeAccountId(''); setIeAmount(''); setIeDesc(''); setError(''); setShowIncome(true); }} icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>} />}
                   {canManage && <ActionButton label="Add Expense" onClick={() => { setIeType('expense'); setIeAccountId(''); setIeAmount(''); setIeDesc(''); setError(''); setShowIncome(true); }} icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>} />}
-                  {canAdjust && <ActionButton label="Adjustment" onClick={() => {}} icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>} />}
+                  {canAdjust && <ActionButton label="Adjustment" onClick={() => { setAdjAccountId(''); setAdjType('increase'); setAdjAmount(''); setAdjTargetBalance(''); setAdjReason(''); setAdjDate(new Date().toISOString().split('T')[0]); setAdjRef(''); setAdjNotes(''); setError(''); setShowAdjustment(true); }} icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>} />}
                 </div>
               </div>
 
@@ -671,11 +714,10 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
             <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
               <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Actions</h3>
               <div className="grid grid-cols-2 gap-2">
-                {canManage && <ActionButton label="Add Account" onClick={() => {}} icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>} />}
                 {canTransfer && <ActionButton label="Transfer" onClick={() => { setTfFrom(''); setTfTo(''); setTfAmount(''); setTfRef(''); setTfDesc(''); setError(''); setShowTransfer(true); }} icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>} />}
                 {canManage && <ActionButton label="Add Income" onClick={() => { setIeType('income'); setIeAccountId(''); setIeAmount(''); setIeDesc(''); setError(''); setShowIncome(true); }} icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>} />}
                 {canManage && <ActionButton label="Add Expense" onClick={() => { setIeType('expense'); setIeAccountId(''); setIeAmount(''); setIeDesc(''); setError(''); setShowIncome(true); }} icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>} />}
-                {canAdjust && <ActionButton label="Adjustment" onClick={() => {}} icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>} />}
+                {canAdjust && <ActionButton label="Adjustment" onClick={() => { setAdjAccountId(''); setAdjType('increase'); setAdjAmount(''); setAdjTargetBalance(''); setAdjReason(''); setAdjDate(new Date().toISOString().split('T')[0]); setAdjRef(''); setAdjNotes(''); setError(''); setShowAdjustment(true); }} icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>} />}
               </div>
             </div>
 
@@ -774,6 +816,73 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
           <button onClick={() => setShowIncome(false)} className="flex-1 px-4 py-2.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 min-h-[44px]">Cancel</button>
           <button onClick={handleIncomeExpense} disabled={ieSaving} className="flex-1 px-4 py-2.5 text-sm rounded-lg text-white font-medium min-h-[44px] disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>
             {ieSaving ? 'Saving...' : (ieType === 'income' ? 'Add Income' : 'Add Expense')}
+          </button>
+        </div>
+      </Modal>
+
+      {/* Adjustment Modal */}
+      <Modal open={showAdjustment} onClose={() => setShowAdjustment(false)} title="Account Adjustment">
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Account</label>
+            <select value={adjAccountId} onChange={(e) => setAdjAccountId(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm"><option value="">— Select —</option>
+              {accounts.filter((a) => a.is_active).map((a) => (
+                <option key={a.id} value={a.id}>{a.name} ({currencySymbol}{Number(a.current_balance).toFixed(2)})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Adjustment Type</label>
+            <div className="grid grid-cols-3 gap-2">
+              {(['increase', 'decrease', 'set_exact'] as const).map((t) => (
+                <button key={t} onClick={() => setAdjType(t)}
+                  className={`px-3 py-2 text-xs font-medium rounded-lg border min-h-[44px] capitalize ${
+                    adjType === t ? 'text-white border-transparent' : 'text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}
+                  style={adjType === t ? { backgroundColor: theme.primaryColor, borderColor: theme.primaryColor } : {}}
+                >{t.replace('_', ' ')}</button>
+              ))}
+            </div>
+          </div>
+          {adjType !== 'set_exact' ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Amount ({currencySymbol})</label>
+              <input type="number" step="0.01" min="0" inputMode="decimal" value={adjAmount} onChange={(e) => setAdjAmount(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm" placeholder="0.00" />
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Target Balance ({currencySymbol})</label>
+              <input type="number" step="0.01" inputMode="decimal" value={adjTargetBalance} onChange={(e) => setAdjTargetBalance(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm" placeholder="0.00" />
+            </div>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Reason <span className="text-red-400">*</span></label>
+            <input type="text" value={adjReason} onChange={(e) => setAdjReason(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm" placeholder="e.g. Cash count discrepancy correction" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Date</label>
+            <input type="date" value={adjDate} onChange={(e) => setAdjDate(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Reference (optional)</label>
+            <input type="text" value={adjRef} onChange={(e) => setAdjRef(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm" placeholder="e.g. ADJ-001" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Notes (optional)</label>
+            <textarea value={adjNotes} onChange={(e) => setAdjNotes(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm" rows={2} placeholder="Additional notes..." />
+          </div>
+          {error && <p className="text-red-600 text-sm">{error}</p>}
+        </div>
+        <div className="flex gap-3 mt-6">
+          <button onClick={() => setShowAdjustment(false)} className="flex-1 px-4 py-2.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 min-h-[44px]">Cancel</button>
+          <button onClick={handleAdjustment} disabled={adjSaving} className="flex-1 px-4 py-2.5 text-sm rounded-lg text-white font-medium min-h-[44px] disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>
+            {adjSaving ? 'Applying...' : 'Apply Adjustment'}
           </button>
         </div>
       </Modal>
