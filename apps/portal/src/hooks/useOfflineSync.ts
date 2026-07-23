@@ -44,6 +44,7 @@ export default function useOfflineSync(slug: string, authReady: boolean): void {
             tax_rate: Number(s.tax_rate),
             currency_symbol: s.currency_symbol,
             receipt_footer_text: s.receipt_footer_text,
+            enabled_modules: s.enabled_modules,
           });
         }
       } catch {

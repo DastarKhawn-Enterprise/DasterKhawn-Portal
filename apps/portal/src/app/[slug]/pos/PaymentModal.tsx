@@ -23,6 +23,7 @@ interface Props {
   orderType?: string;
   items: { name: string; quantity: number; price: number }[];
   taxAmount?: number;
+  serviceChargeAmount?: number;
   brandName: string;
   onClose: () => void;
   onSuccess: (result: any) => void;
@@ -74,7 +75,7 @@ function matchMethod(accMethod: string, target: string): boolean {
 
 export default function PaymentModal({
   slug, theme, currencySymbol, orderId, orderNumber, orderTotal, amountPaid, amountDue,
-  customerId, customerName, customerPhone, orderType, items, taxAmount,
+  customerId, customerName, customerPhone, orderType, items, taxAmount, serviceChargeAmount,
   brandName, onClose, onSuccess,
 }: Props) {
   const { user } = useUser();
@@ -209,7 +210,7 @@ export default function PaymentModal({
       <ReceiptView
         data={{
           orderNumber, status: 'paid', total: orderTotal, createdAt: new Date().toISOString(),
-          orderType, customerName, customerPhone, items, taxAmount,
+          orderType, customerName, customerPhone, items, taxAmount, serviceChargeAmount,
         }}
         brandName={brandName}
         theme={theme}

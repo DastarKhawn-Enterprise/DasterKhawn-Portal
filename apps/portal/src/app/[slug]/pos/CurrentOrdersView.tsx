@@ -28,6 +28,7 @@ interface Order {
   status: string;
   total: number;
   tax_amount?: number;
+  service_charge_amount?: number;
   created_at: string;
   order_type?: string;
   customer_name?: string | null;
@@ -130,7 +131,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
   const [editCart, setEditCart] = useState<CartItem[]>([]);
 
   // Settings (tax, currency, footer)
-  const [settings, setSettings] = useState<{ taxEnabled: boolean; taxRate: number; currencySymbol: string; footerText: string } | null>(null);
+  const [settings, setSettings] = useState<{ taxEnabled: boolean; taxRate: number; currencySymbol: string; footerText: string; serviceChargeEnabled: boolean; serviceChargeRate: number; serviceChargeDineIn: boolean; serviceChargeTakeaway: boolean; serviceChargeDelivery: boolean; serviceChargeDriveThru: boolean; taxServiceCharge: boolean } | null>(null);
 
   // Menu search
   const [menuSearch, setMenuSearch] = useState('');
@@ -201,23 +202,24 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
   useEffect(() => {
     if (!authReady) return;
     let cancelled = false;
-    supa(slug, { table: 'settings', select: 'tax_enabled, tax_rate, currency_symbol, receipt_footer_text', limit: 1 })
+    supa(slug, { table: 'settings', select: 'tax_enabled, tax_rate, currency_symbol, receipt_footer_text, enabled_modules', limit: 1 })
       .then(async (r) => {
         if (cancelled) return;
         if (r.ok && r.data?.[0]) {
           const d = r.data[0];
-          setSettings({ taxEnabled: d.tax_enabled, taxRate: Number(d.tax_rate), currencySymbol: d.currency_symbol, footerText: d.receipt_footer_text });
+          const rest = d.enabled_modules?.restaurant || {};
+          setSettings({ taxEnabled: d.tax_enabled, taxRate: Number(d.tax_rate), currencySymbol: d.currency_symbol, footerText: d.receipt_footer_text, serviceChargeEnabled: !!rest.service_charge_enabled, serviceChargeRate: Number(rest.service_charge_rate) || 0, serviceChargeDineIn: rest.service_charge_dine_in !== false, serviceChargeTakeaway: !!rest.service_charge_takeaway, serviceChargeDelivery: !!rest.service_charge_delivery, serviceChargeDriveThru: !!rest.service_charge_drive_thru, taxServiceCharge: !!rest.tax_service_charge });
           return;
         }
         if (!navigator.onLine) {
           const cached = await getCachedSettings(slug);
-          if (!cancelled && cached) setSettings({ taxEnabled: cached.tax_enabled, taxRate: cached.tax_rate, currencySymbol: cached.currency_symbol, footerText: cached.receipt_footer_text });
+          if (!cancelled && cached) { const cr = cached.enabled_modules?.restaurant || {}; setSettings({ taxEnabled: cached.tax_enabled, taxRate: Number(cached.tax_rate), currencySymbol: cached.currency_symbol, footerText: cached.receipt_footer_text, serviceChargeEnabled: !!cr.service_charge_enabled, serviceChargeRate: Number(cr.service_charge_rate) || 0, serviceChargeDineIn: cr.service_charge_dine_in !== false, serviceChargeTakeaway: !!cr.service_charge_takeaway, serviceChargeDelivery: !!cr.service_charge_delivery, serviceChargeDriveThru: !!cr.service_charge_drive_thru, taxServiceCharge: !!cr.tax_service_charge }); }
         }
       })
       .catch(async () => {
         if (!cancelled && !navigator.onLine) {
           const cached = await getCachedSettings(slug);
-          if (cached) setSettings({ taxEnabled: cached.tax_enabled, taxRate: cached.tax_rate, currencySymbol: cached.currency_symbol, footerText: cached.receipt_footer_text });
+          if (cached) { const cr = cached.enabled_modules?.restaurant || {}; setSettings({ taxEnabled: cached.tax_enabled, taxRate: Number(cached.tax_rate), currencySymbol: cached.currency_symbol, footerText: cached.receipt_footer_text, serviceChargeEnabled: !!cr.service_charge_enabled, serviceChargeRate: Number(cr.service_charge_rate) || 0, serviceChargeDineIn: cr.service_charge_dine_in !== false, serviceChargeTakeaway: !!cr.service_charge_takeaway, serviceChargeDelivery: !!cr.service_charge_delivery, serviceChargeDriveThru: !!cr.service_charge_drive_thru, taxServiceCharge: !!cr.tax_service_charge }); }
         }
       });
     return () => { cancelled = true; };
@@ -347,11 +349,22 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
     setCheckingOut(true);
     try {
       const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const isDinIn = effectiveOrderType === 'dine_in';
+      const isTakeaway = effectiveOrderType === 'takeaway';
+      const isDelivery = effectiveOrderType === 'delivery';
+      const isDriveThru = effectiveOrderType === 'drive_thru';
+      let serviceCharge = 0;
+      if (settings?.serviceChargeEnabled && settings.serviceChargeRate > 0) {
+        if ((isDinIn && settings.serviceChargeDineIn) || (isTakeaway && settings.serviceChargeTakeaway) || (isDelivery && settings.serviceChargeDelivery) || (isDriveThru && settings.serviceChargeDriveThru)) {
+          serviceCharge = subtotal * (settings.serviceChargeRate / 100);
+        }
+      }
+      const taxableAmount = settings?.taxServiceCharge ? subtotal + serviceCharge : subtotal;
       let taxAmount = 0;
       if (settings?.taxEnabled && settings.taxRate > 0) {
-        taxAmount = subtotal * (settings.taxRate / 100);
+        taxAmount = taxableAmount * (settings.taxRate / 100);
       }
-      const total = subtotal + taxAmount;
+      const total = subtotal + serviceCharge + taxAmount;
 
       let pickupTime: string | null = null;
       if (!pickupASAP && pickupScheduledTime && effectiveOrderType === 'takeaway') {
@@ -395,6 +408,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
         status: 'pending',
         total,
         tax_amount: taxAmount,
+        service_charge_amount: serviceCharge,
         created_at: order.created_at,
         order_type: effectiveOrderType,
         customer_id: selectedCustomer?.id || null,
@@ -497,11 +511,23 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
     setUpdating(selectedId);
     try {
       const subtotal = editCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const orderTypeEdit = selectedOrder?.order_type || effectiveOrderType;
+      const isDinIn = orderTypeEdit === 'dine_in';
+      const isTakeaway = orderTypeEdit === 'takeaway';
+      const isDelivery = orderTypeEdit === 'delivery';
+      const isDriveThru = orderTypeEdit === 'drive_thru';
+      let serviceCharge = 0;
+      if (settings?.serviceChargeEnabled && settings.serviceChargeRate > 0) {
+        if ((isDinIn && settings.serviceChargeDineIn) || (isTakeaway && settings.serviceChargeTakeaway) || (isDelivery && settings.serviceChargeDelivery) || (isDriveThru && settings.serviceChargeDriveThru)) {
+          serviceCharge = subtotal * (settings.serviceChargeRate / 100);
+        }
+      }
+      const taxableAmount = settings?.taxServiceCharge ? subtotal + serviceCharge : subtotal;
       let taxAmount = 0;
       if (settings?.taxEnabled && settings.taxRate > 0) {
-        taxAmount = subtotal * (settings.taxRate / 100);
+        taxAmount = taxableAmount * (settings.taxRate / 100);
       }
-      const total = subtotal + taxAmount;
+      const total = subtotal + serviceCharge + taxAmount;
 
       await supa(slug, { table: 'order_items', method: 'delete', eq: ['order_id', selectedId] });
       if (editCart.length > 0) {
@@ -518,14 +544,14 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
       setOrders((prev) =>
         prev.map((o) =>
           o.id === selectedId
-            ? { ...o, total, tax_amount: taxAmount, order_items: editCart.map((ci) => ({ menu_item_id: ci.id, quantity: ci.quantity, price_at_order: ci.price, menu_items: { name: ci.name } })) }
+            ? { ...o, total, tax_amount: taxAmount, service_charge_amount: serviceCharge, order_items: editCart.map((ci) => ({ menu_item_id: ci.id, quantity: ci.quantity, price_at_order: ci.price, menu_items: { name: ci.name } })) }
             : o
         )
       );
       setEditingOrder(false);
     } catch (e) { console.error('[Edit Order]', e); }
     setUpdating(null);
-  }, [selectedOrder, selectedId, editCart, settings, slug]);
+  }, [selectedOrder, selectedId, editCart, settings, slug, effectiveOrderType]);
 
   const handleCancelEdit = useCallback(() => {
     setEditingOrder(false);
@@ -1325,6 +1351,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
           price: Number(oi.price_at_order),
         }))}
         taxAmount={Number(paymentOrder.tax_amount ?? 0)}
+        serviceChargeAmount={Number(paymentOrder.service_charge_amount ?? 0)}
         brandName={brandName}
         onClose={() => setPaymentOrder(null)}
         onSuccess={handlePaymentSuccess}
@@ -1337,6 +1364,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
           status: receiptOrder.status,
           total: Number(receiptOrder.total),
           taxAmount: Number(receiptOrder.tax_amount ?? 0),
+          serviceChargeAmount: Number(receiptOrder.service_charge_amount ?? 0),
           createdAt: receiptOrder.created_at,
           orderType: receiptOrder.order_type,
           customerName: receiptOrder.customer_name,

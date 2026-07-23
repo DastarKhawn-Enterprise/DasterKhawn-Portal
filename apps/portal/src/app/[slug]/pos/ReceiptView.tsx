@@ -21,6 +21,7 @@ interface ReceiptData {
   tableNumber?: string | null;
   items: ReceiptItem[];
   taxAmount?: number;
+  serviceChargeAmount?: number;
 }
 
 interface Props {
@@ -171,6 +172,12 @@ function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData
           <span>Tax</span>
           <span>{curr}{tax.toFixed(2)}</span>
         </div>
+        {(data.serviceChargeAmount ?? 0) > 0 && (
+          <div className="flex justify-between text-gray-500">
+            <span>Service Charge</span>
+            <span>{curr}{(data.serviceChargeAmount ?? 0).toFixed(2)}</span>
+          </div>
+        )}
         <div className="flex justify-between font-bold text-sm border-t border-gray-300 pt-1">
           <span>Total</span>
           <span>{curr}{data.total.toFixed(2)}</span>

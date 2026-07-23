@@ -16,6 +16,7 @@ export interface OfflineSetting {
   tax_rate: number;
   currency_symbol: string;
   receipt_footer_text: string;
+  enabled_modules?: Record<string, any>;
 }
 
 class OfflineDb extends Dexie {
