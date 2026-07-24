@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "lint": "next lint",
-    "clean": "rm -rf .next"
+    "clean": "rm -rf .next",
+    "seed:test-brand-2": "node scripts/seed-test-brand-2.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^5.0.0",
