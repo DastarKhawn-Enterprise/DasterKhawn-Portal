@@ -11,7 +11,7 @@ import { processPayments, type PaymentInput } from './payment-actions';
 import ReceiptView from './ReceiptView';
 import PaymentMethodLogo from './PaymentMethodLogo';
 
-interface MenuItem { id: string; name: string; description?: string; price: number; category?: string; available?: boolean; image_url?: string; }
+interface MenuItem { id: string; name: string; description?: string; price: number; category?: string; available?: boolean; }
 interface CartItem { id: string; name: string; price: number; quantity: number; image?: string; notes?: string; }
 interface TableRecord { id: string; table_number: string; status: string; }
 interface Customer { id: string; name: string; phone: string | null; total_orders?: number; total_spent?: number; loyalty_points?: number; credit_balance?: number; }
@@ -47,16 +47,13 @@ function NumericKeypad({ value, onChange, onClear }: { value: string; onChange: 
 }
 
 function MenuCard({ item, onAdd, isPopular }: { item: MenuItem; onAdd: (item: MenuItem) => void; isPopular?: boolean }) {
-  const [imgErr, setImgErr] = useState(false);
   const isAvailable = item.available !== false;
   return (
     <button onClick={() => isAvailable && onAdd(item)} disabled={!isAvailable}
       className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-amber-300 transition-all text-left w-full disabled:opacity-50 disabled:cursor-not-allowed flex flex-col group"
     >
       <div className="aspect-[4/3] bg-gray-100 relative overflow-hidden">
-        {item.image_url && !imgErr ? (
-          <img src={item.image_url} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onError={() => setImgErr(true)} loading="lazy" />
-        ) : (<div className="w-full h-full flex items-center justify-center text-gray-300 text-3xl">&#x1F372;</div>)}
+        <div className="w-full h-full flex items-center justify-center text-gray-300 text-3xl">&#x1F372;</div>
         {!isAvailable && <div className="absolute inset-0 bg-black/40 flex items-center justify-center"><span className="bg-white text-gray-800 text-[10px] px-2 py-0.5 rounded font-bold uppercase">Out of Stock</span></div>}
         {isPopular && <div className="absolute top-1.5 left-1.5 bg-amber-500 text-white text-[8px] px-1.5 py-0.5 rounded font-bold uppercase shadow">Popular</div>}
       </div>
@@ -135,7 +132,7 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
   const currencySymbol = settings?.currencySymbol || 'Rs.';
 
   useEffect(() => { if (isLoaded && isSignedIn) setAuthReady(true); }, [isLoaded, isSignedIn]);
-  useEffect(() => { if (!authReady) return; let c = false; supa(slug, { table: 'menu_items', select: 'id, name, description, price, category, available, image_url', order: 'name', limit: 500 }).then((r) => { if (!c && r.ok) setMenuItems(r.data ?? []); }).catch(() => {}); return () => { c = true; }; }, [authReady, slug]);
+  useEffect(() => { if (!authReady) return; let c = false; supa(slug, { table: 'menu_items', select: 'id, name, description, price, category, available', order: 'name', limit: 500 }).then((r) => { if (!c && r.ok) { setMenuItems(r.data ?? []); } else if (!c && !r.ok) { console.error('[NewOrder] menu fetch error:', r.error); } }).catch((e) => { console.error('[NewOrder] menu fetch exception:', e); }); return () => { c = true; }; }, [authReady, slug]);
   useEffect(() => { if (!authReady) return; let c = false; supa(slug, { table: 'tables', select: 'id, table_number, status', order: 'table_number' }).then((r) => { if (!c && r.ok) setTables(r.data ?? []); }).catch(() => {}); return () => { c = true; }; }, [authReady, slug]);
   useEffect(() => { if (!authReady) return; let c = false; supa(slug, { table: 'settings', select: 'tax_enabled, tax_rate, currency_symbol, receipt_footer_text, enabled_modules', limit: 1 }).then((r) => { if (!c && r.ok && r.data?.[0]) { const d = r.data[0]; const rest = d.enabled_modules?.restaurant || {}; setSettings({ taxEnabled: d.tax_enabled, taxRate: Number(d.tax_rate), currencySymbol: d.currency_symbol, footerText: d.receipt_footer_text, serviceChargeEnabled: !!rest.service_charge_enabled, serviceChargeRate: Number(rest.service_charge_rate) || 0, serviceChargeDineIn: rest.service_charge_dine_in !== false, serviceChargeTakeaway: !!rest.service_charge_takeaway, serviceChargeDelivery: !!rest.service_charge_delivery, serviceChargeDriveThru: !!rest.service_charge_drive_thru, taxServiceCharge: !!rest.tax_service_charge }); } }).catch(() => {}); return () => { c = true; }; }, [authReady, slug]);
 
@@ -145,7 +142,7 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
 
   useEffect(() => { if (!currentOrderId || paymentView === 'selection') return; const load = async () => { setLoadingAccounts(true); const r = await supa(slug, { table: 'accounts', select: 'id,name,account_type,payment_method,current_balance', eq: ['is_active', true], order: 'name' }); if (r.ok && r.data) setAccounts(r.data as Account[]); setLoadingAccounts(false); }; load(); }, [slug, currentOrderId, paymentView]);
 
-  const handleAddToCart = useCallback((item: MenuItem) => { setCart((prev) => { const existing = prev.find((ci) => ci.id === item.id); if (existing) return prev.map((ci) => (ci.id === item.id ? { ...ci, quantity: ci.quantity + 1 } : ci)); return [...prev, { id: item.id, name: item.name, price: item.price, quantity: 1, image: item.image_url }]; }); }, []);
+  const handleAddToCart = useCallback((item: MenuItem) => { setCart((prev) => { const existing = prev.find((ci) => ci.id === item.id); if (existing) return prev.map((ci) => (ci.id === item.id ? { ...ci, quantity: ci.quantity + 1 } : ci)); return [...prev, { id: item.id, name: item.name, price: item.price, quantity: 1 }]; }); }, []);
   const handleUpdateQuantity = useCallback((itemId: string, qty: number) => { if (qty <= 0) { setCart((prev) => prev.filter((ci) => ci.id !== itemId)); return; } setCart((prev) => prev.map((ci) => (ci.id === itemId ? { ...ci, quantity: qty } : ci))); }, []);
   const handleRemoveItem = useCallback((itemId: string) => { setCart((prev) => prev.filter((ci) => ci.id !== itemId)); }, []);
 
@@ -297,6 +294,14 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
           </div>
         </div>
       )}
+
+      {/* Page Heading */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 shrink-0">
+        <div className="flex items-center gap-2 text-xs text-gray-400 mb-0.5">
+          <span>POS</span><span>/</span><span className="text-gray-600 font-medium">New Order</span>
+        </div>
+        <h1 className="text-xl font-bold text-gray-800">New Order</h1>
+      </div>
 
       {/* Main 3-Column Layout */}
       <div className="flex-1 flex overflow-hidden">
