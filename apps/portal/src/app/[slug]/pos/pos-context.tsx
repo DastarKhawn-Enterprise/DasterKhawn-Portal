@@ -12,6 +12,8 @@ export interface POSContextValue {
   enabledModules: Record<string, boolean>;
   currencySymbol: string;
   hiddenViews: string[];
+  pageTitle: string;
+  setPageTitle: (title: string) => void;
 }
 
 const POSContext = createContext<POSContextValue | null>(null);

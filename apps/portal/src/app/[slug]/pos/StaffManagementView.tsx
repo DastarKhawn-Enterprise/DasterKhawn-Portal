@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import {
   getStaffList, createStaffAccount, updateStaff, updateStaffPermissions,
@@ -121,6 +122,9 @@ export default function StaffManagementView({ slug }: Props) {
 
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+
+  const { setPageTitle } = usePOS();
+  useEffect(() => { setPageTitle('Staff Management'); }, [setPageTitle]);
 
   // Debounce search
   useEffect(() => {
@@ -278,9 +282,7 @@ export default function StaffManagementView({ slug }: Props) {
       <div className="flex flex-col lg:flex-row flex-1">
         {/* Main area */}
         <div className="flex-1 min-w-0 p-4 md:p-6 pb-20 lg:pb-6">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h1 className="text-xl md:text-2xl font-bold text-gray-800">Staff Management</h1>
+          <div className="flex items-center justify-end gap-3 mb-4">
             <div className="flex items-center gap-2">
               <button onClick={handleExport} className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Export CSV</button>
               {isOwnerOrSuper && (

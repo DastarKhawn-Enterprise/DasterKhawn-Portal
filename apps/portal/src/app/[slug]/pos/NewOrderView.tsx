@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth, useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { supa } from './supa-query';
+import { usePOS } from './pos-context';
 import { deductInventorySupa } from './inventory-utils';
 import { searchCustomersSupa } from './customer-utils';
 import { processPayments, type PaymentInput } from './payment-actions';
@@ -140,6 +141,9 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
   const searchRef = useRef<HTMLInputElement>(null);
   const creatingOrderRef = useRef(false);
   const currencySymbol = settings?.currencySymbol || 'Rs.';
+
+  const { setPageTitle } = usePOS();
+  useEffect(() => { setPageTitle('New Order'); }, [setPageTitle]);
 
   useEffect(() => { if (isLoaded && isSignedIn) setAuthReady(true); }, [isLoaded, isSignedIn]);
   useEffect(() => { if (!authReady) return; let c = false; supa(slug, { table: 'menu_items', select: 'id, name, description, price, category, available', order: 'name', limit: 500 }).then((r) => { if (!c && r.ok) { setMenuItems(r.data ?? []); } else if (!c && !r.ok) { console.error('[NewOrder] menu fetch error:', r.error); } }).catch((e) => { console.error('[NewOrder] menu fetch exception:', e); }); return () => { c = true; }; }, [authReady, slug]);
@@ -396,14 +400,6 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
           </div>
         </div>
       )}
-
-      {/* Page Heading */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 shrink-0">
-        <div className="flex items-center gap-2 text-xs text-gray-400 mb-0.5">
-          <span>POS</span><span>/</span><span className="text-gray-600 font-medium">New Order</span>
-        </div>
-        <h1 className="text-xl font-bold text-gray-800">New Order</h1>
-      </div>
 
       {/* Main 3-Column Layout */}
       <div className="flex-1 flex overflow-hidden">

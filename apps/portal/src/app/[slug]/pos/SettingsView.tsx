@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { hasPermission } from './permissions';
@@ -317,6 +318,8 @@ export default function SettingsView({ slug, theme }: Props) {
     setLoading(false);
   }, [slug, initBranch]);
 
+  const { setPageTitle } = usePOS();
+  useEffect(() => { setPageTitle('Settings'); }, [setPageTitle]);
   useEffect(() => { if (isLoaded) load(); }, [isLoaded, load]);
 
   useEffect(() => {
@@ -597,14 +600,8 @@ export default function SettingsView({ slug, theme }: Props) {
   return (
     <div className="flex-1 flex flex-col bg-gray-50 min-h-dvh min-h-screen">
       {/* ── Header ── */}
-      <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-3 lg:px-4 py-2 flex items-center justify-between shrink-0 gap-2">
+      <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-3 lg:px-4 py-2 flex items-center justify-end shrink-0 gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="text-[11px] text-gray-400 whitespace-nowrap">
-            <span>Settings</span>
-            <span className="mx-1">/</span>
-            <span className="text-gray-700 font-medium">Restaurant Settings</span>
-          </div>
-          <div className="h-4 w-px bg-gray-200 mx-1 hidden sm:block" />
           <select
             value={defaultBranch?.id || ''}
             onChange={(e) => {

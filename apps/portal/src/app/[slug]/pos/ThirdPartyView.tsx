@@ -1,4 +1,12 @@
+'use client';
+
+import { useEffect } from 'react';
+import { usePOS } from './pos-context';
+
 export default function ThirdPartyView() {
+  const { setPageTitle } = usePOS();
+  useEffect(() => { setPageTitle('Third Party Integrations'); }, [setPageTitle]);
+
   const platforms = [
     { name: 'Foodpanda', initial: 'F', color: '#D70F64' },
     { name: 'Uber Eats', initial: 'U', color: '#06C167' },
@@ -9,11 +17,7 @@ export default function ThirdPartyView() {
   return (
     <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">Third Party Integrations</h1>
-        <p className="text-sm text-gray-500 mb-8 max-w-2xl">
-          Once connected, orders from these platforms will automatically appear in your
-          {' '}Current Orders and Kitchen views, synced in real time. No manual entry needed.
-        </p>
+
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {platforms.map((p) => (

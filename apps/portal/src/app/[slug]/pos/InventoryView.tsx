@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { hasPermission } from './permissions';
@@ -60,6 +61,8 @@ export default function InventoryView({ slug, theme }: Props) {
     setLoading(false);
   }, [isLoaded, slug]);
 
+  const { setPageTitle } = usePOS();
+  useEffect(() => { setPageTitle('Inventory'); }, [setPageTitle]);
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
   const openAddForm = () => {
@@ -163,8 +166,7 @@ export default function InventoryView({ slug, theme }: Props) {
   return (
     <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-gray-800">Inventory</h1>
+        <div className="flex items-center justify-end mb-4">
           {canEdit && (
             <button onClick={openAddForm} className="px-4 py-2 text-white rounded text-sm font-medium transition-colors" style={{ backgroundColor: theme.primaryColor }}>
               + Add Item

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { hasPermission } from './permissions';
@@ -93,6 +94,8 @@ export default function ReservationsView({ slug, theme }: Props) {
     setLoading(false);
   }, [isLoaded, slug]);
 
+  const { setPageTitle } = usePOS();
+  useEffect(() => { setPageTitle('Reservations'); }, [setPageTitle]);
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const openAddForm = () => {
@@ -181,8 +184,7 @@ export default function ReservationsView({ slug, theme }: Props) {
   return (
     <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
       <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">Reservations</h1>
+        <div className="flex items-center justify-end mb-6">
           {canEdit && <button onClick={openAddForm} className="px-4 py-2 text-white rounded text-sm font-medium transition-colors" style={{ backgroundColor: theme.primaryColor }}>+ Add Reservation</button>}
         </div>
 

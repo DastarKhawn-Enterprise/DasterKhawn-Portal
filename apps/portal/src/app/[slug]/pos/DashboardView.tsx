@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { usePOS } from './pos-context';
 import { useAuth } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
@@ -100,6 +101,8 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
     setAuthReady(true);
   }, [isLoaded, isSignedIn]);
 
+  const { setPageTitle } = usePOS();
+  useEffect(() => { setPageTitle('Dashboard'); }, [setPageTitle]);
   useEffect(() => {
     if (!authReady) return;
     fetchAll();
@@ -129,8 +132,7 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
   return (
     <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
       <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider">Dashboard</h2>
+        <div className="flex items-center justify-end mb-5">
           <button onClick={fetchAll} disabled={fetchingRef.current} className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50">Refresh</button>
         </div>
 

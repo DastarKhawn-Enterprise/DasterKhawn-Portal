@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { usePOS } from './pos-context';
 import { useAuth } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
 import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
@@ -130,6 +131,8 @@ export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, 
   }, [slug]);
 
   // Initial tables load + Realtime notification (best-effort via anon key) + polling fallback
+  const { setPageTitle } = usePOS();
+  useEffect(() => { setPageTitle('Dine In'); }, [setPageTitle]);
   useEffect(() => {
     if (!authReady) return;
     fetchTables();
@@ -461,7 +464,6 @@ export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, 
     <><div className="flex-1 flex overflow-hidden min-w-0">
       {/* ── FLOOR PLAN ── */}
       <div className={`${mobilePanelOpen ? 'hidden md:flex' : 'flex'} flex-col flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6`}>
-        <h2 className="text-lg font-bold text-gray-700 mb-4 uppercase tracking-wider flex-shrink-0">Floor Plan</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5 auto-rows-fr">
           {tables.map((table) => (
             <button

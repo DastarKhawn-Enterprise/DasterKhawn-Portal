@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { hasPermission } from './permissions';
@@ -213,6 +214,8 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
     } catch (e) { /* silent */ }
   }, [slug]);
 
+  const { setPageTitle } = usePOS();
+  useEffect(() => { setPageTitle('Accounts'); }, [setPageTitle]);
   useEffect(() => { fetchAccounts(); fetchRecentTxns(); }, [fetchAccounts, fetchRecentTxns]);
   useEffect(() => { fetchTxns(selectedAccId); }, [fetchTxns, selectedAccId]);
 
@@ -341,7 +344,6 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
         {/* ── HEADER ── */}
         <div className="mb-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Accounts</h1>
             <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}
               className="self-start sm:self-auto px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white w-full sm:w-auto max-w-[180px]" />
           </div>

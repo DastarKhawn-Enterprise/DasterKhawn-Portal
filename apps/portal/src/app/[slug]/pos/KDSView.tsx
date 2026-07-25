@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { usePOS } from './pos-context';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { fetchKDSOrders, updateKDSOrderStatus } from './orders-actions';
 
@@ -539,6 +540,9 @@ export default function KDSView({ slug, theme, brandName }: Props) {
     setLastUpdated(Date.now());
   }, [slug, activeTab, soundEnabled]);
 
+  const { setPageTitle } = usePOS();
+  useEffect(() => { setPageTitle('Kitchen Display'); }, [setPageTitle]);
+
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
@@ -594,13 +598,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
       </audio>
 
       {/* Top Bar */}
-      <div className="bg-white border-b border-gray-200 px-4 md:px-6 py-3 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 mr-2">
-          <span className="text-lg md:text-xl" role="img" aria-label="kitchen">&#x1F373;</span>
-          <h1 className="text-base md:text-lg font-bold text-gray-900">Kitchen Display</h1>
-          {brandName && <span className="text-xs text-gray-400 hidden sm:inline">| {brandName}</span>}
-        </div>
-
+      <div className="bg-white border-b border-gray-200 px-4 md:px-6 py-3 flex flex-wrap items-center">
         <div className="flex-1 min-w-[140px] max-w-xs">
           <input
             type="text"

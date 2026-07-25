@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { hasPermission } from './permissions';
@@ -103,6 +104,9 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
     setLoading(false);
   }, [slug, dr, filters]);
 
+  const { setPageTitle } = usePOS();
+  useEffect(() => { setPageTitle('Reports'); }, [setPageTitle]);
+
   useEffect(() => {
     if (isLoaded && canView) fetchTab(tab);
   }, [isLoaded, canView, tab, fetchTab]);
@@ -162,8 +166,7 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
     <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 print:bg-white">
       <div className="p-3 md:p-4 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 print:hidden">
-          <h1 className="text-lg md:text-xl font-bold text-gray-800">Reports</h1>
+        <div className="flex items-center justify-end gap-2 mb-3 print:hidden">
           <div className="flex items-center gap-1.5 flex-wrap">
             {['today', 'week', 'month', 'custom'].map((p) => (
               <button key={p} onClick={() => setPreset(p)}

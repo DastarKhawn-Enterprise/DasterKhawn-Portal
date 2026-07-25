@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { usePOS } from './pos-context';
 import { useRouter } from 'next/navigation';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { createClient } from '@supabase/supabase-js';
@@ -93,6 +94,9 @@ const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, create
 export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, theme, brandName, viewConfig }: Props) {
   const router = useRouter();
   const cfg: ViewConfig = { title: 'Active Orders', orderType: null, showCustomerFields: false, ...viewConfig };
+
+  const { setPageTitle } = usePOS();
+  useEffect(() => { setPageTitle(cfg.title); }, [setPageTitle, cfg.title]);
 
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
@@ -586,8 +590,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
       {!cfg.newOrderMode && (<>
       {/* ── LEFT PANEL: Order list ── */}
       <div className={`${pc('list', 'w-full md:w-72 flex-shrink-0 bg-white border-r border-gray-200 flex-col overflow-hidden')}`}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">{cfg.title}</h2>
+        <div className="flex items-center justify-end gap-1 px-4 py-3 border-b border-gray-200">
           <div className="flex items-center gap-1">
             <button onClick={fetchOrdersInitial} disabled={fetchingRef.current} className="text-xs px-2 py-1.5 rounded border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50">↻</button>
             <button

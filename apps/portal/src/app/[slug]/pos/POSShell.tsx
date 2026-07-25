@@ -62,6 +62,7 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [currencySymbol, setCurrencySymbol] = useState('Rs.');
+  const [pageTitle, setPageTitle] = useState('');
   const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
@@ -95,6 +96,8 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
     enabledModules,
     currencySymbol,
     hiddenViews,
+    pageTitle,
+    setPageTitle,
   };
 
   return (
@@ -109,6 +112,7 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
               ☰
             </button>
             <span className="text-lg font-bold">{brandName}</span>
+            {pageTitle && <><span className="text-gray-300 mx-1.5 text-sm">/</span><span className="text-sm font-medium text-gray-600 truncate max-w-[200px]">{pageTitle}</span></>}
             {(user?.publicMetadata as Record<string, any> | undefined)?.role === 'super_admin' && (
               <a
                 href="/dashboard"

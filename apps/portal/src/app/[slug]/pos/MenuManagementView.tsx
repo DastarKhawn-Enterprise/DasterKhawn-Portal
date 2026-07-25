@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { usePOS } from './pos-context';
 import { useAuth } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import type { MenuItemPayload } from './menu-actions';
@@ -81,6 +82,8 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
     setLoading(false);
   }, [slug]);
 
+  const { setPageTitle } = usePOS();
+  useEffect(() => { setPageTitle('Menu Management'); }, [setPageTitle]);
   useEffect(() => {
     if (!authReady) return;
     fetchItems();
@@ -185,9 +188,7 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
 
   return (
     <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider">Menu Management</h2>
+      <div className="flex items-center justify-end mb-6">
         {canEdit && (
           <button
             onClick={handleAdd}
