@@ -13,7 +13,7 @@ import ReceiptView from './ReceiptView';
 import PaymentMethodLogo from './PaymentMethodLogo';
 
 interface MenuItem { id: string; name: string; description?: string; price: number; category?: string; available?: boolean; }
-interface CartItem { id: string; name: string; price: number; quantity: number; image?: string; notes?: string; }
+interface CartItem { id: string; name: string; price: number; quantity: number; uid: string; image?: string; notes?: string; }
 interface TableRecord { id: string; table_number: string; status: string; }
 interface Customer { id: string; name: string; phone: string | null; total_orders?: number; total_spent?: number; loyalty_points?: number; credit_balance?: number; }
 interface Account { id: string; name: string; account_type: string; payment_method: string; current_balance: number; }
@@ -217,9 +217,9 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
     return () => window.removeEventListener('keydown', handler);
   }, [keypadValue]);
 
-  const handleAddToCart = useCallback((item: MenuItem) => { setCart((prev) => { const existing = prev.find((ci) => ci.id === item.id); if (existing) return prev.map((ci) => (ci.id === item.id ? { ...ci, quantity: ci.quantity + 1 } : ci)); return [...prev, { id: item.id, name: item.name, price: item.price, quantity: 1 }]; }); }, []);
+  const handleAddToCart = useCallback((item: MenuItem) => { setCart((prev) => { const existing = prev.find((ci) => ci.id === item.id); if (existing) return prev.map((ci) => (ci.id === item.id ? { ...ci, quantity: ci.quantity + 1 } : ci)); return [...prev, { id: item.id, name: item.name, price: item.price, quantity: 1, uid: genId() }]; }); }, []);
   const handleUpdateQuantity = useCallback((itemId: string, qty: number) => { if (qty <= 0) { setCart((prev) => prev.filter((ci) => ci.id !== itemId)); return; } setCart((prev) => prev.map((ci) => (ci.id === itemId ? { ...ci, quantity: qty } : ci))); }, []);
-  const handleRemoveItem = useCallback((itemId: string) => { setCart((prev) => prev.filter((ci) => ci.id !== itemId)); }, []);
+  const handleRemoveItem = useCallback((uid: string) => { setCart((prev) => prev.filter((ci) => ci.uid !== uid)); }, []);
 
   const handleClearCart = useCallback(() => {
     setCart([]); setSpecialInstructions(''); setOrderNotes(''); setDiscount(null); setSelectedCustomer(null);
@@ -471,10 +471,10 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
               </div>
             ) : (
               cart.map((item) => (
-                <div key={item.id} className="bg-gray-50 rounded-xl border border-gray-100 p-3">
+                <div key={item.uid} className="bg-gray-50 rounded-xl border border-gray-100 p-3">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-gray-800 truncate">{item.name}</p><p className="text-xs text-gray-400">{currencySymbol}{item.price.toFixed(2)} each</p></div>
-                    <button onClick={() => handleRemoveItem(item.id)} className="text-red-300 hover:text-red-600 text-lg leading-none shrink-0 font-bold px-1" title="Remove item">&times;</button>
+                    <button onClick={() => handleRemoveItem(item.uid)} className="text-red-300 hover:text-red-600 text-lg leading-none shrink-0 font-bold px-1" title="Remove item">&times;</button>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
