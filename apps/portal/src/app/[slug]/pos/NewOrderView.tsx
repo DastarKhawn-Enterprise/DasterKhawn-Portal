@@ -377,7 +377,8 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
               <input type="number" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} placeholder={discountType === 'percentage' ? 'Enter percentage...' : 'Enter amount...'} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg" min="0" step="0.01" autoFocus />
               <div className="flex gap-2">
                 <button onClick={() => setShowDiscountModal(false)} className="flex-1 py-2.5 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Cancel</button>
-                <button onClick={() => { const v = parseFloat(discountValue); if (v > 0) { setDiscount({ type: discountType, value: v }); setShowDiscountModal(false); } }} className="flex-1 py-2.5 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: '#C9972B' }}>Apply</button>
+                {discount && <button onClick={() => { setDiscount(null); setShowDiscountModal(false); }} className="flex-1 py-2.5 rounded-lg text-sm font-semibold border border-red-200 text-red-600 hover:bg-red-50">Remove</button>}
+                <button onClick={() => { const v = parseFloat(discountValue); if (v > 0) { setDiscount({ type: discountType, value: v }); } else { setDiscount(null); } setShowDiscountModal(false); }} className="flex-1 py-2.5 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: '#C9972B' }}>{discount ? 'Update' : 'Apply'}</button>
               </div>
             </div>
           </div>
@@ -473,7 +474,7 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
                 <div key={item.id} className="bg-gray-50 rounded-xl border border-gray-100 p-3">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-gray-800 truncate">{item.name}</p><p className="text-xs text-gray-400">{currencySymbol}{item.price.toFixed(2)} each</p></div>
-                    <button onClick={() => handleRemoveItem(item.id)} className="text-gray-300 hover:text-red-500 text-lg leading-none shrink-0">&times;</button>
+                    <button onClick={() => handleRemoveItem(item.id)} className="text-red-300 hover:text-red-600 text-lg leading-none shrink-0 font-bold px-1" title="Remove item">&times;</button>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
