@@ -2,10 +2,10 @@
 
 import { usePOS } from '../pos-context';
 import { usePageGuard } from '../page-guard';
-import CurrentOrdersView from '../CurrentOrdersView';
+import KDSView from '../KDSView';
 
 export default function OrdersPage() {
-  const { supabaseUrl, supabaseAnonKey, theme, slug, brandName } = usePOS();
+  const { theme, slug, brandName } = usePOS();
   if (usePageGuard()) return null;
-  return <CurrentOrdersView slug={slug} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} brandName={brandName} viewConfig={{ excludeStatus: ['cancelled', 'completed'], hideNewOrder: true }} />;
+  return <KDSView slug={slug} theme={theme} brandName={brandName} />;
 }
