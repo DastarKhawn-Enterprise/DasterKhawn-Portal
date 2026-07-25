@@ -32,6 +32,10 @@ export const PERMISSIONS = {
     'accounts:transactions',
     'accounts:transfer',
     'accounts:adjust',
+    'customers:view',
+    'customers:create',
+    'customers:edit',
+    'customers:manage',
   ],
   staff: [
     'orders:create',
@@ -39,6 +43,9 @@ export const PERMISSIONS = {
     'orders:update',
     'menu:view',
     'accounts:view',
+    'customers:view',
+    'customers:create',
+    'customers:edit',
   ],
   customer: [
     'orders:create:own',

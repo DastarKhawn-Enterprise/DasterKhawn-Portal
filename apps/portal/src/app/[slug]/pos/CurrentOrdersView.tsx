@@ -1041,7 +1041,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
                         if (result.ok && result.data?.length > 0) {
                           custId = result.data[0].id;
                         } else {
-                          const insertResult = await supa(slug, { table: 'customers', method: 'insert', select: 'id', single: true, body: { name: customerName, phone: customerPhone || null } });
+                          const insertResult = await supa(slug, { table: 'customers', method: 'insert', select: 'id', single: true, body: { name: customerName, phone: customerPhone || null, status: 'active' } });
                           if (!insertResult.ok || !insertResult.data) return;
                           custId = insertResult.data.id;
                         }
@@ -1308,7 +1308,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
                       if (result.ok && result.data?.length > 0) {
                         custId = result.data[0].id;
                       } else {
-                        const insertResult = await supa(slug, { table: 'customers', method: 'insert', select: 'id', single: true, body: { name: customerName, phone: customerPhone || null } });
+                        const insertResult = await supa(slug, { table: 'customers', method: 'insert', select: 'id', single: true, body: { name: customerName, phone: customerPhone || null, status: 'active' } });
                         if (!insertResult.ok || !insertResult.data) return;
                         custId = insertResult.data.id;
                       }

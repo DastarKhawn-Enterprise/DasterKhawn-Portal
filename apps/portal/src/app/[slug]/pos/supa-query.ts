@@ -14,8 +14,10 @@ interface QueryOptions {
   notIn?: [string, any[]];
   notEq?: [string, any];
   isNull?: [string];
+  notNull?: [string];
   order?: string | { column: string; ascending?: boolean } | (string | { column: string; ascending?: boolean })[];
   limit?: number;
+  offset?: number;
   single?: boolean;
   method?: 'select' | 'insert' | 'update' | 'delete';
   body?: any;
@@ -34,6 +36,7 @@ interface QueryResultOk {
 interface QueryResultErr {
   ok: false;
   error: string;
+  count?: undefined;
 }
 
 type QueryResult = QueryResultOk | QueryResultErr;
@@ -46,6 +49,10 @@ const ALLOWED_TABLES = new Set([
   'branches', 'business_hours',
 ]);
 
+const TABLE_READ_PERMISSION: Record<string, string> = {
+  customers: 'customers:view',
+};
+
 const TABLE_WRITE_PERMISSION: Record<string, string> = {
   menu_items: 'menu:edit',
   menu_item_ingredients: 'menu:edit',
@@ -53,7 +60,7 @@ const TABLE_WRITE_PERMISSION: Record<string, string> = {
   orders: 'orders:create',
   order_items: 'orders:create',
   tables: 'orders:create',
-  customers: 'orders:create',
+  customers: 'customers:edit',
   settings: 'settings:edit',
   expenses: 'settings:edit',
   reservations: 'orders:create',
@@ -97,6 +104,11 @@ async function checkAccess(slug: string, table: string, write: boolean): Promise
       const required = TABLE_WRITE_PERMISSION[table];
       if (required && !me.permissions.includes(required)) {
         return { authorized: false, reason: `Forbidden: missing ${required}` };
+      }
+    } else {
+      const readRequired = TABLE_READ_PERMISSION[table];
+      if (readRequired && !me.permissions.includes(readRequired)) {
+        return { authorized: false, reason: `Forbidden: missing ${readRequired}` };
       }
     }
     return { authorized: true, tenant };
@@ -160,6 +172,10 @@ function buildUrl(baseUrl: string, table: string, opts: QueryOptions) {
     params.push(`${encodeURIComponent(opts.isNull[0])}=is.null`);
   }
 
+  if (opts.notNull) {
+    params.push(`${encodeURIComponent(opts.notNull[0])}=not.is.null`);
+  }
+
   if (opts.order) {
     const orders = Array.isArray(opts.order) ? opts.order : [opts.order];
     for (const o of orders) {
@@ -170,6 +186,10 @@ function buildUrl(baseUrl: string, table: string, opts: QueryOptions) {
 
   if (opts.limit) {
     params.push(`limit=${opts.limit}`);
+  }
+
+  if (opts.offset) {
+    params.push(`offset=${opts.offset}`);
   }
 
   if (opts.filter) {

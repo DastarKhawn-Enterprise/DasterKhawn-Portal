@@ -5,6 +5,20 @@ import { readFileSync } from 'fs';
 const SEED_KEY = 'test-brand-2-functional-seed-v1';
 const SEED_CREATED_BY = 'seed-script';
 
+async function execSql(url, key, query) {
+  const u = `${url.replace(/\/+$/, '')}/auth/v1/sql`;
+  const res = await fetch(u, {
+    method: 'POST',
+    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`SQL: ${res.status} ${txt.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function loadEnv(path) {
@@ -139,6 +153,44 @@ async function main() {
   const hasHours = await tableExists(tnUrl, tnKey, 'business_hours');
   log('Tables: branches', hasBranches ? 'exists' : 'missing (019 not applied)');
   log('Tables: business_hours', hasHours ? 'exists' : 'missing (019 not applied)');
+
+  // Apply migration 020 if not yet applied
+  log('Applying migration 020 (customer status)...');
+  let migrationOk = false;
+  try {
+    await execSql(tnUrl, tnKey, `ALTER TABLE customers ADD COLUMN IF NOT EXISTS status text DEFAULT 'active'`);
+    migrationOk = true;
+  } catch (_) {}
+  if (!migrationOk) {
+    try {
+      const { default: pg } = await import('pg');
+      const projectRef = tnUrl.replace('https://', '').replace('.supabase.co', '');
+      const pool = new pg.Pool({
+        host: `db.${projectRef}.supabase.co`,
+        port: 5432,
+        database: 'postgres',
+        user: 'postgres',
+        password: tnKey,
+        ssl: { rejectUnauthorized: false },
+        max: 1,
+      });
+      const client = await pool.connect();
+      try {
+        await client.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS status text DEFAULT 'active'`);
+        await client.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS last_order_date timestamptz`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone)`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(status)`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_customers_created_at ON customers(created_at)`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_customer_id_status ON orders(customer_id, status)`);
+        migrationOk = true;
+      } finally { client.release(); await pool.end(); }
+    } catch (e2) { /* pg fallback also failed */ }
+  }
+  if (migrationOk) {
+    log('Migration 020 applied');
+  } else {
+    log('Migration 020 note', 'Run migration manually via Supabase SQL editor (packages/gateway-sdk/migrations/020_customer_status_and_indexes.sql)');
+  }
 
   // ── 2. Configure settings ────────────────────────────────────────────
   log('Configuring settings...');
@@ -756,7 +808,72 @@ async function main() {
   }
   log(`Purchases: ${purchCount}`);
 
-  // ── 14. Reconciliation ──────────────────────────────────────────────
+  // ── 14. Historical test orders (linked to customers) ─────────────────
+  log('Creating historical test orders...');
+  const { data: custRows } = await select(tnUrl, tnKey, 'customers', { select: 'id,name' });
+  const custList = (custRows ?? []).filter((c) => c.name !== 'Corporate Test Customer');
+  const cashAcctId2 = acctIdMap['Cash in Hand'];
+  let histOrderCount = 0;
+
+  if (custList.length >= 4) {
+    const histOrders = [
+      { custIdx: 0, items: [{ menu: 'Classic Chicken Burger', qty: 2 }, { menu: 'Fresh Lime', qty: 1 }], daysAgo: 5 },
+      { custIdx: 1, items: [{ menu: 'Chicken Biryani', qty: 1 }, { menu: 'Gulab Jamun', qty: 2 }, { menu: 'Soft Drink Can', qty: 1 }], daysAgo: 3 },
+      { custIdx: 2, items: [{ menu: 'Chicken Tikka Pizza', qty: 1 }, { menu: 'Mineral Water', qty: 1 }], daysAgo: 2 },
+      { custIdx: 3, items: [{ menu: 'Special Fried Rice', qty: 1 }, { menu: 'Kheer', qty: 1 }], daysAgo: 1 },
+      { custIdx: 0, items: [{ menu: 'Beef Burger', qty: 1 }, { menu: 'Fresh Lime', qty: 2 }], daysAgo: 0 },
+    ];
+
+    for (const ho of histOrders) {
+      const c = custList[ho.custIdx];
+      let subtotal = 0;
+      for (const oi of ho.items) { const m = menuDefs.find(x => x.name === oi.menu); subtotal += (m?.price || 0) * oi.qty; }
+      const scAmt = subtotal * 0.07;
+      const taxAmt = (subtotal + scAmt) * 0.05;
+      const total = Math.round(subtotal + scAmt + taxAmt);
+      const orderDate = new Date(Date.now() - ho.daysAgo * 86400000).toISOString();
+
+      const oIns = await insert(tnUrl, tnKey, 'orders', {
+        status: 'completed', source: 'pos', order_type: 'dine_in', total,
+        customer_id: c.id, customer_name: c.name, created_by: SEED_CREATED_BY,
+        created_at: orderDate,
+      });
+      const oid = (Array.isArray(oIns) ? oIns[0] : oIns).id;
+
+      for (const oi of ho.items) {
+        const m = menuDefs.find(x => x.name === oi.menu);
+        if (m && menuIdMap[m.name]) {
+          await insert(tnUrl, tnKey, 'order_items', { order_id: oid, menu_item_id: menuIdMap[m.name], quantity: oi.qty, price_at_order: m.price });
+        }
+      }
+
+      // Process payment (cash)
+      try {
+        await rpc(tnUrl, tnKey, 'process_payments', {
+          p_order_id: oid,
+          p_payments: [{ account_id: cashAcctId2, payment_method: 'cash', amount: total, customer_id: c.id, cash_received: total, change_due: 0, notes: 'Seed historical order', idempotency_key: `seed-hist-${oid}` }],
+          p_created_by: SEED_CREATED_BY,
+        });
+      } catch (e) { log('  Hist order payment error', e.message?.slice(0, 60)); }
+
+      // Update customer loyalty
+      const { data: custRow } = await select(tnUrl, tnKey, 'customers', { select: 'total_orders,total_spent,loyalty_points', eq: ['id', c.id] });
+      if (custRow?.[0]) {
+        const cr = custRow[0];
+        const upd = {
+          total_orders: Number(cr.total_orders) + 1,
+          total_spent: Number(cr.total_spent) + total,
+          loyalty_points: Number(cr.loyalty_points) + Math.floor(total),
+        };
+        try { await update(tnUrl, tnKey, 'customers', 'id', c.id, { ...upd, last_order_date: orderDate }); }
+        catch (e) { await update(tnUrl, tnKey, 'customers', 'id', c.id, upd); }
+      }
+      histOrderCount++;
+    }
+  }
+  log(`Historical test orders: ${histOrderCount}`);
+
+  // ── 15. Reconciliation ──────────────────────────────────────────────
   console.log('\n========================================');
   console.log('  Reconciliation');
   console.log('========================================\n');
@@ -826,7 +943,7 @@ async function main() {
   log('Tables', tablesList.length);
   log('Customers', customersList.length);
 
-  // ── 15. Tenant isolation ────────────────────────────────────────────
+  // ── 16. Tenant isolation ────────────────────────────────────────────
   console.log('\n  Tenant isolation check...');
   try {
     const { data: baoGTenants } = await select(gwUrl, gwKey, 'tenants?slug=eq.bao-g&select=supabase_url,supabase_service_key,brand_name');
@@ -848,7 +965,7 @@ async function main() {
     log('Isolation check note', e.message?.slice(0, 80));
   }
 
-  // ── 15. Checkout simulation ─────────────────────────────────────────
+  // ── 17. Checkout simulation ─────────────────────────────────────────
   const RUN_CHECKOUT = process.argv.includes('--checkout');
   if (RUN_CHECKOUT) {
     console.log('\n========================================');
