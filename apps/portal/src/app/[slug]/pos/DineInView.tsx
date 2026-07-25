@@ -3,14 +3,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { usePOS } from './pos-context';
 import { useAuth } from '@clerk/nextjs';
-import { createClient } from '@supabase/supabase-js';
 import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
 import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import ReceiptView from './ReceiptView';
 import { deductInventorySupa } from './inventory-utils';
 import { updateCustomerLoyaltySupa, searchCustomersSupa } from './customer-utils';
 import { supa } from './supa-query';
+import { useEvent, usePublish } from './use-event';
 
 interface TableRecord {
   id: string;
@@ -42,8 +41,6 @@ interface Order {
 
 interface Props {
   slug: string;
-  supabaseUrl: string;
-  supabaseAnonKey: string;
   theme: ThemeConfig;
   brandName: string;
 }
@@ -76,7 +73,8 @@ const tableBorder: Record<string, string> = {
   reserved: 'border-amber-200 hover:border-amber-400',
 };
 
-export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, brandName }: Props) {
+export default function DineInView({ slug, theme, brandName }: Props) {
+  const publish = usePublish();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [authReady, setAuthReady] = useState(false);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -106,10 +104,6 @@ export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, 
   const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string; phone: string | null } | null>(null);
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
 
-  const getSupabaseClient = useCallback(() => {
-    return createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } });
-  }, [supabaseUrl, supabaseAnonKey]);
-
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
     setAuthReady(true);
@@ -138,21 +132,8 @@ export default function DineInView({ slug, supabaseUrl, supabaseAnonKey, theme, 
     fetchTables();
   }, [authReady, fetchTables]);
 
-  useEffect(() => {
-    if (!authReady) return;
-    const client = getSupabaseClient();
-    const channel = client
-      .channel('dine-in-tables')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => { fetchTables(); })
-      .subscribe();
-    return () => { channel.unsubscribe(); };
-  }, [authReady, getSupabaseClient, fetchTables]);
-
-  useEffect(() => {
-    if (!authReady) return;
-    const interval = setInterval(() => fetchTables(), 5000);
-    return () => clearInterval(interval);
-  }, [authReady, fetchTables]);
+  useEvent('orders', () => { fetchTables(); });
+  useEvent('tables', () => { fetchTables(); });
 
   // When selectedTable changes to occupied, fetch its order
   useEffect(() => {

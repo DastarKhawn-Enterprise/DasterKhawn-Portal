@@ -7,6 +7,7 @@ import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { normalizePhone, checkDuplicatePhone } from './customer-utils';
 import { usePOS } from './pos-context';
+import { useEvent, usePublish } from './use-event';
 
 interface Props {
   slug: string;
@@ -59,6 +60,7 @@ function getPrevMonthRange() {
 }
 
 export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true, currencySymbol }: Props) {
+  const publish = usePublish();
   const { user, isLoaded } = useUser();
   const meta = user?.publicMetadata as Record<string, any> | undefined;
   const perms = (meta?.permissions ?? []) as string[];
@@ -218,6 +220,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
     if (!authReady || !canView) return;
     fetchCustomers();
   }, [fetchCustomers, authReady, canView]);
+  useEvent('customers', () => { fetchCustomers(); });
 
   const { setPageTitle } = usePOS();
   useEffect(() => { setPageTitle('Customers'); }, [setPageTitle]);
@@ -287,15 +290,17 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
         email: formEmail.trim() || null, notes: formNotes.trim() || null,
       };
       if (formStatus !== 'active') payload.status = formStatus;
-      if (editingCustomer) {
+        if (editingCustomer) {
         const result = await supa(slug, { table: 'customers', method: 'update', eq: ['id', editingCustomer.id], body: payload });
         if (!result.ok) { setFormError(result.error); setSaving(false); return; }
+        publish('customers', 'UPDATE', { id: editingCustomer.id });
         setCustomers((prev) => prev.map((c) => (c.id === editingCustomer.id ? { ...c, ...payload } : c)));
         if (selectedCustomer?.id === editingCustomer.id) setSelectedCustomer((prev) => prev ? { ...prev, ...payload } : null);
       } else {
         payload.loyalty_points = 0; payload.total_orders = 0; payload.total_spent = 0;
         const result = await supa(slug, { table: 'customers', method: 'insert', body: payload, single: true });
         if (!result.ok) { setFormError(result.error); setSaving(false); return; }
+        publish('customers', 'INSERT', { id: result.data?.id });
         if (result.data) setCustomers((prev) => [result.data as Customer, ...prev]);
         setTotalCount((c) => c + 1);
       }
@@ -315,6 +320,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
     try {
       const result = await supa(slug, { table: 'customers', method: 'delete', eq: ['id', customer.id] });
       if (!result.ok) { setDeleteError(result.error); setDeleting(false); return; }
+      publish('customers', 'DELETE', { id: customer.id });
       setCustomers((prev) => prev.filter((c) => c.id !== customer.id));
       setTotalCount((c) => c - 1);
       if (selectedCustomer?.id === customer.id) setSelectedCustomer(null);
@@ -327,6 +333,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
   const handleDeactivate = async (customer: Customer) => {
     const newStatus = (customer.status || 'active') === 'active' ? 'inactive' : 'active';
     await supa(slug, { table: 'customers', method: 'update', eq: ['id', customer.id], body: { status: newStatus } });
+    publish('customers', 'UPDATE', { id: customer.id });
     setCustomers((prev) => prev.map((c) => c.id === customer.id ? { ...c, status: newStatus } : c));
     if (selectedCustomer?.id === customer.id) setSelectedCustomer((prev) => prev ? { ...prev, status: newStatus } : null);
     fetchSummary();

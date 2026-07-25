@@ -6,6 +6,7 @@ import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
+import { useEvent, usePublish } from './use-event';
 
 interface Props {
   slug: string;
@@ -47,6 +48,7 @@ const STATUS_COLORS: Record<string, string> = {
 type FilterMode = 'upcoming' | 'past' | 'all';
 
 export default function ReservationsView({ slug, theme }: Props) {
+  const publish = usePublish();
   const { user, isLoaded } = useUser();
   const meta = user?.publicMetadata as Record<string, any> | undefined;
   const perms = (meta?.permissions ?? []) as string[];
@@ -97,6 +99,7 @@ export default function ReservationsView({ slug, theme }: Props) {
   const { setPageTitle } = usePOS();
   useEffect(() => { setPageTitle('Reservations'); }, [setPageTitle]);
   useEffect(() => { fetchData(); }, [fetchData]);
+  useEvent('reservations', () => { fetchData(); });
 
   const openAddForm = () => {
     setEditingRes(null); setFormGuestName(''); setFormGuestPhone(''); setFormPartySize(2);
@@ -124,6 +127,7 @@ export default function ReservationsView({ slug, theme }: Props) {
       if (editingRes) {
         const result = await supa(slug, { table: 'reservations', method: 'update', eq: ['id', editingRes.id], body: payload });
         if (!result.ok) { setError(result.error); setSaving(false); return; }
+        publish('reservations', 'UPDATE', { id: editingRes.id });
         fetchData();
       } else {
         const result = await supa(slug, { table: 'reservations', method: 'insert', body: payload, single: true });
@@ -132,6 +136,7 @@ export default function ReservationsView({ slug, theme }: Props) {
           setReservations((prev) => [...prev, result.data as Reservation].sort(
             (a, b) => a.reservation_date.localeCompare(b.reservation_date) || a.reservation_time.localeCompare(b.reservation_time)
           ));
+          publish('reservations', 'INSERT', { id: (result.data as Reservation).id });
         }
       }
       setShowForm(false);
@@ -145,9 +150,11 @@ export default function ReservationsView({ slug, theme }: Props) {
       const updates: Record<string, unknown> = { status: newStatus };
       if (newStatus === 'seated' && res.table_id) {
         await supa(slug, { table: 'tables', method: 'update', body: { status: 'occupied' }, eq: ['id', res.table_id] });
+        publish('reservations', 'UPDATE', { id: res.id });
       }
       const result = await supa(slug, { table: 'reservations', method: 'update', body: updates, eq: ['id', res.id] });
       if (!result.ok) { setError(result.error); return; }
+      publish('reservations', 'UPDATE', { id: res.id });
       fetchData();
     } catch (e: any) { setError(e.message || 'Status update failed'); }
   };
@@ -158,6 +165,7 @@ export default function ReservationsView({ slug, theme }: Props) {
     try {
       const result = await supa(slug, { table: 'reservations', method: 'delete', eq: ['id', deleteId] });
       if (!result.ok) { setError(result.error); setDeleting(false); return; }
+      publish('reservations', 'DELETE', { id: deleteId });
       setReservations((prev) => prev.filter((r) => r.id !== deleteId));
       setDeleteId(null);
     } catch (e: any) { setError(e.message || 'Delete failed'); }

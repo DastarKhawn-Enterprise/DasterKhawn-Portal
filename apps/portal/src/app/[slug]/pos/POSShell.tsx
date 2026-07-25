@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useAuth, useUser, UserButton } from '@clerk/nextjs';
 import Sidebar from './Sidebar';
 import { POSProvider } from './pos-context';
+import { EventProvider } from './event-context';
+import { RealtimeIndicator } from './realtime-indicator';
 import { supa } from './supa-query';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import type { ViewId } from './Sidebar';
@@ -102,6 +104,7 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
 
   return (
     <POSProvider value={contextValue}>
+      <EventProvider slug={slug} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey}>
       <div className="h-screen h-dvh flex flex-col overflow-hidden">
         <header className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-gray-200 flex-shrink-0">
           <div className="flex items-center gap-3" style={{ color: theme.secondaryColor }}>
@@ -131,6 +134,7 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
               disabled
             />
             <button className="md:hidden text-gray-400 text-lg p-1">🔍</button>
+            <RealtimeIndicator />
             <UserButton afterSignOutUrl="/" />
           </div>
         </header>
@@ -148,6 +152,7 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
           {children}
         </div>
       </div>
+      </EventProvider>
     </POSProvider>
   );
 }

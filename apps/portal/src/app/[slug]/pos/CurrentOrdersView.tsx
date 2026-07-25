@@ -4,10 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePOS } from './pos-context';
 import { useRouter } from 'next/navigation';
 import { useAuth, useUser } from '@clerk/nextjs';
-import { createClient } from '@supabase/supabase-js';
 import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
 import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import ReceiptView from './ReceiptView';
 import PaymentModal from './PaymentModal';
 import { deductInventorySupa } from './inventory-utils';
@@ -15,6 +13,7 @@ import { updateCustomerLoyaltySupa, searchCustomersSupa } from './customer-utils
 import { supa } from './supa-query';
 import useOfflineSync from '@/hooks/useOfflineSync';
 import { getCachedMenuItems, getCachedSettings } from '@/lib/offline-db';
+import { useEvent, usePublish } from './use-event';
 
 interface OrderItem {
   menu_item_id: string;
@@ -57,11 +56,9 @@ export interface ViewConfig {
 
 interface Props {
   slug: string;
-  supabaseUrl: string;
-  supabaseAnonKey: string;
   theme: ThemeConfig;
   brandName: string;
-  viewConfig?: Partial<ViewConfig>;
+  viewConfig?: ViewConfig;
 }
 
 type OrderTypeOption = 'dine_in' | 'takeaway' | 'delivery' | 'drive_thru';
@@ -91,7 +88,7 @@ const statusColor: Record<string, string> = {
 
 const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
 
-export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, theme, brandName, viewConfig }: Props) {
+export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }: Props) {
   const router = useRouter();
   const cfg: ViewConfig = { title: 'Active Orders', orderType: null, showCustomerFields: false, ...viewConfig };
 
@@ -157,10 +154,6 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
   const effectiveOrderType: string = cfg.orderType || selectedOrderType;
 
   const selectedOrder = orders.find((o) => o.id === selectedId) ?? null;
-
-  const getSupabaseClient = useCallback(() => {
-    return createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } });
-  }, [supabaseUrl, supabaseAnonKey]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -296,23 +289,9 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
     fetchingRef.current = false;
   }, [slug, cfg.statusFilter, cfg.excludeStatus]);
 
-  // Realtime subscription (notification-only via anon key — best-effort)
-  // Actual data re-fetch always uses secure supa() server actions.
-  // A polling fallback ensures updates on tenants where anon-key Realtime is blocked by RLS.
-  useEffect(() => {
-    if (!authReady) return;
-    const client = getSupabaseClient();
-    const channel = client
-      .channel('orders-realtime')
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'orders' },
-        () => { fetchOrdersInitial(); })
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'orders' },
-        () => { fetchOrdersInitial(); })
-      .subscribe();
-    return () => { channel.unsubscribe(); };
-  }, [authReady, getSupabaseClient, fetchOrdersInitial]);
+  // Auto-refresh when events come in
+  useEvent('orders', () => { fetchOrdersInitial(); });
+  const publish = usePublish();
 
   useEffect(() => {
     if (!authReady) return;
@@ -406,6 +385,11 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
         setOrderedTables((prev) => prev.map((t) => (t.id === selectedTableId ? { ...t, status: 'occupied' } : t)));
       }
 
+      publish('orders', 'INSERT', { id: order.id, status: 'pending', order_type: effectiveOrderType });
+      if (effectiveOrderType === 'dine_in' && selectedTableId) {
+        publish('tables', 'UPDATE', { id: selectedTableId, status: 'occupied' });
+      }
+
       const newOrder: Order = {
         id: order.id,
         order_number: order.order_number,
@@ -451,6 +435,7 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
     try {
       const updateResult = await supa(slug, { table: 'orders', method: 'update', eq: ['id', orderId], body: { status: newStatus } });
       if (!updateResult.ok) { console.error('[Status]', updateResult.error); setUpdating(null); return; }
+      publish('orders', 'UPDATE', { id: orderId, status: newStatus });
 
       if (newStatus === 'completed') {
         const orderResult = await supa(slug, { table: 'orders', select: 'customer_id, total', eq: ['id', orderId], single: true });
@@ -544,6 +529,8 @@ export default function CurrentOrdersView({ slug, supabaseUrl, supabaseAnonKey, 
         await supa(slug, { table: 'order_items', method: 'insert', body: items });
       }
       await supa(slug, { table: 'orders', method: 'update', eq: ['id', selectedId], body: { total, tax_amount: taxAmount } });
+
+      publish('orders', 'UPDATE', { id: selectedId });
 
       setOrders((prev) =>
         prev.map((o) =>

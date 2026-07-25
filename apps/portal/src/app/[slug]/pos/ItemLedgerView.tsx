@@ -6,6 +6,7 @@ import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
+import { useEvent, usePublish } from './use-event';
 
 interface Props {
   slug: string;
@@ -49,6 +50,7 @@ const MOVEMENT_LABELS: Record<string, string> = {
 };
 
 export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
+  const publish = usePublish();
   const { user, isLoaded } = useUser();
   const meta = user?.publicMetadata as Record<string, any> | undefined;
   const perms = (meta?.permissions ?? []) as string[];
@@ -110,6 +112,7 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
   const { setPageTitle } = usePOS();
   useEffect(() => { setPageTitle('Item Ledger'); }, [setPageTitle]);
   useEffect(() => { fetchItems(); }, [fetchItems]);
+  useEvent('item_ledger', () => { fetchItems(); });
 
   useEffect(() => {
     fetchLedger(selectedDate);
@@ -181,6 +184,7 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
         single: true,
       });
       if (!ledgerResult.ok) { setError(ledgerResult.error); setSaving(false); return; }
+      publish('item_ledger', 'INSERT', { id: ledgerResult.data?.id });
 
       if (purchaseLogExpense) {
         const desc = `Purchase: ${theItem.name} x${qty} ${theItem.unit}${vendor ? ` from ${vendor}` : ''}`;

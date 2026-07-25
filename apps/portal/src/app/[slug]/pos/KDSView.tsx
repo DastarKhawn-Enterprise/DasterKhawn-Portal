@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useEvent } from './use-event';
 import { usePOS } from './pos-context';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { fetchKDSOrders, updateKDSOrderStatus } from './orders-actions';
@@ -547,10 +548,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
     fetchOrders();
   }, [fetchOrders]);
 
-  useEffect(() => {
-    const id = setInterval(fetchOrders, 10000);
-    return () => clearInterval(id);
-  }, [fetchOrders]);
+  useEvent('orders', () => { fetchOrders(); });
 
   const handleStatusUpdate = useCallback(async (orderId: string, newStatus: string) => {
     setUpdating(orderId);

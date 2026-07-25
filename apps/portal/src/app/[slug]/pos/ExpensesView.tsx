@@ -7,6 +7,7 @@ import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { processExpense } from './payment-actions';
+import { useEvent, usePublish } from './use-event';
 
 interface Props {
   slug: string;
@@ -40,6 +41,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 type DatePreset = 'this-month' | 'this-week' | 'custom';
 
 export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
+  const publish = usePublish();
   const { user, isLoaded } = useUser();
   const meta = user?.publicMetadata as Record<string, any> | undefined;
   const perms = (meta?.permissions ?? []) as string[];
@@ -116,6 +118,8 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
     });
   }, [fetchExpenses, slug]);
 
+  useEvent('expenses', () => { fetchExpenses(); });
+
   const { setPageTitle } = usePOS();
   useEffect(() => { setPageTitle('Expenses'); }, [setPageTitle]);
 
@@ -141,6 +145,7 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
         const result = await supa(slug, { table: 'expenses', method: 'update', eq: ['id', editingExpense.id], body: payload });
         if (!result.ok) { setError(result.error); setSaving(false); return; }
         setExpenses((prev) => prev.map((e) => (e.id === editingExpense.id ? { ...e, ...payload } as Expense : e)));
+        publish('expenses', 'UPDATE', { id: editingExpense.id });
       } else {
         if (!formAccountId) { setError('Select an account'); setSaving(false); return; }
         const r = await processExpense(slug, formAccountId, formCategory, formDescription.trim() || null, parseFloat(formAmount), formDate);
@@ -150,6 +155,7 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
           amount: parseFloat(formAmount), expense_date: formDate, account_id: formAccountId, created_at: new Date().toISOString(),
         };
         setExpenses((prev) => [newExp, ...prev]);
+        publish('expenses', 'INSERT', { id: r.expense_id });
       }
       setShowForm(false);
     } catch (e: any) { setError(e.message || 'Save failed'); }
@@ -163,6 +169,7 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
       const result = await supa(slug, { table: 'expenses', method: 'delete', eq: ['id', deleteId] });
       if (!result.ok) { setError(result.error); setDeleting(false); return; }
       setExpenses((prev) => prev.filter((e) => e.id !== deleteId));
+      publish('expenses', 'DELETE', { id: deleteId });
       setDeleteId(null);
     } catch (e: any) { setError(e.message || 'Delete failed'); }
     setDeleting(false);

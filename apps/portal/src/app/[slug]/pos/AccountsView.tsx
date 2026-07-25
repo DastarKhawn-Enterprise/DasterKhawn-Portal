@@ -8,6 +8,7 @@ import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { processTransfer, processExpense, processAdjustment } from './payment-actions';
 import PaymentMethodLogo from './PaymentMethodLogo';
+import { useEvent, usePublish } from './use-event';
 
 interface Props {
   slug: string;
@@ -132,6 +133,7 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
 }
 
 export default function AccountsView({ slug, theme, currencySymbol }: Props) {
+  const publish = usePublish();
   const { user, isLoaded } = useUser();
   const meta = user?.publicMetadata as Record<string, any> | undefined;
   const perms = (meta?.permissions ?? []) as string[];
@@ -217,6 +219,7 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
   const { setPageTitle } = usePOS();
   useEffect(() => { setPageTitle('Accounts'); }, [setPageTitle]);
   useEffect(() => { fetchAccounts(); fetchRecentTxns(); }, [fetchAccounts, fetchRecentTxns]);
+  useEvent('accounts', () => { fetchAccounts(); });
   useEffect(() => { fetchTxns(selectedAccId); }, [fetchTxns, selectedAccId]);
 
   const filteredAccounts = useMemo(() =>
@@ -276,6 +279,7 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
         const newBal = bal + amt;
         const { ok } = await supa(slug, { table: 'accounts', method: 'update', eq: ['id', ieAccountId], body: { current_balance: newBal } });
         if (!ok) { setError('Failed to update balance'); setIeSaving(false); return; }
+        publish('accounts', 'UPDATE', { id: ieAccountId, current_balance: newBal });
         await supa(slug, {
           table: 'account_transactions', method: 'insert', body: {
             account_id: ieAccountId, transaction_type: 'income', direction: 'credit',
@@ -283,6 +287,7 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
             description: ieDesc || 'Direct income', created_by: user?.id || null,
           },
         });
+        publish('accounts', 'UPDATE', { id: ieAccountId });
       }
       setSuccessMsg(`${ieType === 'income' ? 'Income' : 'Expense'} of ${currencySymbol}${amt.toFixed(2)} recorded`);
       setShowIncome(false);

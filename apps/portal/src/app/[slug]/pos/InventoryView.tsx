@@ -6,6 +6,7 @@ import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
+import { useEvent, usePublish } from './use-event';
 
 interface Props {
   slug: string;
@@ -24,6 +25,7 @@ interface InventoryItem {
 const UNITS = ['pcs', 'kg', 'liters', 'grams', 'ml', 'oz', 'lb', 'bags', 'boxes', 'bottles'];
 
 export default function InventoryView({ slug, theme }: Props) {
+  const publish = usePublish();
   const { user, isLoaded } = useUser();
   const meta = user?.publicMetadata as Record<string, any> | undefined;
   const perms = (meta?.permissions ?? []) as string[];
@@ -64,6 +66,7 @@ export default function InventoryView({ slug, theme }: Props) {
   const { setPageTitle } = usePOS();
   useEffect(() => { setPageTitle('Inventory'); }, [setPageTitle]);
   useEffect(() => { fetchItems(); }, [fetchItems]);
+  useEvent('inventory_items', () => { fetchItems(); });
 
   const openAddForm = () => {
     setEditingId(null);
@@ -99,10 +102,12 @@ export default function InventoryView({ slug, theme }: Props) {
       if (editingId) {
         const result = await supa(slug, { table: 'inventory_items', method: 'update', eq: ['id', editingId], body: payload });
         if (!result.ok) { setError(result.error); setSaving(false); return; }
+        publish('inventory_items', 'UPDATE', { id: editingId });
         setItems((prev) => prev.map((i) => (i.id === editingId ? { ...i, ...payload } : i)));
       } else {
         const result = await supa(slug, { table: 'inventory_items', method: 'insert', body: payload, single: true });
         if (!result.ok) { setError(result.error); setSaving(false); return; }
+        publish('inventory_items', 'INSERT', { id: result.data?.id });
         if (result.data) setItems((prev) => [...prev, result.data as InventoryItem]);
       }
       setShowForm(false);
@@ -117,6 +122,7 @@ export default function InventoryView({ slug, theme }: Props) {
     try {
       const result = await supa(slug, { table: 'inventory_items', method: 'delete', eq: ['id', deleteId] });
       if (!result.ok) { setError(result.error); setDeleting(false); return; }
+      publish('inventory_items', 'DELETE', { id: deleteId });
       setItems((prev) => prev.filter((i) => i.id !== deleteId));
       setDeleteId(null);
     } catch (e: any) { setError(e.message || 'Delete failed'); }
@@ -134,6 +140,7 @@ export default function InventoryView({ slug, theme }: Props) {
       const newStock = Number(adjustItem.current_stock) + delta;
       const result = await supa(slug, { table: 'inventory_items', method: 'update', eq: ['id', adjustItem.id], body: { current_stock: newStock } });
       if (!result.ok) { setError(result.error); setAdjusting(false); return; }
+      publish('inventory_items', 'UPDATE', { id: adjustItem.id });
       setItems((prev) => prev.map((i) => (i.id === adjustItem.id ? { ...i, current_stock: newStock } : i)));
 
       const movementType = delta < 0 && adjustType === 'wastage' ? 'wastage' : 'adjustment';
@@ -149,6 +156,7 @@ export default function InventoryView({ slug, theme }: Props) {
           created_by: user?.id || null,
         },
       });
+      publish('item_ledger', 'INSERT', { inventory_item_id: adjustItem.id });
 
       setAdjustItem(null);
       setAdjustDelta('');

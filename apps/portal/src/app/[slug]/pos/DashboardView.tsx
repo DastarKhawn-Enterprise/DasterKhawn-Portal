@@ -2,14 +2,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePOS } from './pos-context';
 import { useAuth } from '@clerk/nextjs';
-import { createClient } from '@supabase/supabase-js';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { useEvent, usePublish } from './use-event';
 import { supa, supaBatch } from './supa-query';
 
 interface Props {
-  supabaseUrl: string;
-  supabaseAnonKey: string;
   theme: ThemeConfig;
   slug: string;
   currencySymbol: string;
@@ -33,7 +30,7 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-red-50 text-red-700 border border-red-200',
 };
 
-export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slug, currencySymbol }: Props) {
+export default function DashboardView({ theme, slug, currencySymbol }: Props) {
   const { isLoaded, isSignedIn } = useAuth();
   const [authReady, setAuthReady] = useState(false);
 
@@ -109,19 +106,9 @@ export default function DashboardView({ supabaseUrl, supabaseAnonKey, theme, slu
   }, [authReady, fetchAll]);
 
   // Realtime subscriptions — refresh on any orders/tables change
-  useEffect(() => {
-    if (!authReady) return;
-    let channel: ReturnType<SupabaseClient['channel']> | null = null;
-
-    const client = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } });
-    channel = client
-      .channel('dashboard-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { fetchAll(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => { fetchAll(); })
-      .subscribe();
-
-    return () => { if (channel) channel.unsubscribe(); };
-  }, [authReady, supabaseUrl, supabaseAnonKey, fetchAll]);
+  useEvent('orders', () => { fetchAll(); });
+  useEvent('tables', () => { fetchAll(); });
+  const publish = usePublish();
 
   if (!isLoaded || !authReady) {
     return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;

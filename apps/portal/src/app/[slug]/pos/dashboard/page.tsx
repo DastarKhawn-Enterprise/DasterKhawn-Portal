@@ -7,5 +7,5 @@ import DashboardView from '../DashboardView';
 export default function DashboardPage() {
   const { supabaseUrl, supabaseAnonKey, theme, slug, currencySymbol } = usePOS();
   if (usePageGuard()) return null;
-  return <DashboardView supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} slug={slug} currencySymbol={currencySymbol} />;
+  return <DashboardView theme={theme} slug={slug} currencySymbol={currencySymbol} />;
 }

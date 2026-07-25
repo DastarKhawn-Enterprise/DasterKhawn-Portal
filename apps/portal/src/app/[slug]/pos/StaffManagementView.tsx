@@ -12,6 +12,7 @@ import {
   getRoleLabel, getAllPermissions, ROLE_DEFAULTS, STAFF_ROLES, PERMISSION_PAGES,
 } from './staff-types';
 import { hasPermission } from './permissions';
+import { useEvent, usePublish } from './use-event';
 
 interface Props { slug: string }
 
@@ -88,6 +89,7 @@ function AccessBadges({ permissions }: { permissions: string[] }) {
 }
 
 export default function StaffManagementView({ slug }: Props) {
+  const publish = usePublish();
   const { user, isLoaded } = useUser();
   const meta = user?.publicMetadata as Record<string, any> | undefined;
   const perms = (meta?.permissions ?? []) as string[];
@@ -151,6 +153,8 @@ export default function StaffManagementView({ slug }: Props) {
     if (isLoaded && user) fetchData();
   }, [isLoaded, user, fetchData]);
 
+  useEvent('staff', () => { fetchData(); });
+
   // Filter + sort staff
   const filteredStaff = staff.filter((s) => {
     const m = s.metadata;
@@ -197,6 +201,7 @@ export default function StaffManagementView({ slug }: Props) {
     if (result.success) {
       if (result.credentials) setTempPassword(result.credentials);
       setShowAddModal(false);
+      publish('staff', 'INSERT', {});
       fetchData();
     }
     return result;
@@ -207,6 +212,7 @@ export default function StaffManagementView({ slug }: Props) {
     if (result.success) {
       setShowEditModal(null);
       fetchData();
+      publish('staff', 'UPDATE', { id: clerkUserId });
       if (selectedStaff?.clerkUserId === clerkUserId) {
         setSelectedStaff(null);
       }
@@ -218,6 +224,7 @@ export default function StaffManagementView({ slug }: Props) {
     const result = await updateStaffPermissions(slug, clerkUserId, newPerms);
     if (result.success) {
       fetchData();
+      publish('staff', 'UPDATE', { id: clerkUserId });
       if (selectedStaff?.clerkUserId === clerkUserId) {
         setSelectedStaff((prev) => prev ? { ...prev, permissions: newPerms } : null);
       }
@@ -230,6 +237,7 @@ export default function StaffManagementView({ slug }: Props) {
     if (result.success && result.password) {
       const s = staff.find((x) => x.clerkUserId === clerkUserId);
       setTempPassword({ email: s?.email || '', password: result.password });
+      publish('staff', 'UPDATE', { id: clerkUserId });
     }
     return result;
   };
@@ -238,6 +246,7 @@ export default function StaffManagementView({ slug }: Props) {
     const result = await toggleLogin(slug, clerkUserId, enable);
     if (result.success) {
       fetchData();
+      publish('staff', 'UPDATE', { id: clerkUserId });
       if (selectedStaff?.clerkUserId === clerkUserId) {
         setSelectedStaff((prev) => prev ? { ...prev, metadata: { ...prev.metadata, login_enabled: enable } } : null);
       }
@@ -250,6 +259,7 @@ export default function StaffManagementView({ slug }: Props) {
     if (result.success) {
       setShowLeaveModal(null);
       fetchData();
+      publish('staff', 'UPDATE', { id: clerkUserId });
       if (selectedStaff?.clerkUserId === clerkUserId) setSelectedStaff(null);
     }
     return result;
@@ -261,6 +271,7 @@ export default function StaffManagementView({ slug }: Props) {
     const result = await removeStaff(slug, clerkUserId);
     if (!result.success) setError(result.error || 'Failed to remove');
     fetchData();
+    publish('staff', 'DELETE', { id: clerkUserId });
     setRemovingId('');
     if (selectedStaff?.clerkUserId === clerkUserId) setSelectedStaff(null);
   };

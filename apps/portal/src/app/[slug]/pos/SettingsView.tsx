@@ -6,6 +6,7 @@ import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
+import { useEvent, usePublish } from './use-event';
 
 interface Props {
   slug: string;
@@ -222,6 +223,7 @@ function CompactToggle({ label, checked, onChange, disabled }: { label: string; 
 }
 
 export default function SettingsView({ slug, theme }: Props) {
+  const publish = usePublish();
   const { user, isLoaded } = useUser();
   const meta = user?.publicMetadata as Record<string, any> | undefined;
   const perms = (meta?.permissions ?? []) as string[];
@@ -308,7 +310,10 @@ export default function SettingsView({ slug, theme }: Props) {
           const insRes = await supa(slug, {
             table: 'branches', method: 'insert', body: { name: 'Main Branch', country: 'Pakistan', is_default: true, is_active: true }, select: '*',
           });
-          if (insRes.ok && insRes.data) setBranches(insRes.data as unknown as BranchRow[]);
+          if (insRes.ok && insRes.data) {
+            setBranches(insRes.data as unknown as BranchRow[]);
+            publish('branches', 'INSERT', insRes.data as any);
+          }
         }
       }
     } catch (e: any) {
@@ -321,6 +326,7 @@ export default function SettingsView({ slug, theme }: Props) {
   const { setPageTitle } = usePOS();
   useEffect(() => { setPageTitle('Settings'); }, [setPageTitle]);
   useEffect(() => { if (isLoaded) load(); }, [isLoaded, load]);
+  useEvent('settings', () => { load(); });
 
   useEffect(() => {
     if (!settings) return;
@@ -477,8 +483,10 @@ export default function SettingsView({ slug, theme }: Props) {
             const existing = businessHours.find((bh) => bh.day_of_week === h.day_of_week);
             if (existing?.id) {
               await supa(slug, { table: 'business_hours', method: 'update', eq: ['id', existing.id], body: hBody });
+              publish('business_hours', 'UPDATE', { day_of_week: h.day_of_week });
             } else {
               await supa(slug, { table: 'business_hours', method: 'insert', body: hBody });
+              publish('business_hours', 'INSERT', { day_of_week: h.day_of_week });
             }
           }
         }
@@ -486,6 +494,7 @@ export default function SettingsView({ slug, theme }: Props) {
         initialFormRef.current = JSON.stringify(form);
         setTimeout(() => setSaved(false), 2000);
         load();
+        publish('settings', 'UPDATE', { id: settings.id });
       }
     } catch (e: any) {
       setError(e.message || 'Save failed');
@@ -518,8 +527,10 @@ export default function SettingsView({ slug, theme }: Props) {
       const body: Record<string, any> = { name: d.name, address: d.address, city: d.city, province: d.province, postal_code: d.postal_code, country: d.country || 'Pakistan', phone: d.phone, email: d.email, is_default: !!d.is_default, is_active: true };
       if (branchModal.editing?.id) {
         await supa(slug, { table: 'branches', method: 'update', eq: ['id', branchModal.editing.id], body });
+        publish('branches', 'UPDATE', { id: branchModal.editing.id });
       } else {
         await supa(slug, { table: 'branches', method: 'insert', body, select: '*' });
+        publish('branches', 'INSERT', body);
       }
       setBranchModal({ open: false, data: {} });
       load();
@@ -531,6 +542,7 @@ export default function SettingsView({ slug, theme }: Props) {
     setError('');
     const r = await supa(slug, { table: 'branches', method: 'delete', eq: ['id', id] });
     if (!r.ok) { setError(r.error || 'Delete failed'); return; }
+    publish('branches', 'DELETE', { id });
     load();
   };
 
@@ -608,6 +620,7 @@ export default function SettingsView({ slug, theme }: Props) {
               const br = branches.find((b) => b.id === e.target.value);
               if (br && canEdit) {
                 branches.forEach((b) => supa(slug, { table: 'branches', method: 'update', eq: ['id', b.id], body: { is_default: b.id === br.id } }));
+                publish('branches', 'UPDATE', {});
                 load();
               }
             }}

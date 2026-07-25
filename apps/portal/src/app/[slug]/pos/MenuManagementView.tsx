@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useEvent, usePublish } from './use-event';
 import { usePOS } from './pos-context';
 import { useAuth } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
@@ -41,6 +42,7 @@ const defaultForm: Omit<MenuItemRecord, 'id'> = {
 };
 
 export default function MenuManagementView({ slug, theme, currencySymbol: _currencySymbol }: Props) {
+  const publish = usePublish();
   const { isLoaded, isSignedIn } = useAuth();
   const [authReady, setAuthReady] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
@@ -88,6 +90,7 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
     if (!authReady) return;
     fetchItems();
   }, [authReady, fetchItems]);
+  useEvent('menu_items', () => { fetchItems(); });
 
   // Group by category
   const categories = [...new Set(items.map((i) => i.category ?? 'Uncategorized'))].sort();
@@ -146,8 +149,10 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
       if (editId) {
         await updateMenuItem(slug, editId, payload);
         await saveIngredients(slug, editId, ingredients);
+        publish('menu_items', 'UPDATE', { id: editId });
       } else {
         const inserted = await addMenuItem(slug, payload);
+        publish('menu_items', 'INSERT', { id: inserted.id });
         if (inserted && ingredients.length > 0) {
           await saveIngredients(slug, inserted.id, ingredients);
         }
@@ -165,6 +170,7 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
     setDeleting(deleteTarget.id);
     try {
       await deleteMenuItemAction(slug, deleteTarget.id);
+      publish('menu_items', 'DELETE', { id: deleteTarget.id });
       setDeleteTarget(null);
       fetchItems();
     } catch (e: any) { console.error('[Menu] delete error', e.message); }
@@ -177,6 +183,7 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, available: newVal } : i)));
     try {
       await toggleMenuItemAction(slug, item.id, newVal);
+      publish('menu_items', 'UPDATE', { id: item.id, available: newVal });
     } catch {
       setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, available: item.available } : i)));
     }

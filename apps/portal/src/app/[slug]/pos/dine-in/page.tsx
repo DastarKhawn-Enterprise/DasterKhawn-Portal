@@ -7,5 +7,5 @@ import DineInView from '../DineInView';
 export default function DineInPage() {
   const { supabaseUrl, supabaseAnonKey, theme, slug, brandName } = usePOS();
   if (usePageGuard()) return null;
-  return <DineInView slug={slug} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} brandName={brandName} />;
+  return <DineInView slug={slug} theme={theme} brandName={brandName} />;
 }

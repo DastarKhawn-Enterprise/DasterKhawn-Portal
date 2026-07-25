@@ -5,6 +5,7 @@ import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { hasPermission } from './permissions';
+import { useEvent } from './use-event';
 import { DonutChart, BarChart, LineChart, Heatmap } from './reports-charts';
 import {
   getOverviewData, getSalesData, getOrdersData, getItemsData,
@@ -110,6 +111,9 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
   useEffect(() => {
     if (isLoaded && canView) fetchTab(tab);
   }, [isLoaded, canView, tab, fetchTab]);
+
+  // Auto-refresh reports when related data changes
+  useEvent('orders', () => { fetchTab(tab); });
 
   // Export CSV
   const handleExport = useCallback(() => {

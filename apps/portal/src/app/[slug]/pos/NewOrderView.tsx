@@ -11,6 +11,7 @@ import { searchCustomersSupa } from './customer-utils';
 import { processPayments, type PaymentInput } from './payment-actions';
 import ReceiptView from './ReceiptView';
 import PaymentMethodLogo from './PaymentMethodLogo';
+import { usePublish } from './use-event';
 
 interface MenuItem { id: string; name: string; description?: string; price: number; category?: string; available?: boolean; }
 interface CartItem { id: string; name: string; price: number; quantity: number; uid: string; image?: string; notes?: string; }
@@ -20,7 +21,7 @@ interface Account { id: string; name: string; account_type: string; payment_meth
 type OrderTypeOption = 'dine_in' | 'takeaway' | 'delivery' | 'drive_thru' | 'third_party';
 type PaymentViewType = 'selection' | 'input';
 
-interface Props { slug: string; supabaseUrl: string; supabaseAnonKey: string; theme: ThemeConfig; brandName: string; }
+interface Props { slug: string; theme: ThemeConfig; brandName: string; }
 
 const ORDER_TYPE_LABELS: Record<OrderTypeOption, string> = { dine_in: 'Dine In', takeaway: 'Take Away', delivery: 'Delivery', drive_thru: 'Drive Thru', third_party: '3rd Party' };
 const METHOD_LABELS: Record<string, string> = { cash: 'Cash', jazzcash: 'JazzCash', easypaisa: 'Easypaisa', bank_transfer: 'Bank Transfer', card: 'Card', credit: 'Credit' };
@@ -86,7 +87,8 @@ function CompactMenuItem({ item, onAdd }: { item: MenuItem; onAdd: (item: MenuIt
   );
 }
 
-export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme, brandName }: Props) {
+export default function NewOrderView({ slug, theme, brandName }: Props) {
+  const publish = usePublish();
   const router = useRouter();
   const { isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
@@ -261,6 +263,7 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
       if (orderType === 'dine_in' && selectedTableId) orderPayload.table_id = selectedTableId;
       const orderResult = await supa(slug, { table: 'orders', method: 'insert', select: 'id, order_number, created_at', single: true, body: orderPayload });
       if (!orderResult.ok || !orderResult.data) { setOrderError(orderResult.error || 'Failed to create order'); setCheckingOut(false); creatingOrderRef.current = false; return; }
+      publish('orders', 'INSERT', { id: orderResult.data?.id });
       const newOrder: any = orderResult.data;
       const items = cart.map((item) => ({ order_id: newOrder.id, menu_item_id: item.id, quantity: item.quantity, price_at_order: item.price }));
       const itemsResult = await supa(slug, { table: 'order_items', method: 'insert', body: items });
@@ -284,6 +287,7 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
       const payments: PaymentInput[] = [{ account_id: acc.id, payment_method: paymentMethod, amount: grandTotal, cash_received: paymentMethod === 'cash' ? received : null, change_due: paymentMethod === 'cash' ? changeDue : null, reference_number: (paymentMethod !== 'cash' ? keypadValue : null) || null, notes: null, customer_id: selectedCustomer?.id || null, idempotency_key: currentOrderId + '_' + Date.now() + '_' + genId() }];
       const r = await processPayments(slug, currentOrderId, payments);
       if (!r.success) { setPaymentError(r.error || 'Payment failed'); setSavingPayment(false); return; }
+      publish('payments', 'INSERT', { id: r.data?.id });
       setSuccessData(r); setShowReceipt(true);
     } catch (e: any) { setPaymentError(e.message || 'Payment failed'); }
     setSavingPayment(false);
@@ -304,6 +308,7 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
     setSavingPayment(true);
     processPayments(slug, currentOrderId, payments).then((r) => {
       if (!r.success) { setPaymentError(r.error || 'Payment failed'); setSavingPayment(false); return; }
+      publish('payments', 'INSERT', { id: r.data?.id });
       setSuccessData(r); setShowReceipt(true); setSavingPayment(false);
     }).catch((e: any) => { setPaymentError(e.message || 'Payment failed'); setSavingPayment(false); });
   }, [currentOrderId, cart, paymentMethod, keypadValue, grandTotal, accounts, selectedCustomer, slug]);
@@ -374,7 +379,7 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
                 <div className="space-y-2">
                   <input type="text" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} placeholder="Full Name" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
                   <input type="tel" value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} placeholder="Phone (optional)" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
-                  <button onClick={async () => { if (!newCustomerName.trim()) return; const result = await supa(slug, { table: 'customers', method: 'insert', select: 'id, name, phone', single: true, body: { name: newCustomerName.trim(), phone: newCustomerPhone.trim() || null, status: 'active' } }); if (result.ok && result.data) { setSelectedCustomer(result.data as Customer); setShowCustomerModal(false); setNewCustomerName(''); setNewCustomerPhone(''); } }}
+                  <button onClick={async () => { if (!newCustomerName.trim()) return; const result = await supa(slug, { table: 'customers', method: 'insert', select: 'id, name, phone', single: true, body: { name: newCustomerName.trim(), phone: newCustomerPhone.trim() || null, status: 'active' } }); if (result.ok && result.data) { setSelectedCustomer(result.data as Customer); setShowCustomerModal(false); setNewCustomerName(''); setNewCustomerPhone(''); publish('customers', 'INSERT', { id: result.data?.id }); } }}
                     className="w-full py-2 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: '#C9972B' }}>Add Customer</button>
                 </div>
               </div>
