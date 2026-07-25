@@ -219,7 +219,15 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
 
   const handleAddToCart = useCallback((item: MenuItem) => { setCart((prev) => { const existing = prev.find((ci) => ci.id === item.id); if (existing) return prev.map((ci) => (ci.id === item.id ? { ...ci, quantity: ci.quantity + 1 } : ci)); return [...prev, { id: item.id, name: item.name, price: item.price, quantity: 1, uid: genId() }]; }); }, []);
   const handleUpdateQuantity = useCallback((itemId: string, qty: number) => { if (qty <= 0) { setCart((prev) => prev.filter((ci) => ci.id !== itemId)); return; } setCart((prev) => prev.map((ci) => (ci.id === itemId ? { ...ci, quantity: qty } : ci))); }, []);
-  const handleRemoveItem = useCallback((uid: string) => { setCart((prev) => prev.filter((ci) => ci.uid !== uid)); }, []);
+  const handleRemoveItem = useCallback((uid: string, e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    setCart((prev) => {
+      const byUid = prev.filter((ci) => ci.uid !== uid);
+      if (byUid.length < prev.length) return byUid;
+      return prev.filter((ci) => ci.id !== uid);
+    });
+  }, []);
 
   const handleClearCart = useCallback(() => {
     setCart([]); setSpecialInstructions(''); setOrderNotes(''); setDiscount(null); setSelectedCustomer(null);
@@ -474,7 +482,7 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
                 <div key={item.uid} className="bg-gray-50 rounded-xl border border-gray-100 p-3">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-gray-800 truncate">{item.name}</p><p className="text-xs text-gray-400">{currencySymbol}{item.price.toFixed(2)} each</p></div>
-                    <button onClick={() => handleRemoveItem(item.uid)} className="text-red-300 hover:text-red-600 text-lg leading-none shrink-0 font-bold px-1" title="Remove item">&times;</button>
+                    <button onClick={(e) => handleRemoveItem(item.uid || item.id, e)} className="text-red-400 hover:text-red-600 text-lg font-bold px-1.5 py-0.5 border border-red-200 rounded-md hover:border-red-400 transition-colors" title="Remove item">&#x2716; <span className="text-[10px] font-medium">Remove</span></button>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
