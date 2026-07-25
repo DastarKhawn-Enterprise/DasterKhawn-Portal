@@ -436,7 +436,7 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
       )}
 
       {/* Main 3-Column Layout */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
 
         {/* LEFT: Order Cart */}
         <div className="w-[340px] xl:w-[380px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden hidden md:flex">
@@ -532,7 +532,7 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
             <p className="text-xs text-gray-400">{orderCount} items</p>
           </div>
           <button onClick={() => setShowCustomerModal(true)} className="px-3 py-2 text-xs font-semibold border border-gray-200 rounded-lg text-gray-600">Customer</button>
-          <button onClick={handlePlaceOrder} disabled={cart.length === 0 || checkingOut || !!currentOrderId} className="px-6 py-2 rounded-lg text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: cart.length > 0 ? '#C9972B' : '#9CA3AF' }}>{checkingOut ? '...' : currentOrderId ? 'Pay' : 'Order'}</button>
+          <button onClick={currentOrderId ? handlePayClick : handlePlaceOrder} disabled={cart.length === 0 || checkingOut} className="px-6 py-2 rounded-lg text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: cart.length > 0 ? '#C9972B' : '#9CA3AF' }}>{checkingOut ? '...' : currentOrderId ? 'Pay ' + currencySymbol + grandTotal.toFixed(2) : 'Order'}</button>
         </div>
 
         {/* CENTER: Menu */}
@@ -609,7 +609,7 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
         </div>
 
         {/* RIGHT: Calculator-Style POS Sidebar */}
-        <div className="w-[300px] xl:w-[320px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col hidden xl:flex">
+        <div className="w-full md:w-[300px] xl:w-[320px] flex-shrink-0 bg-white md:border-l border-t md:border-t-0 border-gray-200 flex flex-col">
 
           {/* Action Buttons - 2x2 Grid */}
           <div className="grid grid-cols-2 gap-1 p-2 border-b border-gray-200 shrink-0">
