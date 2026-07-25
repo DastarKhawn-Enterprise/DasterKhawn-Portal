@@ -27,15 +27,16 @@ const METHOD_LABELS: Record<string, string> = { cash: 'Cash', jazzcash: 'JazzCas
 
 function genId() { return Math.random().toString(36).slice(2, 9); }
 
-function NumericKeypadInner({ value, onChange, onClear }: { value: string; onChange: (v: string) => void; onClear: () => void }) {
+function NumericKeypadInner({ value, onChange, onClear, onOperator, calcNewNumberRef }: { value: string; onChange: (v: string) => void; onClear: () => void; onOperator?: (op: '+' | '-', currentValue: string) => void; calcNewNumberRef?: React.MutableRefObject<{ newNumber: boolean }> }) {
   const press = (k: string) => {
     if (k === 'backspace') { onChange(value.slice(0, -1)); return; }
     if (k === 'clear') { onClear(); return; }
     if (k === '.' && value.includes('.')) return;
     if (k === '.' && value === '') { onChange('0.'); return; }
-    if (k === '+') { const n = (parseFloat(value) || 0) + 100; onChange(String(n)); return; }
-    if (k === '-') { const n = Math.max(0, (parseFloat(value) || 0) - 100); onChange(String(n)); return; }
-    onChange(value + k);
+    if (k === '+') { onOperator?.('+', value); return; }
+    if (k === '-') { onOperator?.('-', value); return; }
+    if (calcNewNumberRef?.current.newNumber) { calcNewNumberRef.current.newNumber = false; onChange(k); }
+    else onChange(value + k);
   };
   return (
     <div className="grid grid-cols-4 gap-1">
@@ -141,6 +142,18 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
   const searchRef = useRef<HTMLInputElement>(null);
   const creatingOrderRef = useRef(false);
   const currencySymbol = settings?.currencySymbol || 'Rs.';
+  const calcRef = useRef({ buffer: 0, op: null as '+' | '-' | null, newNumber: false });
+  const handleOperator = useCallback((op: '+' | '-', currentValue: string) => {
+    const curr = parseFloat(currentValue) || 0;
+    const c = calcRef.current;
+    let result = curr;
+    if (c.op === '+') result = c.buffer + curr;
+    else if (c.op === '-') result = c.buffer - curr;
+    if (c.op !== null) { const str = String(result); setKeypadValue(str); setKeypadDisplay(str); }
+    c.buffer = result;
+    c.op = op;
+    c.newNumber = true;
+  }, []);
 
   const { setPageTitle } = usePOS();
   useEffect(() => { setPageTitle('New Order'); }, [setPageTitle]);
@@ -179,15 +192,26 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
       else if (e.code === 'Numpad7') k = '7';
       else if (e.code === 'Numpad8') k = '8';
       else if (e.code === 'Numpad9') k = '9';
+      else if (e.key === 'Enter' || e.code === 'NumpadEnter') {
+        const cur = parseFloat(keypadValue) || 0;
+        const cc = calcRef.current;
+        if (cc.op === '+') { const r = cc.buffer + cur; const s = String(r); setKeypadValue(s); setKeypadDisplay(s); }
+        else if (cc.op === '-') { const r = cc.buffer - cur; const s = String(r); setKeypadValue(s); setKeypadDisplay(s); }
+        else return;
+        cc.buffer = 0; cc.op = null; cc.newNumber = true;
+        return;
+      }
       if (k === null) return;
       e.preventDefault();
-      if (k === 'clear') { setKeypadValue(''); setKeypadDisplay(''); return; }
+      if (k === 'clear') { calcRef.current = { buffer: 0, op: null, newNumber: false }; setKeypadValue(''); setKeypadDisplay(''); return; }
       if (k === 'backspace') { setKeypadValue((prev) => prev.slice(0, -1)); setKeypadDisplay((prev) => prev.slice(0, -1)); return; }
-      if (k === '+' && keypadValue) { setKeypadValue((prev) => String((parseFloat(prev) || 0) + 100)); return; }
-      if (k === '-' && keypadValue) { setKeypadValue((prev) => String(Math.max(0, (parseFloat(prev) || 0) - 100))); return; }
+      if (k === '+' && keypadValue) { handleOperator('+', keypadValue); return; }
+      if (k === '-' && keypadValue) { handleOperator('-', keypadValue); return; }
       if (k === '.' && keypadValue.includes('.')) return;
       if (k === '.' && keypadValue === '') { setKeypadValue('0.'); setKeypadDisplay('0.'); return; }
-      setKeypadValue((prev) => prev + k); setKeypadDisplay((prev) => prev + k);
+      const c = calcRef.current;
+      if (c.newNumber) { c.newNumber = false; setKeypadValue(k); setKeypadDisplay(k); }
+      else { setKeypadValue((prev) => prev + k); setKeypadDisplay((prev) => prev + k); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -201,6 +225,7 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
     setCart([]); setSpecialInstructions(''); setOrderNotes(''); setDiscount(null); setSelectedCustomer(null);
     setSelectedTableId(null); setCurrentOrderId(null); setCurrentOrderNumber(0); setPaymentView('selection');
     setPaymentMethod(''); setKeypadValue(''); setKeypadDisplay(''); setPaymentError(''); setAccounts([]);
+    calcRef.current = { buffer: 0, op: null, newNumber: false };
   }, []);
 
   const handleNewOrder = useCallback(() => { handleClearCart(); }, [handleClearCart]);
@@ -232,7 +257,7 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
       if (!itemsResult.ok) { console.error('[PlaceOrder items]', itemsResult.error); setCheckingOut(false); creatingOrderRef.current = false; return; }
       await deductInventorySupa(slug, cart, newOrder.id, user?.id).catch((e) => console.error('[Inventory]', e));
       if (orderType === 'dine_in' && selectedTableId) { await supa(slug, { table: 'tables', method: 'update', eq: ['id', selectedTableId], body: { status: 'occupied', current_order_id: newOrder.id } }); setTables((prev) => prev.map((t) => (t.id === selectedTableId ? { ...t, status: 'occupied' } : t))); }
-      setCurrentOrderId(newOrder.id); setCurrentOrderNumber(newOrder.order_number); setPaymentView('selection'); setPaymentMethod(''); setKeypadValue(''); setKeypadDisplay(''); setPaymentError('');
+      setCurrentOrderId(newOrder.id); setCurrentOrderNumber(newOrder.order_number); setPaymentView('selection'); setPaymentMethod(''); setKeypadValue(''); setKeypadDisplay(''); setPaymentError(''); calcRef.current = { buffer: 0, op: null, newNumber: false };
     } catch (e) { console.error('[PlaceOrder]', e); }
     setCheckingOut(false); creatingOrderRef.current = false;
   }, [cart, orderType, grandTotal, taxAmount, serviceCharge, selectedCustomer, selectedTableId, orderNotes, slug, user]);
@@ -639,7 +664,7 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
                 <p className="text-base font-extrabold text-gray-900">{currencySymbol}{(parseFloat(keypadValue) || 0).toFixed(2)}</p>
               </div>
             )}
-            <NumericKeypad value={keypadValue} onChange={(v) => { setKeypadValue(v); setKeypadDisplay(v); }} onClear={() => { setKeypadValue(''); setKeypadDisplay(''); }} />
+            <NumericKeypad value={keypadValue} onChange={(v) => { setKeypadValue(v); setKeypadDisplay(v); }} onClear={() => { calcRef.current = { buffer: 0, op: null, newNumber: false }; setKeypadValue(''); setKeypadDisplay(''); }} onOperator={handleOperator} calcNewNumberRef={calcRef} />
             {paymentError && <p className="text-[10px] text-red-600 text-center mt-1">{paymentError}</p>}
           </div>
 
