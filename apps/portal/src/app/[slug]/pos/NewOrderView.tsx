@@ -578,33 +578,40 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
         <div className="w-[300px] xl:w-[320px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col hidden xl:flex">
 
           {/* Action Buttons - 2x2 Grid */}
-          <div className="grid grid-cols-2 gap-1.5 p-2 border-b border-gray-200 shrink-0">
+          <div className="grid grid-cols-2 gap-1 p-2 border-b border-gray-200 shrink-0">
             <button onClick={() => setShowCustomerModal(true)}
-              className="flex flex-col items-center justify-center py-2 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
+              className="flex flex-col items-center justify-center py-1.5 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
             >
-              <span className="text-base leading-none">&#x1F464;</span>
-              <span className="text-[10px] font-semibold">Customer</span>
-              {selectedCustomer && <span className="text-[8px] text-green-600 font-bold truncate max-w-full px-0.5 leading-tight">{selectedCustomer.name}</span>}
+              <span className="text-sm leading-none">&#x1F464;</span>
+              <span className="text-[9px] font-semibold">Customer</span>
+              {selectedCustomer && <span className="text-[7px] text-green-600 font-bold truncate max-w-full px-0.5 leading-tight">{selectedCustomer.name}</span>}
             </button>
             <button onClick={() => setShowNotesModal(true)}
-              className="flex flex-col items-center justify-center py-2 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
+              className="flex flex-col items-center justify-center py-1.5 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
             >
-              <span className="text-base leading-none">&#x1F4DD;</span>
-              <span className="text-[10px] font-semibold">Notes</span>
-              {orderNotes && <span className="text-[8px] text-blue-600 font-bold">Added</span>}
+              <span className="text-sm leading-none">&#x1F4DD;</span>
+              <span className="text-[9px] font-semibold">Notes</span>
+              {orderNotes && <span className="text-[7px] text-blue-600 font-bold">Added</span>}
             </button>
-            <button onClick={() => { setShowDiscountModal(true); setDiscountValue(discount ? String(discount.value) : ''); }}
-              className="flex flex-col items-center justify-center py-2 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
+            <button onClick={() => {
+              if (keypadValue) {
+                const v = parseFloat(keypadValue);
+                if (v > 0) { setDiscount({ type: 'fixed', value: v }); setKeypadValue(''); setKeypadDisplay(''); }
+              } else {
+                setShowDiscountModal(true); setDiscountValue(discount ? String(discount.value) : '');
+              }
+            }}
+              className="flex flex-col items-center justify-center py-1.5 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
             >
-              <span className="text-base leading-none">&#x1F3F7;&#xFE0F;</span>
-              <span className="text-[10px] font-semibold">Discount</span>
-              {discount && <span className="text-[8px] text-green-600 font-bold truncate max-w-full px-0.5 leading-tight">{discount.type === 'percentage' ? discount.value + '%' : currencySymbol + discount.value}</span>}
+              <span className="text-sm leading-none">&#x1F3F7;&#xFE0F;</span>
+              <span className="text-[9px] font-semibold">Discount</span>
+              {discount && <span className="text-[7px] text-green-600 font-bold truncate max-w-full px-0.5 leading-tight">{discount.type === 'percentage' ? discount.value + '%' : currencySymbol + discount.value}</span>}
             </button>
             <button onClick={() => { setShowPromoModal(true); setPromoCode(''); setPromoError(''); }}
-              className="flex flex-col items-center justify-center py-2 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
+              className="flex flex-col items-center justify-center py-1.5 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
             >
-              <span className="text-base leading-none">&#x1F39F;&#xFE0F;</span>
-              <span className="text-[10px] font-semibold">Promo</span>
+              <span className="text-sm leading-none">&#x1F39F;&#xFE0F;</span>
+              <span className="text-[9px] font-semibold">Promo</span>
             </button>
           </div>
 
@@ -627,9 +634,9 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
 
           {/* Keypad - always functional */}
           <div className="p-2 border-b border-gray-200 shrink-0">
-            {currentOrderId && paymentMethod && (
+            {keypadValue && (
               <div className="mb-1.5 px-2 py-1 bg-gray-50 rounded-lg border border-gray-200 text-center">
-                <span className="text-[10px] text-gray-400">{paymentMethod === 'cash' ? 'Cash Received' : 'Reference / Amount'}</span>
+                <span className="text-[10px] text-gray-400">{currentOrderId && paymentMethod ? (paymentMethod === 'cash' ? 'Cash Received' : 'Reference / Amount') : 'Calculator'}</span>
                 <p className="text-base font-extrabold text-gray-900">{currencySymbol}{(parseFloat(keypadValue) || 0).toFixed(2)}</p>
               </div>
             )}
