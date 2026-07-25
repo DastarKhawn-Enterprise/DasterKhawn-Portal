@@ -26,21 +26,28 @@ const METHOD_LABELS: Record<string, string> = { cash: 'Cash', jazzcash: 'JazzCas
 
 function genId() { return Math.random().toString(36).slice(2, 9); }
 
-function NumericKeypad({ value, onChange, onClear }: { value: string; onChange: (v: string) => void; onClear: () => void }) {
+function NumericKeypad({ value, onChange, onClear, disabled }: { value: string; onChange: (v: string) => void; onClear: () => void; disabled?: boolean }) {
   const press = (k: string) => {
+    if (disabled) return;
     if (k === 'backspace') { onChange(value.slice(0, -1)); return; }
     if (k === 'clear') { onClear(); return; }
     if (k === '.' && value.includes('.')) return;
     if (k === '.' && value === '') { onChange('0.'); return; }
+    if (k === '+') { const n = (parseFloat(value) || 0) + 100; onChange(String(n)); return; }
+    if (k === '-') { const n = Math.max(0, (parseFloat(value) || 0) - 100); onChange(String(n)); return; }
     onChange(value + k);
   };
   return (
-    <div className="grid grid-cols-3 gap-1.5">
-      {[['1','2','3'],['4','5','6'],['7','8','9'],['00','0','.']].map((row, ri) => row.map((k) => (
-        <button key={ri+k} onClick={() => press(k)} className="h-11 rounded-lg text-sm font-bold bg-gray-50 hover:bg-gray-200 active:bg-gray-300 text-gray-800 border border-gray-200 transition-colors">{k}</button>
+    <div className="grid grid-cols-4 gap-1.5">
+      {[['7','8','9','backspace'],['4','5','6','+'],['1','2','3','-'],['0','00','.','clear']].map((row, ri) => row.map((k) => (
+        <button key={ri+k} onClick={() => press(k)}
+          className={'min-h-[56px] md:min-h-[60px] rounded-xl text-sm font-bold transition-all active:scale-95 select-none ' + (
+            k === 'backspace' || k === 'clear' ? 'bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-600 border border-red-200' :
+            k === '+' || k === '-' ? 'bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-600 border border-blue-200' :
+            'bg-gray-50 hover:bg-gray-200 active:bg-gray-300 text-gray-800 border border-gray-200'
+          )}
+        >{k === 'backspace' ? '⌫' : k === 'clear' ? 'C' : k === '+' ? '+' : k === '-' ? '−' : k}</button>
       )))}
-      <button onClick={() => press('backspace')} className="h-11 rounded-lg text-sm font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 transition-colors">DEL</button>
-      <button onClick={() => press('clear')} className="h-11 rounded-lg text-sm font-bold bg-gray-100 hover:bg-gray-200 text-gray-600 border border-gray-200 transition-colors">CLR</button>
     </div>
   );
 }
@@ -125,6 +132,10 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
   const [successData, setSuccessData] = useState<any>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [showPromoModal, setShowPromoModal] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoError, setPromoError] = useState('');
 
   const searchRef = useRef<HTMLInputElement>(null);
   const creatingOrderRef = useRef(false);
@@ -201,6 +212,17 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
     } catch (e: any) { setPaymentError(e.message || 'Payment failed'); }
     setSavingPayment(false);
   }, [currentOrderId, paymentMethod, keypadValue, grandTotal, accounts, selectedCustomer, slug]);
+
+  const handlePayClick = useCallback(() => {
+    if (!currentOrderId || cart.length === 0) return;
+    if (!paymentMethod) {
+      setPaymentMethod('cash');
+      setKeypadValue(String(Math.ceil(grandTotal)));
+      setKeypadDisplay(String(Math.ceil(grandTotal)));
+      return;
+    }
+    handleProcessPayment();
+  }, [currentOrderId, cart, paymentMethod, grandTotal, handleProcessPayment]);
 
   const filteredItems = useMemo(() => {
     let items = menuItems;
@@ -291,6 +313,48 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
                 <button onClick={() => setShowDiscountModal(false)} className="flex-1 py-2.5 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Cancel</button>
                 <button onClick={() => { const v = parseFloat(discountValue); if (v > 0) { setDiscount({ type: discountType, value: v }); setShowDiscountModal(false); } }} className="flex-1 py-2.5 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: '#C9972B' }}>Apply</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notes Modal */}
+      {showNotesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowNotesModal(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-800">Order Notes</h2>
+              <button onClick={() => setShowNotesModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+            </div>
+            <textarea value={orderNotes} onChange={(e) => setOrderNotes(e.target.value)} placeholder="Kitchen instructions, special requests..." className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg resize-none h-28" autoFocus />
+            <button onClick={() => setShowNotesModal(false)} className="w-full mt-3 py-2.5 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: '#C9972B' }}>Save</button>
+          </div>
+        </div>
+      )}
+
+      {/* Promo Code Modal */}
+      {showPromoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowPromoModal(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-800">Promo Code</h2>
+              <button onClick={() => setShowPromoModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+            </div>
+            <div className="space-y-3">
+              <input type="text" value={promoCode} onChange={(e) => { setPromoCode(e.target.value); setPromoError(''); }} placeholder="Enter promo code..." className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg uppercase" autoFocus />
+              {promoError && <p className="text-xs text-red-600">{promoError}</p>}
+              <button onClick={async () => {
+                if (!promoCode.trim()) { setPromoError('Enter a promo code'); return; }
+                const r = await supa(slug, { table: 'settings', select: 'promo_codes', limit: 1 }).catch(() => null);
+                const codes = r?.ok && r.data?.[0]?.promo_codes ? r.data[0].promo_codes : null;
+                if (codes?.[promoCode.trim().toUpperCase()]) {
+                  const p = codes[promoCode.trim().toUpperCase()];
+                  setDiscount({ type: p.type || 'percentage', value: p.value });
+                  setShowPromoModal(false); setPromoCode(''); setPromoError('');
+                } else {
+                  setPromoError('Invalid or expired promo code');
+                }
+              }} className="w-full py-2.5 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: '#C9972B' }}>Apply</button>
             </div>
           </div>
         </div>
@@ -477,73 +541,99 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
           </div>
         </div>
 
-        {/* RIGHT: Payment & Actions */}
+        {/* RIGHT: Calculator-Style POS Sidebar */}
         <div className="w-[300px] xl:w-[320px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden hidden xl:flex">
-          {!currentOrderId ? (
-            <>
-              <div className="px-4 py-3 border-b border-gray-200">
-                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Quick Actions</h3>
-              </div>
-              <div className="p-4 space-y-2">
-                <button onClick={() => setShowCustomerModal(true)} className="w-full py-2.5 rounded-xl text-sm font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors text-left px-4">&#x1F464; Customer</button>
-                <button onClick={() => { setShowDiscountModal(true); setDiscountValue(discount ? String(discount.value) : ''); }} className="w-full py-2.5 rounded-xl text-sm font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors text-left px-4">&#x1F4B0; Discount{discount ? ' (' + discount.type.charAt(0).toUpperCase() + discount.value + (discount.type === 'percentage' ? '%)' : ')') : ''}</button>
-                <button onClick={() => router.push('/' + slug + '/pos/reservations')} className="w-full py-2.5 rounded-xl text-sm font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors text-left px-4">&#x1F4C5; Reservation</button>
-                <button className="w-full py-2.5 rounded-xl text-sm font-semibold border border-gray-200 text-gray-400 cursor-not-allowed text-left px-4">&#x1F355; Split Bill</button>
-                <button className="w-full py-2.5 rounded-xl text-sm font-semibold border border-gray-200 text-gray-400 cursor-not-allowed text-left px-4">&#x1F500; Merge Order</button>
-                <button className="w-full py-2.5 rounded-xl text-sm font-semibold border border-gray-200 text-gray-400 cursor-not-allowed text-left px-4">&#x21C5; Transfer Table</button>
-              </div>
-              <div className="border-t border-gray-200 p-4">
-                <div className="bg-gray-50 rounded-xl p-4 text-center">
-                  <p className="text-xs text-gray-400 mb-1">Order Total</p>
-                  <p className="text-2xl font-extrabold" style={{ color: '#C9972B' }}>{currencySymbol}{grandTotal.toFixed(2)}</p>
-                  <p className="text-xs text-gray-400 mt-1">{orderCount} items in cart</p>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="px-4 py-3 border-b border-gray-200">
-                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Payment</h3>
-                <p className="text-lg font-extrabold text-gray-900 mt-1">{currencySymbol}{grandTotal.toFixed(2)}</p>
-              </div>
-              {paymentView === 'selection' && (
-                <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                  {['cash', 'card', 'jazzcash', 'easypaisa', 'bank_transfer'].map((pm) => {
-                    const acc = accounts.find((a) => a.payment_method === pm);
-                    return (
-                      <button key={pm} onClick={() => { setPaymentMethod(pm); if (pm === 'cash') { setKeypadDisplay(String(Math.ceil(grandTotal))); setKeypadValue(String(Math.ceil(grandTotal))); setPaymentView('input'); } else { setKeypadValue(''); setKeypadDisplay(''); setPaymentView('input'); } }}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 hover:border-amber-300 hover:shadow-sm transition-all text-left flex items-center gap-3"
-                      >
-                        <span className="text-xl">{pm === 'cash' ? '\u{1F4B5}' : pm === 'card' ? '\u{1F4B3}' : pm === 'jazzcash' || pm === 'easypaisa' ? '\u{1F4F1}' : '\u{1F3E6}'}</span>
-                        <div><p className="text-sm font-semibold text-gray-800">{METHOD_LABELS[pm] || pm}</p>{acc && <p className="text-xs text-gray-400">{acc.name}</p>}</div>
-                      </button>
-                    );
-                  })}
-                  <button onClick={() => { setPaymentMethod('split'); }} className="w-full py-3 rounded-xl border border-dashed border-gray-300 text-sm text-gray-500 hover:bg-gray-50 transition-colors">+ Split Payment</button>
-                </div>
-              )}
-              {paymentView === 'input' && (
-                <div className="flex-1 flex flex-col overflow-hidden p-4 space-y-3">
-                  <div className="text-center">
-                    <p className="text-xs text-gray-400 mb-1">{paymentMethod === 'cash' ? 'Cash Received' : 'Reference / Amount'}</p>
-                    <p className="text-2xl font-extrabold text-gray-900">{currencySymbol}{(parseFloat(keypadValue) || 0).toFixed(2)}</p>
-                    {paymentMethod === 'cash' && (parseFloat(keypadValue) || 0) >= grandTotal && (
-                      <p className="text-sm text-green-600 mt-1">Change: {currencySymbol}{((parseFloat(keypadValue) || 0) - grandTotal).toFixed(2)}</p>
-                    )}
-                    {paymentMethod === 'cash' && (parseFloat(keypadValue) || 0) > 0 && (parseFloat(keypadValue) || 0) < grandTotal && (
-                      <p className="text-sm text-amber-600 mt-1">Remaining: {currencySymbol}{(grandTotal - (parseFloat(keypadValue) || 0)).toFixed(2)}</p>
-                    )}
-                  </div>
-                  <NumericKeypad value={keypadValue} onChange={(v) => { setKeypadValue(v); setKeypadDisplay(v); }} onClear={() => { setKeypadValue(''); setKeypadDisplay(''); }} />
-                  {paymentError && <p className="text-xs text-red-600 text-center">{paymentError}</p>}
-                  <div className="flex gap-2 pt-1">
-                    <button onClick={() => { setPaymentView('selection'); setPaymentMethod(''); setKeypadValue(''); setKeypadDisplay(''); }} className="flex-1 py-2.5 rounded-xl text-xs font-semibold border border-gray-200 text-gray-500 hover:bg-gray-50">Back</button>
-                    <button onClick={handleProcessPayment} disabled={savingPayment || (paymentMethod === 'cash' && (!keypadValue || parseFloat(keypadValue) < grandTotal))} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg" style={{ backgroundColor: '#C9972B' }}>{savingPayment ? 'Processing...' : 'Pay ' + currencySymbol + grandTotal.toFixed(2)}</button>
-                  </div>
-                </div>
-              )}
-            </>
+
+          {/* Action Buttons - 2x2 Grid */}
+          <div className="p-3 grid grid-cols-2 gap-2 border-b border-gray-200">
+            <button onClick={() => setShowCustomerModal(true)}
+              className="flex flex-col items-center justify-center py-3 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
+            >
+              <span className="text-lg leading-none">&#x1F464;</span>
+              <span className="text-[10px] font-semibold mt-1">Customer</span>
+              {selectedCustomer && <span className="text-[9px] text-green-600 font-bold truncate max-w-full px-1">{selectedCustomer.name}</span>}
+            </button>
+            <button onClick={() => setShowNotesModal(true)}
+              className="flex flex-col items-center justify-center py-3 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
+            >
+              <span className="text-lg leading-none">&#x1F4DD;</span>
+              <span className="text-[10px] font-semibold mt-1">Notes</span>
+              {orderNotes && <span className="text-[9px] text-blue-600 font-bold truncate max-w-full px-1">Added</span>}
+            </button>
+            <button onClick={() => { setShowDiscountModal(true); setDiscountValue(discount ? String(discount.value) : ''); }}
+              className="flex flex-col items-center justify-center py-3 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
+            >
+              <span className="text-lg leading-none">&#x1F3F7;&#xFE0F;</span>
+              <span className="text-[10px] font-semibold mt-1">Discount</span>
+              {discount && <span className="text-[9px] text-green-600 font-bold truncate max-w-full px-1">{discount.type === 'percentage' ? discount.value + '%' : currencySymbol + discount.value}</span>}
+            </button>
+            <button onClick={() => { setShowPromoModal(true); setPromoCode(''); setPromoError(''); }}
+              className="flex flex-col items-center justify-center py-3 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
+            >
+              <span className="text-lg leading-none">&#x1F39F;&#xFE0F;</span>
+              <span className="text-[10px] font-semibold mt-1">Promo</span>
+            </button>
+          </div>
+
+          {/* Payment Method Row (visible only after order placed) */}
+          {currentOrderId && (
+            <div className="px-3 py-2 border-b border-gray-200 flex gap-1 overflow-x-auto shrink-0">
+              {['cash', 'card', 'jazzcash', 'easypaisa', 'bank_transfer'].map((pm) => (
+                <button key={pm} onClick={() => {
+                  if (paymentMethod === pm) { setPaymentMethod(''); return; }
+                  setPaymentMethod(pm); setPaymentView('input');
+                  if (pm === 'cash') { setKeypadValue(String(Math.ceil(grandTotal))); setKeypadDisplay(String(Math.ceil(grandTotal))); }
+                  else { setKeypadValue(''); setKeypadDisplay(''); }
+                }}
+                  className={'flex-1 py-2 rounded-lg text-[10px] font-semibold transition-all border ' + (paymentMethod === pm ? 'text-white border-transparent shadow-sm' : 'text-gray-500 border-gray-200 hover:bg-gray-50')}
+                  style={paymentMethod === pm ? { backgroundColor: '#C9972B' } : {}}
+                >{pm === 'cash' ? '\u{1F4B5} Cash' : pm === 'card' ? '\u{1F4B3} Card' : pm === 'jazzcash' ? '\u{1F4F1} JCash' : pm === 'easypaisa' ? '\u{1F4F1} EasyP' : '\u{1F3E6} Bank'}</button>
+              ))}
+            </div>
           )}
+
+          {/* Keypad - always visible */}
+          <div className="p-3 border-b border-gray-200">
+            {currentOrderId && paymentMethod && (
+              <div className="mb-2 px-2 py-1.5 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                <span className="text-xs text-gray-400">{paymentMethod === 'cash' ? 'Cash Received' : 'Reference / Amount'}</span>
+                <p className="text-lg font-extrabold text-gray-900">{currencySymbol}{(parseFloat(keypadValue) || 0).toFixed(2)}</p>
+              </div>
+            )}
+            <NumericKeypad value={keypadValue} onChange={(v) => { setKeypadValue(v); setKeypadDisplay(v); }} onClear={() => { setKeypadValue(''); setKeypadDisplay(''); }} disabled={!currentOrderId || !paymentMethod} />
+            {paymentError && <p className="text-xs text-red-600 text-center mt-1.5">{paymentError}</p>}
+          </div>
+
+          {/* Payment Summary */}
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1.5 text-xs">
+            <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>{currencySymbol}{subtotal.toFixed(2)}</span></div>
+            {discount && <div className="flex justify-between text-green-600"><span>Discount{discount.type === 'percentage' ? ` (${discount.value}%)` : ''}</span><span>-{currencySymbol}{discountAmount.toFixed(2)}</span></div>}
+            {serviceCharge > 0 && <div className="flex justify-between text-gray-500"><span>Service Charge ({(settings?.serviceChargeRate || 0).toFixed(0)}%)</span><span>{currencySymbol}{serviceCharge.toFixed(2)}</span></div>}
+            {taxAmount > 0 && <div className="flex justify-between text-gray-500"><span>Tax ({(settings?.taxRate || 0).toFixed(0)}%)</span><span>{currencySymbol}{taxAmount.toFixed(2)}</span></div>}
+            <div className="border-t border-gray-200 pt-1.5" />
+            <div className="flex justify-between font-bold text-gray-900" style={{ fontSize: '15px' }}><span>Grand Total</span><span>{currencySymbol}{grandTotal.toFixed(2)}</span></div>
+            {currentOrderId && paymentMethod && (
+              <>
+                <div className="border-t border-gray-200 pt-1.5 border-dashed" />
+                <div className="flex justify-between text-blue-600 font-medium"><span>Paid</span><span>{currencySymbol}{(parseFloat(keypadValue) || 0).toFixed(2)}</span></div>
+                {(parseFloat(keypadValue) || 0) > 0 && (parseFloat(keypadValue) || 0) < grandTotal && (
+                  <div className="flex justify-between text-amber-600 font-medium"><span>Remaining</span><span>{currencySymbol}{(grandTotal - (parseFloat(keypadValue) || 0)).toFixed(2)}</span></div>
+                )}
+                {(parseFloat(keypadValue) || 0) >= grandTotal && (
+                  <div className="flex justify-between text-green-600 font-medium"><span>Change</span><span>{currencySymbol}{((parseFloat(keypadValue) || 0) - grandTotal).toFixed(2)}</span></div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Pay Button */}
+          <div className="border-t border-gray-200 px-4 py-3">
+            <button onClick={handlePayClick}
+              disabled={!currentOrderId || cart.length === 0 || savingPayment}
+              className="w-full py-3 rounded-xl text-sm font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg active:scale-[0.98]"
+              style={{ backgroundColor: '#C9972B' }}
+            >{savingPayment ? 'Processing...' : 'Pay ' + currencySymbol + grandTotal.toFixed(2)}</button>
+          </div>
         </div>
       </div>
     </div>
