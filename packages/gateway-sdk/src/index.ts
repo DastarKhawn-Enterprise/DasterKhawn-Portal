@@ -288,13 +288,14 @@ export interface StaffRoleRow {
   role: string;
   permissions: string[];
   created_at: string;
+  metadata?: Record<string, any>;
 }
 
 export async function getStaffByTenant(tenantId: string): Promise<StaffRoleRow[]> {
   const client = getGatewayClient();
   const { data, error } = await client
     .from('staff_roles')
-    .select('id, clerk_user_id, tenant_id, role, permissions, created_at')
+    .select('id, clerk_user_id, tenant_id, role, permissions, created_at, metadata')
     .eq('tenant_id', tenantId);
 
   if (error) return [];
@@ -306,6 +307,7 @@ export async function addStaffRole(
   tenantId: string,
   role: string,
   permissions: string[],
+  metadata?: Record<string, any>,
 ): Promise<{ success: boolean; error?: string }> {
   const client = getGatewayClient();
   const { error } = await client.from('staff_roles').insert({
@@ -313,7 +315,31 @@ export async function addStaffRole(
     tenant_id: tenantId,
     role,
     permissions,
+    metadata: metadata ?? {},
   });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+export async function updateStaffRole(
+  clerkUserId: string,
+  tenantId: string,
+  updates: {
+    role?: string;
+    permissions?: string[];
+    metadata?: Record<string, any>;
+  },
+): Promise<{ success: boolean; error?: string }> {
+  const client = getGatewayClient();
+  const patch: Record<string, any> = {};
+  if (updates.role !== undefined) patch.role = updates.role;
+  if (updates.permissions !== undefined) patch.permissions = updates.permissions;
+  if (updates.metadata !== undefined) patch.metadata = updates.metadata;
+  const { error } = await client
+    .from('staff_roles')
+    .update(patch)
+    .eq('clerk_user_id', clerkUserId)
+    .eq('tenant_id', tenantId);
   if (error) return { success: false, error: error.message };
   return { success: true };
 }
