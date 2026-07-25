@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth, useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
@@ -26,9 +26,8 @@ const METHOD_LABELS: Record<string, string> = { cash: 'Cash', jazzcash: 'JazzCas
 
 function genId() { return Math.random().toString(36).slice(2, 9); }
 
-function NumericKeypad({ value, onChange, onClear, disabled }: { value: string; onChange: (v: string) => void; onClear: () => void; disabled?: boolean }) {
+function NumericKeypadInner({ value, onChange, onClear }: { value: string; onChange: (v: string) => void; onClear: () => void }) {
   const press = (k: string) => {
-    if (disabled) return;
     if (k === 'backspace') { onChange(value.slice(0, -1)); return; }
     if (k === 'clear') { onClear(); return; }
     if (k === '.' && value.includes('.')) return;
@@ -38,10 +37,10 @@ function NumericKeypad({ value, onChange, onClear, disabled }: { value: string; 
     onChange(value + k);
   };
   return (
-    <div className="grid grid-cols-4 gap-1.5">
+    <div className="grid grid-cols-4 gap-1">
       {[['7','8','9','backspace'],['4','5','6','+'],['1','2','3','-'],['0','00','.','clear']].map((row, ri) => row.map((k) => (
         <button key={ri+k} onClick={() => press(k)}
-          className={'min-h-[56px] md:min-h-[60px] rounded-xl text-sm font-bold transition-all active:scale-95 select-none ' + (
+          className={'min-h-[52px] xl:min-h-[56px] rounded-xl text-sm font-bold transition-all active:scale-95 select-none ' + (
             k === 'backspace' || k === 'clear' ? 'bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-600 border border-red-200' :
             k === '+' || k === '-' ? 'bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-600 border border-blue-200' :
             'bg-gray-50 hover:bg-gray-200 active:bg-gray-300 text-gray-800 border border-gray-200'
@@ -51,6 +50,7 @@ function NumericKeypad({ value, onChange, onClear, disabled }: { value: string; 
     </div>
   );
 }
+const NumericKeypad = memo(NumericKeypadInner);
 
 function MenuCard({ item, onAdd, isPopular }: { item: MenuItem; onAdd: (item: MenuItem) => void; isPopular?: boolean }) {
   const isAvailable = item.available !== false;
@@ -151,6 +151,43 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
   useEffect(() => { if (!authReady || !showCustomerModal) return; const t = setTimeout(async () => { if (!customerSearch.trim()) { setCustomerResults([]); return; } setCustomerSearchLoading(true); try { const results = await searchCustomersSupa(slug, customerSearch); setCustomerResults(results); } catch {} setCustomerSearchLoading(false); }, 300); return () => clearTimeout(t); }, [customerSearch, authReady, slug, showCustomerModal]);
 
   useEffect(() => { if (!currentOrderId || paymentView === 'selection') return; const load = async () => { setLoadingAccounts(true); const r = await supa(slug, { table: 'accounts', select: 'id,name,account_type,payment_method,current_balance', eq: ['is_active', true], order: 'name' }); if (r.ok && r.data) setAccounts(r.data as Account[]); setLoadingAccounts(false); }; load(); }, [slug, currentOrderId, paymentView]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      let k: string | null = null;
+      if (e.key >= '0' && e.key <= '9') k = e.key;
+      else if (e.key === '00') k = '00';
+      else if (e.key === '.' || (e.key === 'Decimal' && e.code === 'NumpadDecimal')) k = '.';
+      else if (e.key === 'Backspace') k = 'backspace';
+      else if (e.key === 'Delete' || e.key === 'Escape') k = 'clear';
+      else if (e.key === '+' || e.code === 'NumpadAdd') k = '+';
+      else if (e.key === '-' || e.code === 'NumpadSubtract') k = '-';
+      else if (e.code === 'Numpad0') k = '0';
+      else if (e.code === 'Numpad1') k = '1';
+      else if (e.code === 'Numpad2') k = '2';
+      else if (e.code === 'Numpad3') k = '3';
+      else if (e.code === 'Numpad4') k = '4';
+      else if (e.code === 'Numpad5') k = '5';
+      else if (e.code === 'Numpad6') k = '6';
+      else if (e.code === 'Numpad7') k = '7';
+      else if (e.code === 'Numpad8') k = '8';
+      else if (e.code === 'Numpad9') k = '9';
+      if (k === null) return;
+      e.preventDefault();
+      if (k === 'clear') { setKeypadValue(''); setKeypadDisplay(''); return; }
+      if (k === 'backspace') { setKeypadValue((prev) => prev.slice(0, -1)); setKeypadDisplay((prev) => prev.slice(0, -1)); return; }
+      if (k === '+' && keypadValue) { setKeypadValue((prev) => String((parseFloat(prev) || 0) + 100)); return; }
+      if (k === '-' && keypadValue) { setKeypadValue((prev) => String(Math.max(0, (parseFloat(prev) || 0) - 100))); return; }
+      if (k === '.' && keypadValue.includes('.')) return;
+      if (k === '.' && keypadValue === '') { setKeypadValue('0.'); setKeypadDisplay('0.'); return; }
+      setKeypadValue((prev) => prev + k); setKeypadDisplay((prev) => prev + k);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [keypadValue]);
 
   const handleAddToCart = useCallback((item: MenuItem) => { setCart((prev) => { const existing = prev.find((ci) => ci.id === item.id); if (existing) return prev.map((ci) => (ci.id === item.id ? { ...ci, quantity: ci.quantity + 1 } : ci)); return [...prev, { id: item.id, name: item.name, price: item.price, quantity: 1 }]; }); }, []);
   const handleUpdateQuantity = useCallback((itemId: string, qty: number) => { if (qty <= 0) { setCart((prev) => prev.filter((ci) => ci.id !== itemId)); return; } setCart((prev) => prev.map((ci) => (ci.id === itemId ? { ...ci, quantity: qty } : ci))); }, []);
@@ -542,42 +579,42 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
         </div>
 
         {/* RIGHT: Calculator-Style POS Sidebar */}
-        <div className="w-[300px] xl:w-[320px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden hidden xl:flex">
+        <div className="w-[300px] xl:w-[320px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col hidden xl:flex">
 
           {/* Action Buttons - 2x2 Grid */}
-          <div className="p-3 grid grid-cols-2 gap-2 border-b border-gray-200">
+          <div className="grid grid-cols-2 gap-1.5 p-2 border-b border-gray-200 shrink-0">
             <button onClick={() => setShowCustomerModal(true)}
-              className="flex flex-col items-center justify-center py-3 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
+              className="flex flex-col items-center justify-center py-2 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
             >
-              <span className="text-lg leading-none">&#x1F464;</span>
-              <span className="text-[10px] font-semibold mt-1">Customer</span>
-              {selectedCustomer && <span className="text-[9px] text-green-600 font-bold truncate max-w-full px-1">{selectedCustomer.name}</span>}
+              <span className="text-base leading-none">&#x1F464;</span>
+              <span className="text-[10px] font-semibold">Customer</span>
+              {selectedCustomer && <span className="text-[8px] text-green-600 font-bold truncate max-w-full px-0.5 leading-tight">{selectedCustomer.name}</span>}
             </button>
             <button onClick={() => setShowNotesModal(true)}
-              className="flex flex-col items-center justify-center py-3 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
+              className="flex flex-col items-center justify-center py-2 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
             >
-              <span className="text-lg leading-none">&#x1F4DD;</span>
-              <span className="text-[10px] font-semibold mt-1">Notes</span>
-              {orderNotes && <span className="text-[9px] text-blue-600 font-bold truncate max-w-full px-1">Added</span>}
+              <span className="text-base leading-none">&#x1F4DD;</span>
+              <span className="text-[10px] font-semibold">Notes</span>
+              {orderNotes && <span className="text-[8px] text-blue-600 font-bold">Added</span>}
             </button>
             <button onClick={() => { setShowDiscountModal(true); setDiscountValue(discount ? String(discount.value) : ''); }}
-              className="flex flex-col items-center justify-center py-3 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
+              className="flex flex-col items-center justify-center py-2 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
             >
-              <span className="text-lg leading-none">&#x1F3F7;&#xFE0F;</span>
-              <span className="text-[10px] font-semibold mt-1">Discount</span>
-              {discount && <span className="text-[9px] text-green-600 font-bold truncate max-w-full px-1">{discount.type === 'percentage' ? discount.value + '%' : currencySymbol + discount.value}</span>}
+              <span className="text-base leading-none">&#x1F3F7;&#xFE0F;</span>
+              <span className="text-[10px] font-semibold">Discount</span>
+              {discount && <span className="text-[8px] text-green-600 font-bold truncate max-w-full px-0.5 leading-tight">{discount.type === 'percentage' ? discount.value + '%' : currencySymbol + discount.value}</span>}
             </button>
             <button onClick={() => { setShowPromoModal(true); setPromoCode(''); setPromoError(''); }}
-              className="flex flex-col items-center justify-center py-3 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
+              className="flex flex-col items-center justify-center py-2 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
             >
-              <span className="text-lg leading-none">&#x1F39F;&#xFE0F;</span>
-              <span className="text-[10px] font-semibold mt-1">Promo</span>
+              <span className="text-base leading-none">&#x1F39F;&#xFE0F;</span>
+              <span className="text-[10px] font-semibold">Promo</span>
             </button>
           </div>
 
           {/* Payment Method Row (visible only after order placed) */}
           {currentOrderId && (
-            <div className="px-3 py-2 border-b border-gray-200 flex gap-1 overflow-x-auto shrink-0">
+            <div className="px-2 py-1.5 border-b border-gray-200 flex gap-1 overflow-x-auto shrink-0">
               {['cash', 'card', 'jazzcash', 'easypaisa', 'bank_transfer'].map((pm) => (
                 <button key={pm} onClick={() => {
                   if (paymentMethod === pm) { setPaymentMethod(''); return; }
@@ -585,36 +622,36 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
                   if (pm === 'cash') { setKeypadValue(String(Math.ceil(grandTotal))); setKeypadDisplay(String(Math.ceil(grandTotal))); }
                   else { setKeypadValue(''); setKeypadDisplay(''); }
                 }}
-                  className={'flex-1 py-2 rounded-lg text-[10px] font-semibold transition-all border ' + (paymentMethod === pm ? 'text-white border-transparent shadow-sm' : 'text-gray-500 border-gray-200 hover:bg-gray-50')}
+                  className={'flex-1 py-1.5 rounded-lg text-[9px] font-semibold transition-all border ' + (paymentMethod === pm ? 'text-white border-transparent shadow-sm' : 'text-gray-500 border-gray-200 hover:bg-gray-50')}
                   style={paymentMethod === pm ? { backgroundColor: '#C9972B' } : {}}
-                >{pm === 'cash' ? '\u{1F4B5} Cash' : pm === 'card' ? '\u{1F4B3} Card' : pm === 'jazzcash' ? '\u{1F4F1} JCash' : pm === 'easypaisa' ? '\u{1F4F1} EasyP' : '\u{1F3E6} Bank'}</button>
+                >{pm === 'cash' ? '\u{1F4B5}' : pm === 'card' ? '\u{1F4B3}' : pm === 'jazzcash' ? '\u{1F4F1}' : pm === 'easypaisa' ? '\u{1F4F1}' : '\u{1F3E6}'}</button>
               ))}
             </div>
           )}
 
-          {/* Keypad - always visible */}
-          <div className="p-3 border-b border-gray-200">
+          {/* Keypad - always functional */}
+          <div className="p-2 border-b border-gray-200 shrink-0">
             {currentOrderId && paymentMethod && (
-              <div className="mb-2 px-2 py-1.5 bg-gray-50 rounded-lg border border-gray-200 text-center">
-                <span className="text-xs text-gray-400">{paymentMethod === 'cash' ? 'Cash Received' : 'Reference / Amount'}</span>
-                <p className="text-lg font-extrabold text-gray-900">{currencySymbol}{(parseFloat(keypadValue) || 0).toFixed(2)}</p>
+              <div className="mb-1.5 px-2 py-1 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                <span className="text-[10px] text-gray-400">{paymentMethod === 'cash' ? 'Cash Received' : 'Reference / Amount'}</span>
+                <p className="text-base font-extrabold text-gray-900">{currencySymbol}{(parseFloat(keypadValue) || 0).toFixed(2)}</p>
               </div>
             )}
-            <NumericKeypad value={keypadValue} onChange={(v) => { setKeypadValue(v); setKeypadDisplay(v); }} onClear={() => { setKeypadValue(''); setKeypadDisplay(''); }} disabled={!currentOrderId || !paymentMethod} />
-            {paymentError && <p className="text-xs text-red-600 text-center mt-1.5">{paymentError}</p>}
+            <NumericKeypad value={keypadValue} onChange={(v) => { setKeypadValue(v); setKeypadDisplay(v); }} onClear={() => { setKeypadValue(''); setKeypadDisplay(''); }} />
+            {paymentError && <p className="text-[10px] text-red-600 text-center mt-1">{paymentError}</p>}
           </div>
 
-          {/* Payment Summary */}
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1.5 text-xs">
+          {/* Payment Summary - flex-1 fills remaining space, scrolls only if needed */}
+          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1 text-[11px]">
             <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>{currencySymbol}{subtotal.toFixed(2)}</span></div>
             {discount && <div className="flex justify-between text-green-600"><span>Discount{discount.type === 'percentage' ? ` (${discount.value}%)` : ''}</span><span>-{currencySymbol}{discountAmount.toFixed(2)}</span></div>}
             {serviceCharge > 0 && <div className="flex justify-between text-gray-500"><span>Service Charge ({(settings?.serviceChargeRate || 0).toFixed(0)}%)</span><span>{currencySymbol}{serviceCharge.toFixed(2)}</span></div>}
             {taxAmount > 0 && <div className="flex justify-between text-gray-500"><span>Tax ({(settings?.taxRate || 0).toFixed(0)}%)</span><span>{currencySymbol}{taxAmount.toFixed(2)}</span></div>}
-            <div className="border-t border-gray-200 pt-1.5" />
-            <div className="flex justify-between font-bold text-gray-900" style={{ fontSize: '15px' }}><span>Grand Total</span><span>{currencySymbol}{grandTotal.toFixed(2)}</span></div>
+            <div className="border-t border-gray-200 pt-1" />
+            <div className="flex justify-between font-bold text-gray-900 text-sm"><span>Grand Total</span><span>{currencySymbol}{grandTotal.toFixed(2)}</span></div>
             {currentOrderId && paymentMethod && (
               <>
-                <div className="border-t border-gray-200 pt-1.5 border-dashed" />
+                <div className="border-t border-gray-200 pt-1 border-dashed" />
                 <div className="flex justify-between text-blue-600 font-medium"><span>Paid</span><span>{currencySymbol}{(parseFloat(keypadValue) || 0).toFixed(2)}</span></div>
                 {(parseFloat(keypadValue) || 0) > 0 && (parseFloat(keypadValue) || 0) < grandTotal && (
                   <div className="flex justify-between text-amber-600 font-medium"><span>Remaining</span><span>{currencySymbol}{(grandTotal - (parseFloat(keypadValue) || 0)).toFixed(2)}</span></div>
@@ -626,12 +663,12 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
             )}
           </div>
 
-          {/* Pay Button */}
-          <div className="border-t border-gray-200 px-4 py-3">
+          {/* Pay Button - shrink-0 sticks to bottom */}
+          <div className="border-t border-gray-200 px-3 py-2 shrink-0">
             <button onClick={handlePayClick}
               disabled={!currentOrderId || cart.length === 0 || savingPayment}
-              className="w-full py-3 rounded-xl text-sm font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg active:scale-[0.98]"
-              style={{ backgroundColor: '#C9972B' }}
+              className="w-full py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg active:scale-[0.98]"
+              style={{ backgroundColor: cart.length > 0 ? '#C9972B' : '#9CA3AF' }}
             >{savingPayment ? 'Processing...' : 'Pay ' + currencySymbol + grandTotal.toFixed(2)}</button>
           </div>
         </div>
