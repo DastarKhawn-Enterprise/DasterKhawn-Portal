@@ -22,7 +22,6 @@ type PaymentViewType = 'selection' | 'input';
 interface Props { slug: string; supabaseUrl: string; supabaseAnonKey: string; theme: ThemeConfig; brandName: string; }
 
 const ORDER_TYPE_LABELS: Record<OrderTypeOption, string> = { dine_in: 'Dine In', takeaway: 'Take Away', delivery: 'Delivery', drive_thru: 'Drive Thru', third_party: '3rd Party' };
-const CATEGORIES = ['all', 'breakfast', 'starters', 'main course', 'bbq', 'fast food', 'drinks', 'desserts', 'deals'];
 const METHOD_LABELS: Record<string, string> = { cash: 'Cash', jazzcash: 'JazzCash', easypaisa: 'Easypaisa', bank_transfer: 'Bank Transfer', card: 'Card', credit: 'Credit' };
 
 function genId() { return Math.random().toString(36).slice(2, 9); }
@@ -205,10 +204,12 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
 
   const filteredItems = useMemo(() => {
     let items = menuItems;
-    if (selectedCategory !== 'all') items = items.filter((i) => i.category?.toLowerCase() === selectedCategory);
-    if (menuSearch) { const q = menuSearch.toLowerCase(); items = items.filter((i) => i.name.toLowerCase().includes(q) || i.category?.toLowerCase().includes(q)); }
+    if (selectedCategory !== 'all') items = items.filter((i) => (i.category ?? 'Uncategorized') === selectedCategory);
+    if (menuSearch) { const q = menuSearch.toLowerCase(); items = items.filter((i) => i.name.toLowerCase().includes(q) || (i.category ?? '').toLowerCase().includes(q)); }
     return items;
   }, [menuItems, selectedCategory, menuSearch]);
+  const allCategories = useMemo(() => [...new Set(menuItems.map((i) => i.category ?? 'Uncategorized'))].sort(), [menuItems]);
+  const groupedByCategory = useMemo(() => { const m = new Map<string, MenuItem[]>(); for (const item of filteredItems) { const c = item.category ?? 'Uncategorized'; if (!m.has(c)) m.set(c, []); m.get(c)!.push(item); } return m; }, [filteredItems]);
   const availableTables = tables.filter((t) => t.status === 'available');
   const orderCount = cart.reduce((s, i) => s + i.quantity, 0);
 
@@ -417,11 +418,15 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
               </div>
             </div>
             <div className="flex gap-0.5 px-3 pb-2 overflow-x-auto scrollbar-hide">
-              {CATEGORIES.map((cat) => (
+              <button key="all" onClick={() => setSelectedCategory('all')}
+                className={'px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors ' + (selectedCategory === 'all' ? 'text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700')}
+                style={selectedCategory === 'all' ? { backgroundColor: '#C9972B' } : {}}
+              >All</button>
+              {allCategories.map((cat) => (
                 <button key={cat} onClick={() => setSelectedCategory(cat)}
                   className={'px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors ' + (selectedCategory === cat ? 'text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700')}
                   style={selectedCategory === cat ? { backgroundColor: '#C9972B' } : {}}
-                >{cat === 'all' ? 'All' : cat.charAt(0).toUpperCase() + cat.slice(1)}</button>
+                >{cat}</button>
               ))}
             </div>
           </div>
@@ -442,18 +447,30 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
               filteredItems.length === 0 ? (
                 <div className="flex items-center justify-center h-48"><p className="text-gray-400 text-sm">No items found</p></div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                  {filteredItems.map((item) => (
-                    <MenuCard key={item.id} item={item} onAdd={handleAddToCart} isPopular={mostOrderedItems.some((m) => m.id === item.id)} />
-                  ))}
-                </div>
+                Array.from(groupedByCategory.entries()).map(([cat, items]) => (
+                  <div key={cat} className="mb-6">
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">{cat}</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                      {items.map((item) => (
+                        <MenuCard key={item.id} item={item} onAdd={handleAddToCart} isPopular={mostOrderedItems.some((m) => m.id === item.id)} />
+                      ))}
+                    </div>
+                  </div>
+                ))
               )
             ) : (
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 {filteredItems.length === 0 ? (
                   <div className="flex items-center justify-center h-32"><p className="text-gray-400 text-sm">No items found</p></div>
                 ) : (
-                  filteredItems.map((item) => (<CompactMenuItem key={item.id} item={item} onAdd={handleAddToCart} />))
+                  Array.from(groupedByCategory.entries()).map(([cat, items]) => (
+                    <div key={cat}>
+                      <div className="px-4 py-2 bg-gray-50 border-b border-gray-100">
+                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">{cat}</h4>
+                      </div>
+                      {items.map((item) => (<CompactMenuItem key={item.id} item={item} onAdd={handleAddToCart} />))}
+                    </div>
+                  ))
                 )}
               </div>
             )}
