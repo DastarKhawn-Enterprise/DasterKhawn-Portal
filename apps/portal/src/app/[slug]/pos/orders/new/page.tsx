@@ -2,10 +2,10 @@
 
 import { usePOS } from '../../pos-context';
 import { usePageGuard } from '../../page-guard';
-import CurrentOrdersView from '../../CurrentOrdersView';
+import NewOrderView from '../../NewOrderView';
 
 export default function OrdersNewPage() {
   const { supabaseUrl, supabaseAnonKey, theme, slug, brandName } = usePOS();
   if (usePageGuard()) return null;
-  return <CurrentOrdersView slug={slug} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} brandName={brandName} viewConfig={{ title: 'Order', newOrderMode: true }} />;
+  return <NewOrderView slug={slug} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} theme={theme} brandName={brandName} />;
 }
