@@ -81,15 +81,16 @@ export function BarChart({
 
 // ─── Line / Area Chart ───
 export function LineChart({
-  data, width = 600, height = 200, color = '#3b82f6', format, showDots = true,
+  data, aspectRatio = 3, color = '#3b82f6', format, showDots = true,
 }: {
   data: { label: string; value: number }[];
-  width?: number; height?: number; color?: string; format?: (n: number) => string; showDots?: boolean;
+  aspectRatio?: number; color?: string; format?: (n: number) => string; showDots?: boolean;
 }) {
   if (data.length === 0) return <div className="text-center text-gray-400 text-sm py-12">No data</div>;
 
+  const width = 600, height = Math.round(width / aspectRatio);
   const mx = Math.max(...data.map(d => d.value), 1);
-  const pad = { t: 16, r: 16, b: 24, l: 48 };
+  const pad = { t: 20, r: 16, b: 24, l: 52 };
   const chartW = width - pad.l - pad.r;
   const chartH = height - pad.t - pad.b;
   const stepX = chartW / Math.max(data.length - 1, 1);
@@ -104,35 +105,32 @@ export function LineChart({
     : data;
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
-      {/* Grid lines */}
-      {yTicks.map((v) => (
-        <g key={v}>
-          <line x1={pad.l} y1={yScale(v)} x2={width - pad.r} y2={yScale(v)} stroke="#e5e7eb" strokeWidth="1" />
-          <text x={pad.l - 6} y={yScale(v) + 3} textAnchor="end" fontSize="10" fill="#9ca3af">
-            {format ? format(v) : String(v)}
-          </text>
-        </g>
-      ))}
-      {/* Area fill */}
-      <polygon points={areaPoints} fill={color} fillOpacity="0.1" />
-      {/* Line */}
-      <polyline points={points.join(' ')} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
-      {/* Dots */}
-      {showDots && data.map((d, i) => (
-        <circle key={i} cx={pad.l + i * stepX} cy={yScale(d.value)} r="3" fill={color} stroke="white" strokeWidth="2">
-          <title>{d.label}: {format ? format(d.value) : String(d.value)}</title>
-        </circle>
-      ))}
-      {/* X axis labels */}
-      {xTicks.map((d, i) => {
-        const idx = data.indexOf(d);
-        const x = pad.l + idx * stepX;
-        return (
-          <text key={i} x={x} y={height - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">{d.label}</text>
-        );
-      })}
-    </svg>
+    <div style={{ aspectRatio: `${width}/${height}` }}>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+        {yTicks.map((v) => (
+          <g key={v}>
+            <line x1={pad.l} y1={yScale(v)} x2={width - pad.r} y2={yScale(v)} stroke="#e5e7eb" strokeWidth="1" />
+            <text x={pad.l - 6} y={yScale(v) + 3} textAnchor="end" fontSize="10" fill="#9ca3af">
+              {format ? format(v) : String(v)}
+            </text>
+          </g>
+        ))}
+        <polygon points={areaPoints} fill={color} fillOpacity="0.1" />
+        <polyline points={points.join(' ')} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
+        {showDots && data.map((d, i) => (
+          <circle key={i} cx={pad.l + i * stepX} cy={yScale(d.value)} r="3" fill={color} stroke="white" strokeWidth="2">
+            <title>{d.label}: {format ? format(d.value) : String(d.value)}</title>
+          </circle>
+        ))}
+        {xTicks.map((d, i) => {
+          const idx = data.indexOf(d);
+          const x = pad.l + idx * stepX;
+          return (
+            <text key={i} x={x} y={height - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">{d.label}</text>
+          );
+        })}
+      </svg>
+    </div>
   );
 }
 

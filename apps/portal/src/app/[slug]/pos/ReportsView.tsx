@@ -302,9 +302,7 @@ function OverviewTab({ data, currencySymbol, theme }: { data: OverviewData; curr
             ))}
           </div>
         </div>
-        <div className="h-48">
-          <LineChart data={chartData.length > 0 ? chartData : [{ label: 'No data', value: 0 }]} height={180} color={theme.primaryColor} format={(v) => `${currencySymbol}${v.toFixed(0)}`} showDots={chartData.length <= 31} />
-        </div>
+        <LineChart data={chartData.length > 0 ? chartData : [{ label: 'No data', value: 0 }]} color={theme.primaryColor} format={(v) => `${currencySymbol}${v.toFixed(0)}`} showDots={chartData.length <= 31} />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 pt-3 border-t border-gray-100">
           <Stat label="Total Sales" value={fmt(summary.totalSales, currencySymbol)} />
           <Stat label="Gross Profit" value={fmt(summary.grossProfit, currencySymbol)} />
