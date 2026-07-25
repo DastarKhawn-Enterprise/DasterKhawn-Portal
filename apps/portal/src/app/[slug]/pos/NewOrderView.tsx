@@ -594,12 +594,11 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
               {orderNotes && <span className="text-[7px] text-blue-600 font-bold">Added</span>}
             </button>
             <button onClick={() => {
-              if (keypadValue) {
+              if (keypadValue && !isNaN(parseFloat(keypadValue))) {
                 const v = parseFloat(keypadValue);
-                if (v > 0) { setDiscount({ type: 'fixed', value: v }); setKeypadValue(''); setKeypadDisplay(''); }
-              } else {
-                setShowDiscountModal(true); setDiscountValue(discount ? String(discount.value) : '');
+                if (v > 0) { setDiscount({ type: 'fixed', value: v }); setKeypadValue(''); setKeypadDisplay(''); return; }
               }
+              setShowDiscountModal(true); setDiscountValue(discount ? String(discount.value) : '');
             }}
               className="flex flex-col items-center justify-center py-1.5 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
             >
