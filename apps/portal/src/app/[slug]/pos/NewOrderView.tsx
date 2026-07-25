@@ -138,6 +138,8 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [promoCode, setPromoCode] = useState('');
   const [promoError, setPromoError] = useState('');
+  const [showCalculator, setShowCalculator] = useState(false);
+  const [orderError, setOrderError] = useState('');
 
   const searchRef = useRef<HTMLInputElement>(null);
   const creatingOrderRef = useRef(false);
@@ -232,7 +234,7 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
   const handleClearCart = useCallback(() => {
     setCart([]); setSpecialInstructions(''); setOrderNotes(''); setDiscount(null); setSelectedCustomer(null);
     setSelectedTableId(null); setCurrentOrderId(null); setCurrentOrderNumber(0); setPaymentView('selection');
-    setPaymentMethod(''); setKeypadValue(''); setKeypadDisplay(''); setPaymentError(''); setAccounts([]);
+    setPaymentMethod(''); setKeypadValue(''); setKeypadDisplay(''); setPaymentError(''); setAccounts([]); setOrderError('');
     calcRef.current = { buffer: 0, op: null, newNumber: false };
   }, []);
 
@@ -251,22 +253,22 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
 
   const handlePlaceOrder = useCallback(async () => {
     if (cart.length === 0 || creatingOrderRef.current) return;
-    creatingOrderRef.current = true; setCheckingOut(true);
+    creatingOrderRef.current = true; setCheckingOut(true); setOrderError('');
     try {
       let pickupTime: string | null = null;
       if (orderType === 'takeaway' || orderType === 'delivery') { const d = new Date(); d.setMinutes(d.getMinutes() + 20); pickupTime = d.toISOString(); }
       const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total: grandTotal, tax_amount: taxAmount, service_charge_amount: serviceCharge, order_type: orderType, customer_id: selectedCustomer?.id || null, customer_name: selectedCustomer?.name || null, customer_phone: selectedCustomer?.phone || null, pickup_time: pickupTime, notes: orderNotes || null };
       if (orderType === 'dine_in' && selectedTableId) orderPayload.table_id = selectedTableId;
       const orderResult = await supa(slug, { table: 'orders', method: 'insert', select: 'id, order_number, created_at', single: true, body: orderPayload });
-      if (!orderResult.ok || !orderResult.data) { console.error('[PlaceOrder]', orderResult.error); setCheckingOut(false); creatingOrderRef.current = false; return; }
+      if (!orderResult.ok || !orderResult.data) { setOrderError(orderResult.error || 'Failed to create order'); setCheckingOut(false); creatingOrderRef.current = false; return; }
       const newOrder: any = orderResult.data;
       const items = cart.map((item) => ({ order_id: newOrder.id, menu_item_id: item.id, quantity: item.quantity, price_at_order: item.price }));
       const itemsResult = await supa(slug, { table: 'order_items', method: 'insert', body: items });
-      if (!itemsResult.ok) { console.error('[PlaceOrder items]', itemsResult.error); setCheckingOut(false); creatingOrderRef.current = false; return; }
+      if (!itemsResult.ok) { setOrderError(itemsResult.error || 'Failed to save order items'); setCheckingOut(false); creatingOrderRef.current = false; return; }
       await deductInventorySupa(slug, cart, newOrder.id, user?.id).catch((e) => console.error('[Inventory]', e));
       if (orderType === 'dine_in' && selectedTableId) { await supa(slug, { table: 'tables', method: 'update', eq: ['id', selectedTableId], body: { status: 'occupied', current_order_id: newOrder.id } }); setTables((prev) => prev.map((t) => (t.id === selectedTableId ? { ...t, status: 'occupied' } : t))); }
       setCurrentOrderId(newOrder.id); setCurrentOrderNumber(newOrder.order_number); setPaymentView('selection'); setPaymentMethod(''); setKeypadValue(''); setKeypadDisplay(''); setPaymentError(''); calcRef.current = { buffer: 0, op: null, newNumber: false };
-    } catch (e) { console.error('[PlaceOrder]', e); }
+    } catch (e: any) { console.error('[PlaceOrder]', e); setOrderError(e.message || 'Order failed'); }
     setCheckingOut(false); creatingOrderRef.current = false;
   }, [cart, orderType, grandTotal, taxAmount, serviceCharge, selectedCustomer, selectedTableId, orderNotes, slug, user]);
 
@@ -289,14 +291,22 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
 
   const handlePayClick = useCallback(() => {
     if (!currentOrderId || cart.length === 0) return;
-    if (!paymentMethod) {
-      setPaymentMethod('cash');
-      setKeypadValue(String(Math.ceil(grandTotal)));
-      setKeypadDisplay(String(Math.ceil(grandTotal)));
-      return;
-    }
-    handleProcessPayment();
-  }, [currentOrderId, cart, paymentMethod, grandTotal, handleProcessPayment]);
+    setOrderError('');
+    const pm = paymentMethod || 'cash';
+    const kv = pm === 'cash' ? (keypadValue || String(Math.ceil(grandTotal))) : '';
+    if (!paymentMethod) { setPaymentMethod(pm); if (pm === 'cash') { setKeypadValue(kv); setKeypadDisplay(kv); } }
+    if (pm === 'cash' && !kv) { setPaymentError('Enter amount received'); return; }
+    const acc = accounts.find((a) => a.payment_method === pm);
+    if (!acc) { setPaymentError('Account not found for ' + pm); return; }
+    const received = pm === 'cash' ? parseFloat(kv) : grandTotal;
+    const changeDue = pm === 'cash' ? Math.max(0, received - grandTotal) : 0;
+    const payments: PaymentInput[] = [{ account_id: acc.id, payment_method: pm, amount: grandTotal, cash_received: pm === 'cash' ? received : null, change_due: pm === 'cash' ? changeDue : null, reference_number: (pm !== 'cash' ? kv : null) || null, notes: null, customer_id: selectedCustomer?.id || null, idempotency_key: currentOrderId + '_' + Date.now() + '_' + genId() }];
+    setSavingPayment(true);
+    processPayments(slug, currentOrderId, payments).then((r) => {
+      if (!r.success) { setPaymentError(r.error || 'Payment failed'); setSavingPayment(false); return; }
+      setSuccessData(r); setShowReceipt(true); setSavingPayment(false);
+    }).catch((e: any) => { setPaymentError(e.message || 'Payment failed'); setSavingPayment(false); });
+  }, [currentOrderId, cart, paymentMethod, keypadValue, grandTotal, accounts, selectedCustomer, slug]);
 
   const filteredItems = useMemo(() => {
     let items = menuItems;
@@ -526,13 +536,28 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
         </div>
 
         {/* Mobile Cart Bar (shown on small screens) */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 px-4 py-2 flex items-center gap-3 shadow-lg">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-gray-800">{currencySymbol}{grandTotal.toFixed(2)}</p>
-            <p className="text-xs text-gray-400">{orderCount} items</p>
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-lg">
+          {orderError && <div className="px-4 py-1.5 bg-red-50 border-b border-red-100 text-[10px] text-red-600 text-center font-medium">{orderError}</div>}
+          {paymentError && <div className="px-4 py-1.5 bg-red-50 border-b border-red-100 text-[10px] text-red-600 text-center font-medium">{paymentError}</div>}
+          {cart.length > 0 && (
+            <div className="flex gap-1 px-3 py-1.5 border-b border-gray-100 overflow-x-auto">
+              {(Object.keys(ORDER_TYPE_LABELS) as OrderTypeOption[]).map((type) => (
+                <button key={type} onClick={() => setOrderType(type)}
+                  className={'px-2 py-1 text-[10px] font-semibold rounded-md whitespace-nowrap ' + (orderType === type ? 'text-white' : 'text-gray-500 border border-gray-200')}
+                  style={orderType === type ? { backgroundColor: '#C9972B' } : {}}
+                >{ORDER_TYPE_LABELS[type]}</button>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2 px-4 py-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-gray-800">{currencySymbol}{grandTotal.toFixed(2)}</p>
+              <p className="text-xs text-gray-400">{orderCount} item{orderCount !== 1 ? 's' : ''}</p>
+            </div>
+            <button onClick={() => setShowCalculator(!showCalculator)} className={'px-2 py-1.5 text-[10px] font-semibold rounded-md border transition-colors ' + (showCalculator ? 'bg-gray-800 text-white border-gray-800' : 'border-gray-200 text-gray-500')}>{showCalculator ? 'Hide Calc' : 'Calc'}</button>
+            <button onClick={() => setShowCustomerModal(true)} className="px-2.5 py-1.5 text-[10px] font-semibold border border-gray-200 rounded-md text-gray-600">Customer</button>
+            <button onClick={currentOrderId ? handlePayClick : handlePlaceOrder} disabled={cart.length === 0 || checkingOut || savingPayment} className="px-5 py-1.5 rounded-md text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: cart.length > 0 ? '#C9972B' : '#9CA3AF' }}>{savingPayment ? '...' : checkingOut ? '...' : currentOrderId ? 'Pay' : 'Order'}</button>
           </div>
-          <button onClick={() => setShowCustomerModal(true)} className="px-3 py-2 text-xs font-semibold border border-gray-200 rounded-lg text-gray-600">Customer</button>
-          <button onClick={currentOrderId ? handlePayClick : handlePlaceOrder} disabled={cart.length === 0 || checkingOut} className="px-6 py-2 rounded-lg text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: cart.length > 0 ? '#C9972B' : '#9CA3AF' }}>{checkingOut ? '...' : currentOrderId ? 'Pay ' + currencySymbol + grandTotal.toFixed(2) : 'Order'}</button>
         </div>
 
         {/* CENTER: Menu */}
@@ -609,7 +634,7 @@ export default function NewOrderView({ slug, supabaseUrl, supabaseAnonKey, theme
         </div>
 
         {/* RIGHT: Calculator-Style POS Sidebar */}
-        <div className="w-full md:w-[300px] xl:w-[320px] flex-shrink-0 bg-white md:border-l border-t md:border-t-0 border-gray-200 flex flex-col">
+        <div className={'w-full md:w-[300px] xl:w-[320px] flex-shrink-0 bg-white md:border-l border-t md:border-t-0 border-gray-200 flex flex-col ' + (showCalculator ? 'flex' : 'hidden md:flex')}>
 
           {/* Action Buttons - 2x2 Grid */}
           <div className="grid grid-cols-2 gap-1 p-2 border-b border-gray-200 shrink-0">
