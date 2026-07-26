@@ -498,7 +498,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
         ? cfg.showCustomerFields
         : effectiveOrderType !== 'dine_in';
 
-      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total, tax_amount: taxAmt, discount_amount: discountAmount, discount_type: discount?.type || null, discount_value: discount?.value || null, notes: orderNotes || null, order_type: effectiveOrderType, customer_id: selectedCustomer?.id || null };
+      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total, tax_amount: taxAmt, order_type: effectiveOrderType, customer_id: selectedCustomer?.id || null };
       if (shouldCaptureCustomer) {
         if (customerName) orderPayload.customer_name = customerName;
         if (customerPhone) orderPayload.customer_phone = customerPhone;
@@ -510,6 +510,9 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
       const orderResult = await supa(slug, { table: 'orders', method: 'insert', select: 'id, order_number, created_at', single: true, body: orderPayload });
       if (!orderResult.ok || !orderResult.data) { console.error('[Checkout]', orderResult.error); setCheckingOut(false); return; }
       const order = orderResult.data;
+      if (discountAmount || orderNotes) {
+        supa(slug, { table: 'orders', method: 'update', eq: ['id', order.id], body: { discount_amount: discountAmount, discount_type: discount?.type || null, discount_value: discount?.value || null, notes: orderNotes || null } }).catch(() => {});
+      }
 
       const items = cart.map((item) => ({ order_id: order.id, menu_item_id: item.id, quantity: item.quantity, price_at_order: item.price }));
       const [itemsResult] = await Promise.all([
