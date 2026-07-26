@@ -9,6 +9,9 @@ import type { MenuItem, ThemeConfig } from '@sat-sys/pos-ui';
 import { fetchKDSOrders, updateKDSOrderStatus } from './orders-actions';
 import { supa } from './supa-query';
 import { deductInventorySupa } from './inventory-utils';
+import ReceiptView from './ReceiptView';
+import PaymentModal from './PaymentModal';
+import { generateInvoiceNumber } from './invoice-utils';
 
 interface KDSOrderItem {
   menu_item_id: string;
@@ -28,6 +31,14 @@ interface KDSOrder {
   customer_phone?: string | null;
   pickup_time?: string | null;
   customer_id?: string | null;
+  payment_status?: string | null;
+  tax_amount?: number;
+  service_charge_amount?: number;
+  discount_amount?: number;
+  discount_type?: string | null;
+  discount_value?: number | null;
+  notes?: string | null;
+  invoice_number?: string | null;
   order_items: KDSOrderItem[];
 }
 
@@ -142,6 +153,7 @@ function OrderCard({
   onCancel,
   onSelect,
   onAddItem,
+  onPay,
 }: {
   order: KDSOrder;
   theme: ThemeConfig;
@@ -152,6 +164,7 @@ function OrderCard({
   onCancel: () => void;
   onSelect: () => void;
   onAddItem?: () => void;
+  onPay?: () => void;
 }) {
   const elapsed = Date.now() - new Date(order.created_at).getTime();
   const overdue = elapsed > ELAPSED_THRESHOLD_MS;
@@ -232,27 +245,36 @@ function OrderCard({
             {updating ? '...' : 'Complete'}
           </button>
         )}
-        {order.status !== 'completed' && order.status !== 'cancelled' && (
-          <>
-            {onAddItem && (
+          {order.status !== 'completed' && order.status !== 'cancelled' && (
+            <>
+              {onAddItem && (
+                <button
+                  onClick={onAddItem}
+                  disabled={updating}
+                  className="px-3 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  style={{ backgroundColor: '#6366f1' }}
+                >
+                  + Item
+                </button>
+              )}
               <button
-                onClick={onAddItem}
+                onClick={onCancel}
                 disabled={updating}
-                className="px-3 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98]"
-                style={{ backgroundColor: '#6366f1' }}
+                className="px-3 py-2 rounded-xl text-sm font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
               >
-                + Item
+                Cancel
               </button>
-            )}
+            </>
+          )}
+          {order.status === 'completed' && onPay && (
             <button
-              onClick={onCancel}
-              disabled={updating}
-              className="px-3 py-2 rounded-xl text-sm font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+              onClick={onPay}
+              className="flex-1 px-3 py-2 rounded-xl text-sm font-bold text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+              style={{ backgroundColor: theme.primaryColor }}
             >
-              Cancel
+              {order.payment_status === 'paid' ? 'Print Invoice' : 'Generate Invoice'}
             </button>
-          </>
-        )}
+          )}
       </div>
     </div>
   );
@@ -305,6 +327,7 @@ function ListView({
   onComplete,
   onCancel,
   onAddItem,
+  onPay,
 }: {
   orders: KDSOrder[];
   theme: ThemeConfig;
@@ -314,6 +337,7 @@ function ListView({
   onComplete: (id: string) => void;
   onCancel: (id: string) => void;
   onAddItem?: (id: string) => void;
+  onPay?: (id: string) => void;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -405,6 +429,15 @@ function ListView({
                         </button>
                       </>
                     )}
+                    {order.status === 'completed' && onPay && (
+                      <button
+                        onClick={() => onPay(order.id)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white"
+                        style={{ backgroundColor: theme.primaryColor }}
+                      >
+                        {order.payment_status === 'paid' ? 'Print Invoice' : 'Pay'}
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -424,6 +457,8 @@ function DetailPanel({
   onReady,
   onComplete,
   onCancel,
+  onPay,
+  theme,
 }: {
   order: KDSOrder | null;
   onClose: () => void;
@@ -432,6 +467,8 @@ function DetailPanel({
   onReady: () => void;
   onComplete: () => void;
   onCancel: () => void;
+  onPay?: () => void;
+  theme: ThemeConfig;
 }) {
   if (!order) return null;
 
@@ -518,6 +555,11 @@ function DetailPanel({
               Cancel Order
             </button>
           )}
+          {order.status === 'completed' && onPay && (
+            <button onClick={onPay} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all" style={{ backgroundColor: theme.primaryColor }}>
+              {order.payment_status === 'paid' ? 'Print Invoice' : 'Generate Invoice'}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -545,6 +587,10 @@ export default function KDSView({ slug, theme, brandName }: Props) {
   const [quickAddUpdating, setQuickAddUpdating] = useState(false);
   const [quickAddItems, setQuickAddItems] = useState<{ id: string; name: string; price: number; quantity: number }[]>([]);
   const [menuSearch, setMenuSearch] = useState('');
+  const [paymentOrder, setPaymentOrder] = useState<KDSOrder | null>(null);
+  const [receiptOrder, setReceiptOrder] = useState<KDSOrder | null>(null);
+  const paymentOrderRef = useRef<KDSOrder | null>(null);
+  paymentOrderRef.current = paymentOrder;
 
   const ordersRef = useRef(orders);
   ordersRef.current = orders;
@@ -644,6 +690,27 @@ export default function KDSView({ slug, theme, brandName }: Props) {
     setQuickAddOrderId(null);
     setQuickAddItems([]);
   }, [quickAddOrderId, quickAddItems, orders, selectedOrder, slug, user, publish]);
+
+  const handlePaymentSuccess = useCallback((_result: any) => {
+    const order = paymentOrderRef.current;
+    if (order) {
+      const invCart = (order.order_items || []).map((oi: KDSOrderItem) => ({ id: oi.menu_item_id, quantity: oi.quantity }));
+      deductInventorySupa(slug, invCart, order.id, user?.id).catch(e => console.error('[KDS Payment inventory]', e));
+      generateInvoiceNumber(slug).then(invNum => {
+        if (invNum) {
+          supa(slug, { table: 'orders', method: 'update', eq: ['id', order.id], body: { invoice_number: invNum } }).catch(e => console.error('[KDS Invoice num]', e));
+        }
+      }).catch(e => console.error('[KDS Invoice num]', e));
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, payment_status: 'paid' } : o)));
+      if (selectedOrder?.id === order.id) {
+        setSelectedOrder((prev) => prev ? { ...prev, payment_status: 'paid' } : null);
+      }
+    }
+  }, [slug, user, selectedOrder]);
+
+  const handlePrintBill = useCallback((order: KDSOrder) => {
+    setReceiptOrder(order);
+  }, []);
 
   const handleStatusUpdate = useCallback(async (orderId: string, newStatus: string) => {
     setUpdating(orderId);
@@ -811,6 +878,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
                       onCancel={() => handleStatusUpdate(order.id, 'cancelled')}
                       onSelect={() => setSelectedOrder(order)}
                       onAddItem={order.status !== 'completed' && order.status !== 'cancelled' ? () => { setQuickAddOrderId(order.id); setMenuSearch(''); } : undefined}
+                      onPay={order.status === 'completed' ? () => { setPaymentOrder(order); } : undefined}
                     />
                   ))}
                 </div>
@@ -834,6 +902,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
               onComplete={(id) => handleStatusUpdate(id, 'completed')}
               onCancel={(id) => handleStatusUpdate(id, 'cancelled')}
               onAddItem={(id) => { setQuickAddOrderId(id); setMenuSearch(''); }}
+              onPay={(id) => { const o = orders.find((ord) => ord.id === id); if (o) setPaymentOrder(o); }}
             />
           )
         )}
@@ -887,6 +956,61 @@ export default function KDSView({ slug, theme, brandName }: Props) {
         </div>
       )}
 
+      {/* Payment Modal */}
+      {paymentOrder && !receiptOrder && (
+        <PaymentModal
+          slug={slug}
+          theme={theme}
+          currencySymbol="Rs."
+          orderId={paymentOrder.id}
+          orderNumber={paymentOrder.order_number}
+          orderTotal={Number(paymentOrder.total)}
+          amountPaid={0}
+          amountDue={Number(paymentOrder.total)}
+          customerId={paymentOrder.customer_id}
+          customerName={paymentOrder.customer_name}
+          customerPhone={paymentOrder.customer_phone}
+          orderType={paymentOrder.order_type}
+          items={(paymentOrder.order_items || []).map((oi) => ({
+            name: oi.menu_items?.name || 'Unknown',
+            quantity: oi.quantity,
+            price: Number(oi.price_at_order),
+          }))}
+          taxAmount={Number(paymentOrder.tax_amount ?? 0)}
+          serviceChargeAmount={Number(paymentOrder.service_charge_amount ?? 0)}
+          brandName={brandName}
+          onClose={() => { setPaymentOrder(null); debouncedFetchOrders(); }}
+          onSuccess={handlePaymentSuccess}
+        />
+      )}
+
+      {/* Receipt View */}
+      {receiptOrder && (
+        <ReceiptView
+          data={{
+            orderNumber: receiptOrder.order_number,
+            status: receiptOrder.status,
+            total: Number(receiptOrder.total),
+            taxAmount: Number(receiptOrder.tax_amount ?? 0),
+            serviceChargeAmount: Number(receiptOrder.service_charge_amount ?? 0),
+            createdAt: receiptOrder.created_at,
+            orderType: receiptOrder.order_type,
+            customerName: receiptOrder.customer_name,
+            customerPhone: receiptOrder.customer_phone,
+            pickupTime: receiptOrder.pickup_time,
+            tableNumber: null,
+            items: (receiptOrder.order_items || []).map((oi) => ({
+              name: oi.menu_items?.name || 'Unknown',
+              quantity: oi.quantity,
+              price: Number(oi.price_at_order),
+            })),
+          }}
+          brandName={brandName}
+          theme={theme}
+          onClose={() => setReceiptOrder(null)}
+        />
+      )}
+
       {/* Detail Panel */}
       <DetailPanel
         order={selectedOrder}
@@ -896,6 +1020,8 @@ export default function KDSView({ slug, theme, brandName }: Props) {
         onReady={() => selectedOrder && handleStatusUpdate(selectedOrder.id, 'ready')}
         onComplete={() => selectedOrder && handleStatusUpdate(selectedOrder.id, 'completed')}
         onCancel={() => selectedOrder && handleStatusUpdate(selectedOrder.id, 'cancelled')}
+        onPay={selectedOrder?.status === 'completed' ? () => setPaymentOrder(selectedOrder) : undefined}
+        theme={theme}
       />
     </div>
   );
