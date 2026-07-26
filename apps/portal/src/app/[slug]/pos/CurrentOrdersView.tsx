@@ -578,6 +578,36 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     }
   }, [slug, user]);
 
+  const handleQuickAddToOrder = useCallback(async (item: MenuItem) => {
+    if (!selectedOrder || !selectedId || updating) return;
+    setUpdating(selectedId);
+    try {
+      const currentItems = selectedOrder.order_items || [];
+      const existing = currentItems.find((oi) => oi.menu_item_id === item.id);
+      const newItems = existing
+        ? currentItems.map((oi) => (oi.menu_item_id === item.id ? { menu_item_id: oi.menu_item_id, quantity: oi.quantity + 1, price_at_order: Number(oi.price_at_order) } : { menu_item_id: oi.menu_item_id, quantity: oi.quantity, price_at_order: Number(oi.price_at_order) }))
+        : [...currentItems.map((oi) => ({ menu_item_id: oi.menu_item_id, quantity: oi.quantity, price_at_order: Number(oi.price_at_order) })), { menu_item_id: item.id, quantity: 1, price_at_order: item.price }];
+      await supa(slug, { table: 'order_items', method: 'delete', eq: ['order_id', selectedId] });
+      if (newItems.length > 0) {
+        await supa(slug, { table: 'order_items', method: 'insert', body: newItems.map((ni) => ({ ...ni, order_id: selectedId })) });
+      }
+      const qs = newItems.reduce((s, ni) => s + ni.price_at_order * ni.quantity, 0);
+      const ot = selectedOrder.order_type || effectiveOrderType;
+      const scR = settings?.serviceChargeRate || 0;
+      const scEn = settings?.serviceChargeEnabled;
+      const isDin = ot === 'dine_in'; const isTA = ot === 'takeaway'; const isDL = ot === 'delivery'; const isDT = ot === 'drive_thru';
+      const sc = scEn && scR > 0 && ((isDin && settings?.serviceChargeDineIn) || (isTA && settings?.serviceChargeTakeaway) || (isDL && settings?.serviceChargeDelivery) || (isDT && settings?.serviceChargeDriveThru)) ? qs * (scR / 100) : 0;
+      const ta = settings?.taxServiceCharge ? qs + sc : qs;
+      const tx = settings?.taxEnabled && (settings?.taxRate || 0) > 0 ? ta * ((settings?.taxRate || 0) / 100) : 0;
+      const total = Math.max(0, qs + sc + tx);
+      await supa(slug, { table: 'orders', method: 'update', eq: ['id', selectedId], body: { total, tax_amount: tx, service_charge_amount: sc, updated_at: new Date().toISOString() } });
+      deductInventorySupa(slug, [{ id: item.id, quantity: 1 }], selectedId, user?.id).catch((e) => console.error('[QuickAdd inventory]', e));
+      publish('orders', 'UPDATE', { id: selectedId });
+      setOrders((prev) => prev.map((o) => (o.id === selectedId ? { ...o, total, tax_amount: tx, service_charge_amount: sc, order_items: newItems.map((ni) => ({ menu_item_id: ni.menu_item_id, quantity: ni.quantity, price_at_order: ni.price_at_order, menu_items: { name: (ni.menu_item_id === item.id ? item.name : (currentItems.find((ci) => ci.menu_item_id === ni.menu_item_id)?.menu_items?.name || 'Unknown')) } })) } : o)));
+    } catch (e) { console.error('[QuickAdd]', e); }
+    setUpdating(null);
+  }, [selectedOrder, selectedId, updating, effectiveOrderType, settings, slug, user]);
+
   // Status update
   const updateStatus = useCallback(async (orderId: string, newStatus: string) => {
     setUpdating(orderId);
@@ -937,6 +967,21 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                       <ActionButton label="Cancel Order" color="bg-red-600 hover:bg-red-700" disabled={updating === selectedOrder.id} onClick={() => updateStatus(selectedOrder.id, 'cancelled')} updating={updating === selectedOrder.id} />
                     )}
                   </div>
+                  {selectedOrder.status !== 'completed' && selectedOrder.status !== 'cancelled' && (
+                    <div className="border-t border-gray-100 pt-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Quick Add Items</h3>
+                        {updating === selectedOrder.id && <span className="text-xs text-gray-400">Updating...</span>}
+                      </div>
+                      <div className="max-h-64 overflow-y-auto">
+                        {menuItems.length > 0 ? (
+                          <MenuGrid menuItems={menuItems} onAddToCart={handleQuickAddToOrder} theme={theme} currencySymbol={settings?.currencySymbol} searchQuery={menuSearch} onSearchChange={setMenuSearch} mostOrderedItems={mostOrderedItems} />
+                        ) : (
+                          <div className="flex items-center justify-center py-8"><p className="text-gray-400">Loading menu...</p></div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
