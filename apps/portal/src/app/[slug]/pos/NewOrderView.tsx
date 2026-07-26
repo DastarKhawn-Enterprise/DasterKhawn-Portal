@@ -171,7 +171,8 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
 
   useEffect(() => { if (!authReady || !showCustomerModal) return; const t = setTimeout(async () => { if (!customerSearch.trim()) { setCustomerResults([]); return; } setCustomerSearchLoading(true); try { const results = await searchCustomersSupa(slug, customerSearch); setCustomerResults(results); } catch {} setCustomerSearchLoading(false); }, 300); return () => clearTimeout(t); }, [customerSearch, authReady, slug, showCustomerModal]);
 
-  useEffect(() => { if (!currentOrderId || paymentView === 'selection') return; const load = async () => { setLoadingAccounts(true); const r = await supa(slug, { table: 'accounts', select: 'id,name,account_type,payment_method,current_balance', eq: ['is_active', true], order: 'name' }); if (r.ok && r.data) setAccounts(r.data as Account[]); setLoadingAccounts(false); }; load(); }, [slug, currentOrderId, paymentView]);
+  // Load accounts on mount (needed for payment)
+  useEffect(() => { if (!authReady) return; const load = async () => { setLoadingAccounts(true); const r = await supa(slug, { table: 'accounts', select: 'id,name,account_type,payment_method,current_balance', eq: ['is_active', true], order: 'name' }); if (r.ok && r.data) setAccounts(r.data as Account[]); setLoadingAccounts(false); }; load(); }, [authReady, slug]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -304,9 +305,8 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
     if (!acc) { setPaymentError('Account not found for ' + pm); return; }
     const received = pm === 'cash' ? parseFloat(kv) : grandTotal;
     const changeDue = pm === 'cash' ? Math.max(0, received - grandTotal) : 0;
-    const payments: PaymentInput[] = [{ account_id: acc.id, payment_method: pm, amount: grandTotal, cash_received: pm === 'cash' ? received : null, change_due: pm === 'cash' ? changeDue : null, reference_number: (pm !== 'cash' ? kv : null) || null, notes: null, customer_id: selectedCustomer?.id || null, idempotency_key: currentOrderId + '_' + Date.now() + '_' + genId() }];
     setSavingPayment(true);
-    processPayments(slug, currentOrderId, payments).then((r) => {
+    processPayments(slug, currentOrderId, [{ account_id: acc.id, payment_method: pm, amount: grandTotal, cash_received: pm === 'cash' ? received : null, change_due: pm === 'cash' ? changeDue : null, reference_number: (pm !== 'cash' ? kv : null) || null, notes: null, customer_id: selectedCustomer?.id || null, idempotency_key: currentOrderId + '_' + Date.now() + '_' + genId() }]).then((r) => {
       if (!r.success) { setPaymentError(r.error || 'Payment failed'); setSavingPayment(false); return; }
       publish('payments', 'INSERT', { id: r.data?.id });
       setSuccessData(r); setShowReceipt(true); setSavingPayment(false);
