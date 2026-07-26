@@ -192,11 +192,12 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
   }, [isLoaded, slug]);
 
   const fetchTxns = useCallback(async (accountId: string | null) => {
-    if (!accountId) { setTxns([]); return; }
+    if (!accountId) { setTxns([]); setTxnLoading(false); return; }
     setTxnLoading(true);
     try {
       const r = await supa(slug, {
-        table: 'account_transactions', select: '*',
+        table: 'account_transactions',
+        select: 'id,account_id,transaction_type,direction,amount,balance_before,balance_after,reference_number,description,created_by,created_at',
         eq: ['account_id', accountId],
         order: { column: 'created_at', ascending: false },
         limit: 100,

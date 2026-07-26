@@ -98,11 +98,11 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
       const dayEnd = `${date}T23:59:59.999`;
       const result = await supa(slug, {
         table: 'item_ledger',
-        select: '*',
+        select: 'id,inventory_item_id,movement_type,quantity_change,unit_cost,total_cost,reference_order_id,vendor,notes,created_by,created_at',
         gte: ['created_at', dayStart],
         lte: ['created_at', dayEnd],
         order: { column: 'created_at', ascending: false },
-        limit: 1000,
+        limit: 200,
       });
       if (result.ok && result.data) setLedger(result.data as LedgerEntry[]);
     } catch (e) { console.error('[Ledger] fetch', e); }

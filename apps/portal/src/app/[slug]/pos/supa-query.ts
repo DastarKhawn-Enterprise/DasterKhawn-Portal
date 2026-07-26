@@ -205,6 +205,19 @@ function buildUrl(baseUrl: string, table: string, opts: QueryOptions) {
   return `${base}/rest/v1/${table}?${params.join('&')}`;
 }
 
+const FETCH_TIMEOUT_MS = 30_000;
+
+async function fetchWithTimeout(url: string, options: RequestInit & { signal?: AbortSignal }, timeoutMs = FETCH_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function execQuery(baseUrl: string, key: string, opts: QueryOptions): Promise<QueryResult> {
   const headers: Record<string, string> = {
     apikey: key,
@@ -217,7 +230,7 @@ async function execQuery(baseUrl: string, key: string, opts: QueryOptions): Prom
     const prefer: string[] = [];
     if (opts.single) prefer.push('return=representation');
     if (opts.head) prefer.push('count=exact');
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       headers: { ...headers, ...(prefer.length ? { Prefer: prefer.join(',') } : {}) },
     });
     if (!res.ok) {
@@ -233,7 +246,7 @@ async function execQuery(baseUrl: string, key: string, opts: QueryOptions): Prom
   }
 
   if (opts.method === 'insert') {
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       method: 'POST', headers: { ...headers, Prefer: 'return=representation' },
       body: JSON.stringify(opts.body),
     });
@@ -243,13 +256,13 @@ async function execQuery(baseUrl: string, key: string, opts: QueryOptions): Prom
   }
 
   if (opts.method === 'update') {
-    const res = await fetch(url, { method: 'PATCH', headers, body: JSON.stringify(opts.body) });
+    const res = await fetchWithTimeout(url, { method: 'PATCH', headers, body: JSON.stringify(opts.body) });
     if (!res.ok) { const t = await res.text(); return { ok: false, error: `${res.status}: ${t.slice(0, 200)}` }; }
     return { ok: true, data: null };
   }
 
   if (opts.method === 'delete') {
-    const res = await fetch(url, { method: 'DELETE', headers });
+    const res = await fetchWithTimeout(url, { method: 'DELETE', headers });
     if (!res.ok) { const t = await res.text(); return { ok: false, error: `${res.status}: ${t.slice(0, 200)}` }; }
     return { ok: true, data: null };
   }
@@ -317,7 +330,7 @@ export async function supaRpc(slug: string, fnName: string, params: Record<strin
     const key = await getSvcKey(slug);
     const url = `${tenant.supabase_url.replace(/\/+$/, '')}/rest/v1/rpc/${encodeURIComponent(fnName)}`;
 
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {
         apikey: key,
