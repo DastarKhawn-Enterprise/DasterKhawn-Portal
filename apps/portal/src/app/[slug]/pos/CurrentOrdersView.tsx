@@ -845,13 +845,28 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                 {order.order_items?.length || 0} item{(order.order_items?.length || 0) !== 1 ? 's' : ''}
                 <span className="ml-auto font-semibold text-gray-700">{settings?.currencySymbol}{Number(order.total).toFixed(2)}</span>
               </div>
-              {order.payment_status !== 'paid' && (
+              {!order.payment_status || order.payment_status === 'null' ? (
                 <button
                   onClick={(e) => { e.stopPropagation(); setPaymentOrder(order); }}
                   className="mt-2 w-full py-1 rounded-lg text-xs font-bold text-white"
                   style={{ backgroundColor: theme.primaryColor }}
                 >
                   Generate Invoice
+                </button>
+              ) : order.payment_status !== 'paid' ? (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setPaymentOrder(order); }}
+                  className="mt-2 w-full py-1 rounded-lg text-xs font-bold text-white"
+                  style={{ backgroundColor: theme.primaryColor }}
+                >
+                  Generate Invoice
+                </button>
+              ) : (
+                <button
+                  onClick={(e) => { e.stopPropagation(); handlePrintBill(order); }}
+                  className="mt-2 w-full py-1 rounded-lg text-xs font-bold bg-gray-600 hover:bg-gray-700 text-white"
+                >
+                  Print Invoice
                 </button>
               )}
             </div>
