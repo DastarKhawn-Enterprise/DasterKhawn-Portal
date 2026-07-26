@@ -1,15 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth, useUser } from '@clerk/nextjs';
+import { useAuth } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { supa } from './supa-query';
 import { usePOS } from './pos-context';
-import { deductInventorySupa } from './inventory-utils';
 import { searchCustomersSupa } from './customer-utils';
-import ReceiptView from './ReceiptView';
-import PaymentModal from './PaymentModal';
 import { usePublish } from './use-event';
 
 interface MenuItem { id: string; name: string; description?: string; price: number; category?: string; available?: boolean; }
@@ -21,7 +17,6 @@ type OrderTypeOption = 'dine_in' | 'takeaway' | 'delivery' | 'drive_thru' | 'thi
 interface Props { slug: string; theme: ThemeConfig; brandName: string; }
 
 const ORDER_TYPE_LABELS: Record<OrderTypeOption, string> = { dine_in: 'Dine In', takeaway: 'Take Away', delivery: 'Delivery', drive_thru: 'Drive Thru', third_party: '3rd Party' };
-const METHOD_LABELS: Record<string, string> = { cash: 'Cash', jazzcash: 'JazzCash', easypaisa: 'Easypaisa', bank_transfer: 'Bank Transfer', card: 'Card', credit: 'Credit' };
 
 function genId() { return Math.random().toString(36).slice(2, 9); }
 
@@ -86,9 +81,7 @@ function CompactMenuItem({ item, onAdd }: { item: MenuItem; onAdd: (item: MenuIt
 
 export default function NewOrderView({ slug, theme, brandName }: Props) {
   const publish = usePublish();
-  const router = useRouter();
   const { isLoaded, isSignedIn } = useAuth();
-  const { user } = useUser();
   const [authReady, setAuthReady] = useState(false);
 
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -122,9 +115,6 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
   const [checkingOut, setCheckingOut] = useState(false);
   const [keypadValue, setKeypadValue] = useState('');
   const [keypadDisplay, setKeypadDisplay] = useState('');
-  const [showReceipt, setShowReceipt] = useState(false);
-  const [receiptOrder, setReceiptOrder] = useState<any>(null);
-  const [paymentOrder, setPaymentOrder] = useState<any>(null);
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [promoCode, setPromoCode] = useState('');
@@ -225,11 +215,9 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
 
   const handleClearCart = useCallback(() => {
     setCart([]); setSpecialInstructions(''); setOrderNotes(''); setDiscount(null); setSelectedCustomer(null);
-    setSelectedTableId(null); setPaymentOrder(null); setKeypadValue(''); setKeypadDisplay(''); setOrderError('');
+    setSelectedTableId(null); setKeypadValue(''); setKeypadDisplay(''); setOrderError('');
     calcRef.current = { buffer: 0, op: null, newNumber: false };
   }, []);
-
-  const handleNewOrder = useCallback(() => { handleClearCart(); }, [handleClearCart]);
 
   const subtotal = useMemo(() => cart.reduce((s, i) => s + i.price * i.quantity, 0), [cart]);
   const serviceCharge = useMemo(() => {
@@ -252,59 +240,20 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
       if (orderType === 'dine_in' && selectedTableId) orderPayload.table_id = selectedTableId;
       const orderResult = await supa(slug, { table: 'orders', method: 'insert', select: 'id, order_number, created_at', single: true, body: orderPayload });
       if (!orderResult.ok || !orderResult.data) { setOrderError(orderResult.error || 'Failed to create order'); setCheckingOut(false); creatingOrderRef.current = false; return; }
-      // Save discount/notes after order creation (avoids schema cache issues with new columns)
-      if (discountAmount || orderNotes) {
-        supa(slug, { table: 'orders', method: 'update', eq: ['id', orderResult.data.id], body: { discount_amount: discountAmount, discount_type: discount?.type || null, discount_value: discount?.value || null, notes: orderNotes || null } }).catch(() => {});
-      }
       const newOrder: any = orderResult.data;
       const items = cart.map((item) => ({ order_id: newOrder.id, menu_item_id: item.id, quantity: item.quantity, price_at_order: item.price }));
       const itemsResult = await supa(slug, { table: 'order_items', method: 'insert', body: items });
       if (!itemsResult.ok) { setOrderError(itemsResult.error || 'Failed to save order items'); setCheckingOut(false); creatingOrderRef.current = false; return; }
-      // Fire-and-forget inventory deduction and table update — don't block payment modal
-      deductInventorySupa(slug, cart, newOrder.id, user?.id).catch((e) => console.error('[Inventory]', e));
+      // Update table status
       if (orderType === 'dine_in' && selectedTableId) { supa(slug, { table: 'tables', method: 'update', eq: ['id', selectedTableId], body: { status: 'occupied', current_order_id: newOrder.id } }).catch(() => {}); setTables((prev) => prev.map((t) => (t.id === selectedTableId ? { ...t, status: 'occupied' } : t))); }
+      // Send to Kitchen Display immediately — no payment needed
       publish('orders', 'INSERT', { id: newOrder.id, status: 'pending', order_type: orderType });
-      setPaymentOrder({
-        id: newOrder.id,
-        order_number: newOrder.order_number,
-        status: 'pending',
-        total: grandTotal,
-        tax_amount: taxAmount,
-        service_charge_amount: serviceCharge,
-        created_at: newOrder.created_at,
-        order_type: orderType,
-        customer_id: selectedCustomer?.id || null,
-        customer_name: selectedCustomer?.name || null,
-        customer_phone: selectedCustomer?.phone || null,
-        pickup_time: pickupTime,
-        order_items: cart.map((item) => ({
-          menu_item_id: item.id,
-          quantity: item.quantity,
-          price_at_order: item.price,
-          menu_items: { name: item.name },
-        })),
-      });
-      setKeypadValue(''); setKeypadDisplay(''); calcRef.current = { buffer: 0, op: null, newNumber: false };
+      // Clear cart for new order
+      setCart([]); setKeypadValue(''); setKeypadDisplay(''); setDiscount(null); setOrderNotes(''); setSpecialInstructions(''); setSelectedCustomer(null); setCustomerSearch(''); setCustomerResults([]); setSelectedTableId(null);
+      calcRef.current = { buffer: 0, op: null, newNumber: false };
     } catch (e: any) { console.error('[PlaceOrder]', e); setOrderError(e.message || 'Order failed'); }
     setCheckingOut(false); creatingOrderRef.current = false;
-  }, [cart, orderType, grandTotal, taxAmount, discountAmount, discount, orderNotes, serviceCharge, selectedCustomer, selectedTableId, slug, user]);
-
-  const handlePaymentSuccess = useCallback(() => {
-    setPaymentOrder(null);
-    setCart([]);
-    setSelectedTableId(null);
-    setSelectedCustomer(null);
-    setCustomerSearch('');
-    setCustomerResults([]);
-    setDiscount(null);
-    setOrderNotes('');
-    setKeypadValue('');
-    setKeypadDisplay('');
-    setShowCalculator(false);
-    setPromoCode('');
-    setPromoError('');
-    calcRef.current = { buffer: 0, op: null, newNumber: false };
-  }, []);
+  }, [cart, orderType, grandTotal, taxAmount, serviceCharge, selectedCustomer, selectedTableId, slug]);
 
   const filteredItems = useMemo(() => {
     let items = menuItems;
@@ -317,52 +266,12 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
   const availableTables = tables.filter((t) => t.status === 'available');
   const orderCount = cart.reduce((s, i) => s + i.quantity, 0);
 
-  const receiptData = useMemo(() => {
-    if (!showReceipt || !receiptOrder) return null;
-    return { orderNumber: receiptOrder.order_number, status: 'paid', total: Number(receiptOrder.total), createdAt: receiptOrder.created_at || new Date().toISOString(), orderType: receiptOrder.order_type, customerName: receiptOrder.customer_name, customerPhone: receiptOrder.customer_phone, items: (receiptOrder.order_items || []).map((i: any) => ({ name: i.menu_items?.name || 'Unknown', quantity: i.quantity, price: Number(i.price_at_order) })), taxAmount: Number(receiptOrder.tax_amount ?? 0), serviceChargeAmount: Number(receiptOrder.service_charge_amount ?? 0), tableNumber: null };
-  }, [showReceipt, receiptOrder]);
-
   if (!isLoaded || !authReady) {
     return <div className="flex-1 flex items-center justify-center bg-gray-50"><div className="text-center"><div className="w-8 h-8 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin mx-auto mb-2" /><p className="text-gray-500 text-sm">Loading POS...</p></div></div>;
   }
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50 min-w-0 overflow-hidden" style={{ fontFamily: 'inherit' }}>
-      {showReceipt && receiptData && (
-        <ReceiptView data={receiptData} brandName={brandName} theme={theme} onClose={() => { setShowReceipt(false); setReceiptOrder(null); handleNewOrder(); }} currencySymbol={currencySymbol} />
-      )}
-
-      {paymentOrder && !receiptOrder && (
-        <PaymentModal
-          slug={slug}
-          theme={theme}
-          currencySymbol={currencySymbol}
-          orderId={paymentOrder.id}
-          orderNumber={paymentOrder.order_number}
-          orderTotal={Number(paymentOrder.total)}
-          amountPaid={0}
-          amountDue={Number(paymentOrder.total)}
-          customerId={paymentOrder.customer_id}
-          customerName={paymentOrder.customer_name}
-          customerPhone={paymentOrder.customer_phone}
-          orderType={paymentOrder.order_type}
-          items={(paymentOrder.order_items || []).map((oi: any) => ({
-            name: oi.menu_items?.name || 'Unknown',
-            quantity: oi.quantity,
-            price: Number(oi.price_at_order),
-          }))}
-          taxAmount={Number(paymentOrder.tax_amount ?? 0)}
-          serviceChargeAmount={Number(paymentOrder.service_charge_amount ?? 0)}
-          brandName={brandName}
-          onClose={() => setPaymentOrder(null)}
-          onSuccess={(r: any) => {
-            setReceiptOrder(paymentOrder);
-            setPaymentOrder(null);
-            setShowReceipt(true);
-          }}
-        />
-      )}
-
       {showCustomerModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowCustomerModal(false)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 max-h-[85vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>

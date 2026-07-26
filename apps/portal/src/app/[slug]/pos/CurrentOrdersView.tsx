@@ -14,6 +14,7 @@ import { supa } from './supa-query';
 import useOfflineSync from '@/hooks/useOfflineSync';
 import { getCachedMenuItems, getCachedSettings } from '@/lib/offline-db';
 import { useEvent, usePublish } from './use-event';
+import { generateInvoiceNumber } from './invoice-utils';
 
 interface OrderItem {
   menu_item_id: string;
@@ -172,6 +173,8 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
   const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
   // Payment
   const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
+  const paymentOrderRef = useRef<Order | null>(null);
+  paymentOrderRef.current = paymentOrder;
   // Edit order
   const [editingOrder, setEditingOrder] = useState(false);
   const [editCart, setEditCart] = useState<CartItem[]>([]);
@@ -559,7 +562,17 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     creatingOrderRef.current = false;
   }, [cart, grandTotal, taxAmt, discountAmount, discount, orderNotes, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, slug, resetCustomerFields, cfg.newOrderMode, router, user]);
 
-  const handlePaymentSuccess = useCallback(() => {
+  const handlePaymentSuccess = useCallback((_result: any) => {
+    const order = paymentOrderRef.current;
+    if (order) {
+      const invCart = (order.order_items || []).map((oi: OrderItem) => ({ id: oi.menu_item_id, quantity: oi.quantity }));
+      deductInventorySupa(slug, invCart, order.id, user?.id).catch(e => console.error('[Inventory deduct]', e));
+      generateInvoiceNumber(slug).then(invNum => {
+        if (invNum) {
+          supa(slug, { table: 'orders', method: 'update', eq: ['id', order.id], body: { invoice_number: invNum } }).catch(e => console.error('[Invoice num]', e));
+        }
+      }).catch(e => console.error('[Invoice num]', e));
+    }
     setPaymentOrder(null);
     setCart([]);
     setSelectedTableId(null);
@@ -577,7 +590,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     calcRef.current = { buffer: 0, op: null, newNumber: false };
     if (cfg.newOrderMode) router.push(`/${slug}/pos/orders`);
     fetchOrdersInitial();
-  }, [slug, cfg.newOrderMode, router, resetCustomerFields, fetchOrdersInitial]);
+  }, [slug, cfg.newOrderMode, router, resetCustomerFields, fetchOrdersInitial, user]);
 
   // Status update
   const updateStatus = useCallback(async (orderId: string, newStatus: string) => {
