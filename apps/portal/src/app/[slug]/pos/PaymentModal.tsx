@@ -128,16 +128,32 @@ export default function PaymentModal({
     accounts.filter((a) => matchMethod(a.payment_method, pm)),
   [accounts]);
 
-  const initLines = useCallback((pm: string) => {
-    const accs = accountsByMethod(pm);
-    const acc = accs.length > 0 ? accs[0] : null;
+  const addPaymentLine = useCallback(async (pm: string, partialAmount?: string) => {
+    let accs = accountsByMethod(pm);
+    let acc = accs.length > 0 ? accs[0] : null;
+    if (!acc) {
+      const defaultAcc = SEED_ACCOUNTS.find(a => a.payment_method === pm);
+      if (defaultAcc) {
+        try {
+          const r = await supa(slug, { table: 'accounts', method: 'insert', body: defaultAcc, single: true });
+          if (r.ok && r.data) {
+            acc = r.data;
+            setAccounts(prev => [...prev, r.data]);
+          }
+        } catch (e: any) {
+          console.error('[PaymentModal] auto-create account failed:', e);
+        }
+      }
+    }
+    const amount = partialAmount ?? (pm === 'cash' ? String(due) : String(due > 0 ? Math.min(due, orderTotal) : 0));
     const newLine: PaymentLine = {
       id: genId(), account_id: acc?.id || '', payment_method: pm,
-      amount: pm === 'cash' ? String(due) : String(due > 0 ? Math.min(due, orderTotal) : 0),
-      cash_received: '', change_due: '', reference_number: '', notes: '',
+      amount, cash_received: '', change_due: '', reference_number: '', notes: '',
     };
     setPaymentLines((prev) => [...prev, newLine]);
-  }, [accountsByMethod, due, orderTotal]);
+  }, [accountsByMethod, due, orderTotal, slug]);
+
+  const initLines = useCallback((pm: string) => { addPaymentLine(pm); }, [addPaymentLine]);
 
   const updateLine = useCallback((id: string, field: keyof PaymentLine, value: string) => {
     setPaymentLines((prev) => prev.map((l) => {
@@ -166,7 +182,7 @@ export default function PaymentModal({
   const remaining = due - totalFromLines;
   const isFullyCovered = remaining <= 0 && paymentLines.length > 0;
 
-  const handleConfirm = async () => {
+  const handleConfirm = useCallback(async () => {
     if (paymentLines.length === 0 || !isFullyCovered) {
       setError('Payments do not cover the full amount');
       return;
@@ -203,7 +219,7 @@ export default function PaymentModal({
       setError(e.message || 'Payment failed');
     }
     setSaving(false);
-  };
+  }, [paymentLines, isFullyCovered, slug, orderId, customerId, onSuccess]);
 
   if (showReceipt && result) {
     return (
@@ -248,36 +264,33 @@ export default function PaymentModal({
             </div>
           ) : paymentLines.length === 0 ? (
             <>
-              {accounts.length > 0 && (
-                <>
-                  <p className="text-sm font-medium text-gray-700">Select payment method</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {['cash', 'jazzcash', 'easypaisa', 'bank_transfer', 'card', 'credit', 'other'].map((pm) => {
-                      const accs = accountsByMethod(pm);
-                      const show = pm === 'credit' ? !!customerId : accs.length > 0 || pm === 'other';
-                      if (!show) return null;
-                      return (
-                        <button
-                          key={pm}
-                          onClick={() => { setMethod(pm); initLines(pm); }}
-                          className={`px-3 py-3 rounded-lg border text-sm font-medium text-left transition-colors min-h-[56px] ${
-                            pm === 'credit' && !customerId ? 'opacity-40 cursor-not-allowed border-gray-200 text-gray-400' :
-                            accs.length === 0 ? 'border-dashed border-gray-300 text-gray-500 hover:bg-gray-50' :
-                            'border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-700'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 font-semibold">
-                            <PaymentMethodLogo method={pm} size={24} />
-                            <span>{METHOD_LABELS[pm] || pm}</span>
-                          </div>
-                          {pm === 'credit' && !customerId && <div className="text-[10px] text-amber-600 mt-0.5">Select customer first</div>}
-                          {accs.length > 0 && <div className="text-[10px] text-gray-400 mt-0.5 truncate">{accs[0].name}</div>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
+              <>
+                <p className="text-sm font-medium text-gray-700">Select payment method</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {['cash', 'jazzcash', 'easypaisa', 'bank_transfer', 'card', 'credit', 'other'].map((pm) => {
+                    const accs = accountsByMethod(pm);
+                    if (pm === 'credit' && !customerId) return null;
+                    return (
+                      <button
+                        key={pm}
+                        onClick={() => { setMethod(pm); initLines(pm); }}
+                        className={`px-3 py-3 rounded-lg border text-sm font-medium text-left transition-colors min-h-[56px] ${
+                          pm === 'credit' && !customerId ? 'opacity-40 cursor-not-allowed border-gray-200 text-gray-400' :
+                          accs.length === 0 ? 'border-dashed border-gray-300 text-gray-500 hover:bg-gray-50' :
+                          'border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 font-semibold">
+                          <PaymentMethodLogo method={pm} size={24} />
+                          <span>{METHOD_LABELS[pm] || pm}</span>
+                        </div>
+                        {pm === 'credit' && !customerId && <div className="text-[10px] text-amber-600 mt-0.5">Select customer first</div>}
+                        {accs.length > 0 && <div className="text-[10px] text-gray-400 mt-0.5 truncate">{accs[0].name}</div>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
               <button
                 onClick={() => setMethod('split')}
                 className="w-full px-3 py-2.5 rounded-lg border border-dashed border-gray-300 text-sm text-gray-500 hover:bg-gray-50 min-h-[44px]"
@@ -383,21 +396,11 @@ export default function PaymentModal({
               {method === 'split' && remaining > 0 && (
                 <div className="grid grid-cols-3 gap-2">
                   {['cash', 'jazzcash', 'easypaisa', 'bank_transfer', 'card', 'credit', 'other'].map((pm) => {
-                    const accs = accountsByMethod(pm);
                     if (pm === 'credit' && !customerId) return null;
-                    if (accs.length === 0 && pm !== 'other') return null;
                     return (
                       <button
                         key={pm}
-                        onClick={() => {
-                          const a = accs.length > 0 ? accs[0] : null;
-                          const nl: PaymentLine = {
-                            id: genId(), account_id: a?.id || '', payment_method: pm,
-                            amount: String(remaining), cash_received: '', change_due: '',
-                            reference_number: '', notes: '',
-                          };
-                          setPaymentLines((prev) => [...prev, nl]);
-                        }}
+                        onClick={() => addPaymentLine(pm, String(remaining))}
                         className="px-2 py-2 text-[10px] rounded border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium min-h-[44px] flex items-center justify-center gap-1"
                       >
                         <PaymentMethodLogo method={pm} size={14} />

@@ -293,14 +293,12 @@ export default function DineInView({ slug, theme, brandName }: Props) {
       const order = orderR.data[0];
 
       const items = cart.map((item) => ({ order_id: order.id, menu_item_id: item.id, quantity: item.quantity, price_at_order: item.price }));
-      const itemsR = await supa(slug, { table: 'order_items', method: 'insert', body: items });
+      const [itemsR] = await Promise.all([
+        supa(slug, { table: 'order_items', method: 'insert', body: items }),
+        deductInventorySupa(slug, cart).catch((e) => console.error('[DineIn Inventory deduct]', e)),
+        supa(slug, { table: 'tables', method: 'update', body: { status: 'occupied', current_order_id: order.id }, eq: ['id', selectedTable.id] }),
+      ]);
       if (!itemsR.ok) { console.error('[DineIn Items]', itemsR.error); setCheckingOut(false); return; }
-
-      // Deduct inventory for linked ingredients
-      await deductInventorySupa(slug, cart).catch((e) => console.error('[DineIn Inventory deduct]', e));
-
-      // Update table to occupied
-      await supa(slug, { table: 'tables', method: 'update', body: { status: 'occupied', current_order_id: order.id }, eq: ['id', selectedTable.id] });
 
       // Optimistic local updates
       setTables((prev) => prev.map((t) => (t.id === selectedTable.id ? { ...t, status: 'occupied' as const, current_order_id: order.id } : t)));

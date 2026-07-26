@@ -36,8 +36,8 @@ export default function MenuGrid({ menuItems, onAddToCart, theme, currencySymbol
       onClick={() => onAddToCart(item)}
       className="w-full flex items-center gap-3 px-4 py-3 md:py-2.5 rounded-lg transition-all text-left hover:bg-gray-50 active:scale-[0.98] active:bg-gray-100"
     >
-      <div className="flex-1 min-w-0">
-        <div className="font-medium text-sm text-gray-900">{item.name}</div>
+      <div className="flex-1">
+        <div className="font-medium text-sm text-gray-900 break-words">{item.name}</div>
         {item.description && <div className="text-xs text-gray-400 truncate">{item.description}</div>}
       </div>
       <div className="flex items-center gap-2">

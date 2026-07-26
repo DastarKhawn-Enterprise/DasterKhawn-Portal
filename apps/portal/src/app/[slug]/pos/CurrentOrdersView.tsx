@@ -35,6 +35,9 @@ interface Order {
   customer_phone?: string | null;
   pickup_time?: string | null;
   customer_id?: string | null;
+  payment_status?: string | null;
+  amount_paid?: number;
+  amount_due?: number;
   order_items: OrderItem[];
 }
 
@@ -86,11 +89,26 @@ const statusColor: Record<string, string> = {
   cancelled: 'bg-red-50 text-red-700 border border-red-200',
 };
 
-const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
+const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, payment_status, amount_paid, amount_due, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
+
+const ORDER_TYPE_BADGE: Record<string, string> = {
+  dine_in: 'bg-purple-50 text-purple-700 border border-purple-200',
+  takeaway: 'bg-blue-50 text-blue-700 border border-blue-200',
+  delivery: 'bg-orange-50 text-orange-700 border border-orange-200',
+  drive_thru: 'bg-teal-50 text-teal-700 border border-teal-200',
+};
+
+const ORDER_TYPE_DISPLAY: Record<string, string> = {
+  dine_in: 'Dine In',
+  takeaway: 'Take Away',
+  delivery: 'Delivery',
+  drive_thru: 'Drive Thru',
+  third_party: '3rd Party',
+};
 
 export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }: Props) {
   const router = useRouter();
-  const cfg: ViewConfig = { title: 'Active Orders', orderType: null, showCustomerFields: false, ...viewConfig };
+  const cfg = useMemo(() => ({ title: 'Active Orders', orderType: null, showCustomerFields: false, ...viewConfig }), [viewConfig]);
 
   const { setPageTitle } = usePOS();
   useEffect(() => { setPageTitle(cfg.title); }, [setPageTitle, cfg.title]);
@@ -150,10 +168,10 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
   const [vehicleType, setVehicleType] = useState('');
   const [vehiclePlateNumber, setVehiclePlateNumber] = useState('');
 
-  const isScoped = cfg.orderType !== null;
+  const   isScoped = cfg.orderType !== null;
   const effectiveOrderType: string = cfg.orderType || selectedOrderType;
 
-  const selectedOrder = orders.find((o) => o.id === selectedId) ?? null;
+  const selectedOrder = useMemo(() => orders.find((o) => o.id === selectedId) ?? null, [orders, selectedId]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -375,13 +393,15 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
       const order = orderResult.data;
 
       const items = cart.map((item) => ({ order_id: order.id, menu_item_id: item.id, quantity: item.quantity, price_at_order: item.price }));
-      const itemsResult = await supa(slug, { table: 'order_items', method: 'insert', body: items });
+      const [itemsResult] = await Promise.all([
+        supa(slug, { table: 'order_items', method: 'insert', body: items }),
+        deductInventorySupa(slug, cart, order.id, user?.id).catch((e) => console.error('[Inventory deduct]', e)),
+        effectiveOrderType === 'dine_in' && selectedTableId
+          ? supa(slug, { table: 'tables', method: 'update', eq: ['id', selectedTableId], body: { status: 'occupied', current_order_id: order.id } })
+          : Promise.resolve({ ok: true } as const),
+      ]);
       if (!itemsResult.ok) { console.error('[Checkout items]', itemsResult.error); setCheckingOut(false); return; }
-
-      await deductInventorySupa(slug, cart, order.id, user?.id).catch((e) => console.error('[Inventory deduct]', e));
-
       if (effectiveOrderType === 'dine_in' && selectedTableId) {
-        await supa(slug, { table: 'tables', method: 'update', eq: ['id', selectedTableId], body: { status: 'occupied', current_order_id: order.id } });
         setOrderedTables((prev) => prev.map((t) => (t.id === selectedTableId ? { ...t, status: 'occupied' } : t)));
       }
 
@@ -549,24 +569,11 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     setEditCart([]);
   }, []);
 
+  const availableTables = useMemo(() => orderedTables.filter((t) => t.status === 'available'), [orderedTables]);
+
   if (!isLoaded || !authReady) {
     return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
   }
-
-  const availableTables = orderedTables.filter((t) => t.status === 'available');
-  const orderTypeBadge: Record<string, string> = {
-    dine_in: 'bg-purple-50 text-purple-700 border border-purple-200',
-    takeaway: 'bg-blue-50 text-blue-700 border border-blue-200',
-    delivery: 'bg-orange-50 text-orange-700 border border-orange-200',
-    drive_thru: 'bg-teal-50 text-teal-700 border border-teal-200',
-  };
-  const orderTypeDisplay: Record<string, string> = {
-    dine_in: 'Dine In',
-    takeaway: 'Take Away',
-    delivery: 'Delivery',
-    drive_thru: 'Drive Thru',
-    third_party: '3rd Party',
-  };
 
   // Mobile panel navigation
   const pc = (panel: 'list' | 'detail' | 'new-order', base: string) =>
@@ -617,8 +624,8 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                 <span className="font-bold text-sm">#{order.order_number}</span>
                 <div className="flex items-center gap-1">
                   {order.order_type && (
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${orderTypeBadge[order.order_type] || 'bg-gray-100 text-gray-600'}`}>
-                      {orderTypeDisplay[order.order_type] || order.order_type}
+<span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${ORDER_TYPE_BADGE[order.order_type] || 'bg-gray-100 text-gray-600'}`}>
+                        {ORDER_TYPE_DISPLAY[order.order_type] || order.order_type}
                     </span>
                   )}
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${statusColor[order.status] || ''}`}>
@@ -760,6 +767,9 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                     <ActionButton label="Print Bill" color="bg-gray-600 hover:bg-gray-700" disabled={false} onClick={() => handlePrintBill(selectedOrder)} updating={false} />
                     {selectedOrder.status !== 'completed' && selectedOrder.status !== 'cancelled' && (
                       <ActionButton label="Edit Order" color="bg-indigo-600 hover:bg-indigo-700" disabled={false} onClick={handleStartEdit} updating={false} />
+                    )}
+                    {selectedOrder.status !== 'cancelled' && selectedOrder.payment_status !== 'paid' && (
+                      <ActionButton label="Pay Now" color="bg-green-600 hover:bg-green-700" disabled={updating === selectedOrder.id} onClick={() => setPaymentOrder(selectedOrder)} updating={false} />
                     )}
                     {selectedOrder.status !== 'cancelled' && (
                       <ActionButton label="Cancel Order" color="bg-red-600 hover:bg-red-700" disabled={updating === selectedOrder.id} onClick={() => updateStatus(selectedOrder.id, 'cancelled')} updating={updating === selectedOrder.id} />

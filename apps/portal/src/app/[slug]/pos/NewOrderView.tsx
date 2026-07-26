@@ -174,6 +174,9 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
   // Load accounts on mount (needed for payment)
   useEffect(() => { if (!authReady) return; const load = async () => { setLoadingAccounts(true); const r = await supa(slug, { table: 'accounts', select: 'id,name,account_type,payment_method,current_balance', eq: ['is_active', true], order: 'name' }); if (r.ok && r.data) setAccounts(r.data as Account[]); setLoadingAccounts(false); }; load(); }, [authReady, slug]);
 
+  const keypadValueRef = useRef(keypadValue);
+  keypadValueRef.current = keypadValue;
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -198,7 +201,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
       else if (e.code === 'Numpad8') k = '8';
       else if (e.code === 'Numpad9') k = '9';
       else if (e.key === 'Enter' || e.code === 'NumpadEnter') {
-        const cur = parseFloat(keypadValue) || 0;
+        const cur = parseFloat(keypadValueRef.current) || 0;
         const cc = calcRef.current;
         if (cc.op === '+') { const r = cc.buffer + cur; const s = String(r); setKeypadValue(s); setKeypadDisplay(s); }
         else if (cc.op === '-') { const r = cc.buffer - cur; const s = String(r); setKeypadValue(s); setKeypadDisplay(s); }
@@ -210,17 +213,17 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
       e.preventDefault();
       if (k === 'clear') { calcRef.current = { buffer: 0, op: null, newNumber: false }; setKeypadValue(''); setKeypadDisplay(''); return; }
       if (k === 'backspace') { setKeypadValue((prev) => prev.slice(0, -1)); setKeypadDisplay((prev) => prev.slice(0, -1)); return; }
-      if (k === '+' && keypadValue) { handleOperator('+', keypadValue); return; }
-      if (k === '-' && keypadValue) { handleOperator('-', keypadValue); return; }
-      if (k === '.' && keypadValue.includes('.')) return;
-      if (k === '.' && keypadValue === '') { setKeypadValue('0.'); setKeypadDisplay('0.'); return; }
+      if (k === '+' && keypadValueRef.current) { handleOperator('+', keypadValueRef.current); return; }
+      if (k === '-' && keypadValueRef.current) { handleOperator('-', keypadValueRef.current); return; }
+      if (k === '.' && keypadValueRef.current.includes('.')) return;
+      if (k === '.' && keypadValueRef.current === '') { setKeypadValue('0.'); setKeypadDisplay('0.'); return; }
       const c = calcRef.current;
       if (c.newNumber) { c.newNumber = false; setKeypadValue(k); setKeypadDisplay(k); }
       else { setKeypadValue((prev) => prev + k); setKeypadDisplay((prev) => prev + k); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [keypadValue]);
+  }, [handleOperator]);
 
   const handleAddToCart = useCallback((item: MenuItem) => { setCart((prev) => { const existing = prev.find((ci) => ci.id === item.id); if (existing) return prev.map((ci) => (ci.id === item.id ? { ...ci, quantity: ci.quantity + 1 } : ci)); return [...prev, { id: item.id, name: item.name, price: item.price, quantity: 1, uid: genId() }]; }); }, []);
   const handleUpdateQuantity = useCallback((itemId: string, qty: number) => { if (qty <= 0) { setCart((prev) => prev.filter((ci) => ci.id !== itemId)); return; } setCart((prev) => prev.map((ci) => (ci.id === itemId ? { ...ci, quantity: qty } : ci))); }, []);
