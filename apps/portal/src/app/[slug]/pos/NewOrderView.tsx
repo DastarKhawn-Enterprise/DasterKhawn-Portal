@@ -259,7 +259,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
     try {
       let pickupTime: string | null = null;
       if (orderType === 'takeaway' || orderType === 'delivery') { const d = new Date(); d.setMinutes(d.getMinutes() + 20); pickupTime = d.toISOString(); }
-      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total: grandTotal, tax_amount: taxAmount, service_charge_amount: serviceCharge, order_type: orderType, customer_id: selectedCustomer?.id || null, customer_name: selectedCustomer?.name || null, customer_phone: selectedCustomer?.phone || null, pickup_time: pickupTime };
+      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total: grandTotal, tax_amount: taxAmount, order_type: orderType, customer_id: selectedCustomer?.id || null, customer_name: selectedCustomer?.name || null, customer_phone: selectedCustomer?.phone || null, pickup_time: pickupTime };
       if (orderType === 'dine_in' && selectedTableId) orderPayload.table_id = selectedTableId;
       const orderResult = await supa(slug, { table: 'orders', method: 'insert', select: 'id, order_number, created_at', single: true, body: orderPayload });
       if (!orderResult.ok || !orderResult.data) { setOrderError(orderResult.error || 'Failed to create order'); setCheckingOut(false); creatingOrderRef.current = false; return; }
