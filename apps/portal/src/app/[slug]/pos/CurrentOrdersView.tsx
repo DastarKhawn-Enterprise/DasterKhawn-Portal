@@ -807,13 +807,13 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
             <p className="text-gray-400 text-sm text-center pt-8">{cfg.statusFilter ? `No ${cfg.title.toLowerCase()}` : 'No active orders'}</p>
           )}
           {orders.map((order) => (
-            <button
+            <div
               key={order.id}
-              onClick={() => { setSelectedId(order.id); setMobilePanel('detail'); }}
-              className={`w-full text-left p-3 rounded-xl border transition-colors ${
+              className={`relative p-3 rounded-xl border transition-colors cursor-pointer ${
                 selectedId === order.id ? '' : 'hover:bg-gray-50'
               }`}
               style={selectedId === order.id ? { borderColor: theme.primaryColor, boxShadow: `0 0 0 2px ${theme.primaryColor}20` } : { borderColor: '#e5e7eb' }}
+              onClick={() => { setSelectedId(order.id); setMobilePanel('detail'); }}
             >
               <div className="flex items-center justify-between mb-1">
                 <span className="font-bold text-sm">#{order.order_number}</span>
@@ -838,14 +838,23 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                   {new Date(order.created_at).toLocaleTimeString()}
                 </div>
               )}
-              <div className="flex text-xs text-gray-400">
+              <div className="flex text-xs text-gray-400 items-center">
                 {order.pickup_time
                   ? `Pickup ${new Date(order.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · `
                   : order.order_type === 'takeaway' ? 'ASAP · ' : ''}
                 {order.order_items?.length || 0} item{(order.order_items?.length || 0) !== 1 ? 's' : ''}
                 <span className="ml-auto font-semibold text-gray-700">{settings?.currencySymbol}{Number(order.total).toFixed(2)}</span>
               </div>
-            </button>
+              {order.payment_status !== 'paid' && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setPaymentOrder(order); }}
+                  className="mt-2 w-full py-1 rounded-lg text-xs font-bold text-white"
+                  style={{ backgroundColor: theme.primaryColor }}
+                >
+                  Generate Invoice
+                </button>
+              )}
+            </div>
           ))}
         </div>
       </div>
