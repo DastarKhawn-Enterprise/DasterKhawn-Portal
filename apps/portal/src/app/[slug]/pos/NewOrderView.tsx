@@ -8,18 +8,15 @@ import { supa } from './supa-query';
 import { usePOS } from './pos-context';
 import { deductInventorySupa } from './inventory-utils';
 import { searchCustomersSupa } from './customer-utils';
-import { processPayments, type PaymentInput } from './payment-actions';
 import ReceiptView from './ReceiptView';
-import PaymentMethodLogo from './PaymentMethodLogo';
+import PaymentModal from './PaymentModal';
 import { usePublish } from './use-event';
 
 interface MenuItem { id: string; name: string; description?: string; price: number; category?: string; available?: boolean; }
 interface CartItem { id: string; name: string; price: number; quantity: number; uid: string; image?: string; notes?: string; }
 interface TableRecord { id: string; table_number: string; status: string; }
 interface Customer { id: string; name: string; phone: string | null; total_orders?: number; total_spent?: number; loyalty_points?: number; credit_balance?: number; }
-interface Account { id: string; name: string; account_type: string; payment_method: string; current_balance: number; }
 type OrderTypeOption = 'dine_in' | 'takeaway' | 'delivery' | 'drive_thru' | 'third_party';
-type PaymentViewType = 'selection' | 'input';
 
 interface Props { slug: string; theme: ThemeConfig; brandName: string; }
 
@@ -123,19 +120,11 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
   const [discountValue, setDiscountValue] = useState('');
 
   const [checkingOut, setCheckingOut] = useState(false);
-  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
-  const [currentOrderNumber, setCurrentOrderNumber] = useState<number>(0);
-
-  const [paymentView, setPaymentView] = useState<PaymentViewType>('selection');
-  const [paymentMethod, setPaymentMethod] = useState('');
   const [keypadValue, setKeypadValue] = useState('');
   const [keypadDisplay, setKeypadDisplay] = useState('');
-  const [savingPayment, setSavingPayment] = useState(false);
-  const [paymentError, setPaymentError] = useState('');
   const [showReceipt, setShowReceipt] = useState(false);
-  const [successData, setSuccessData] = useState<any>(null);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [receiptOrder, setReceiptOrder] = useState<any>(null);
+  const [paymentOrder, setPaymentOrder] = useState<any>(null);
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [promoCode, setPromoCode] = useState('');
@@ -170,9 +159,6 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
   useEffect(() => { if (!authReady) return; let c = false; setMostOrderedLoading(true); supa(slug, { table: 'order_items', select: 'menu_item_id, quantity, menu_items!inner(id, name, description, price, category, available)', limit: 5000 }).then((r) => { if (c || !r.ok || !r.data) return; const grouped = new Map<string, { item: MenuItem; qty: number }>(); for (const row of r.data) { const mi = (row.menu_items as any); if (mi?.available === false) continue; const key = mi.id; const prev = grouped.get(key) || { item: mi as unknown as MenuItem, qty: 0 }; prev.qty += row.quantity; grouped.set(key, prev); } setMostOrderedItems(Array.from(grouped.values()).sort((a, b) => b.qty - a.qty).slice(0, 10).map((e) => e.item)); }).catch(() => {}).finally(() => setMostOrderedLoading(false)); return () => { c = true; }; }, [authReady, slug]);
 
   useEffect(() => { if (!authReady || !showCustomerModal) return; const t = setTimeout(async () => { if (!customerSearch.trim()) { setCustomerResults([]); return; } setCustomerSearchLoading(true); try { const results = await searchCustomersSupa(slug, customerSearch); setCustomerResults(results); } catch {} setCustomerSearchLoading(false); }, 300); return () => clearTimeout(t); }, [customerSearch, authReady, slug, showCustomerModal]);
-
-  // Load accounts on mount (needed for payment)
-  useEffect(() => { if (!authReady) return; const load = async () => { setLoadingAccounts(true); const r = await supa(slug, { table: 'accounts', select: 'id,name,account_type,payment_method,current_balance', eq: ['is_active', true], order: 'name' }); if (r.ok && r.data) setAccounts(r.data as Account[]); setLoadingAccounts(false); }; load(); }, [authReady, slug]);
 
   const keypadValueRef = useRef(keypadValue);
   keypadValueRef.current = keypadValue;
@@ -239,8 +225,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
 
   const handleClearCart = useCallback(() => {
     setCart([]); setSpecialInstructions(''); setOrderNotes(''); setDiscount(null); setSelectedCustomer(null);
-    setSelectedTableId(null); setCurrentOrderId(null); setCurrentOrderNumber(0); setPaymentView('selection');
-    setPaymentMethod(''); setKeypadValue(''); setKeypadDisplay(''); setPaymentError(''); setAccounts([]); setOrderError('');
+    setSelectedTableId(null); setPaymentOrder(null); setKeypadValue(''); setKeypadDisplay(''); setOrderError('');
     calcRef.current = { buffer: 0, op: null, newNumber: false };
   }, []);
 
@@ -263,58 +248,59 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
     try {
       let pickupTime: string | null = null;
       if (orderType === 'takeaway' || orderType === 'delivery') { const d = new Date(); d.setMinutes(d.getMinutes() + 20); pickupTime = d.toISOString(); }
-      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total: grandTotal, tax_amount: taxAmount, order_type: orderType, customer_id: selectedCustomer?.id || null, customer_name: selectedCustomer?.name || null, customer_phone: selectedCustomer?.phone || null, pickup_time: pickupTime };
+      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total: grandTotal, tax_amount: taxAmount, discount_amount: discountAmount, discount_type: discount?.type || null, discount_value: discount?.value || null, notes: orderNotes || null, order_type: orderType, customer_id: selectedCustomer?.id || null, customer_name: selectedCustomer?.name || null, customer_phone: selectedCustomer?.phone || null, pickup_time: pickupTime };
       if (orderType === 'dine_in' && selectedTableId) orderPayload.table_id = selectedTableId;
       const orderResult = await supa(slug, { table: 'orders', method: 'insert', select: 'id, order_number, created_at', single: true, body: orderPayload });
       if (!orderResult.ok || !orderResult.data) { setOrderError(orderResult.error || 'Failed to create order'); setCheckingOut(false); creatingOrderRef.current = false; return; }
-      publish('orders', 'INSERT', { id: orderResult.data?.id });
       const newOrder: any = orderResult.data;
       const items = cart.map((item) => ({ order_id: newOrder.id, menu_item_id: item.id, quantity: item.quantity, price_at_order: item.price }));
       const itemsResult = await supa(slug, { table: 'order_items', method: 'insert', body: items });
       if (!itemsResult.ok) { setOrderError(itemsResult.error || 'Failed to save order items'); setCheckingOut(false); creatingOrderRef.current = false; return; }
-      await deductInventorySupa(slug, cart, newOrder.id, user?.id).catch((e) => console.error('[Inventory]', e));
-      if (orderType === 'dine_in' && selectedTableId) { await supa(slug, { table: 'tables', method: 'update', eq: ['id', selectedTableId], body: { status: 'occupied', current_order_id: newOrder.id } }); setTables((prev) => prev.map((t) => (t.id === selectedTableId ? { ...t, status: 'occupied' } : t))); }
-      setCurrentOrderId(newOrder.id); setCurrentOrderNumber(newOrder.order_number); setPaymentView('selection'); setPaymentMethod(''); setKeypadValue(''); setKeypadDisplay(''); setPaymentError(''); calcRef.current = { buffer: 0, op: null, newNumber: false };
+      // Fire-and-forget inventory deduction and table update — don't block payment modal
+      deductInventorySupa(slug, cart, newOrder.id, user?.id).catch((e) => console.error('[Inventory]', e));
+      if (orderType === 'dine_in' && selectedTableId) { supa(slug, { table: 'tables', method: 'update', eq: ['id', selectedTableId], body: { status: 'occupied', current_order_id: newOrder.id } }).catch(() => {}); setTables((prev) => prev.map((t) => (t.id === selectedTableId ? { ...t, status: 'occupied' } : t))); }
+      publish('orders', 'INSERT', { id: newOrder.id, status: 'pending', order_type: orderType });
+      setPaymentOrder({
+        id: newOrder.id,
+        order_number: newOrder.order_number,
+        status: 'pending',
+        total: grandTotal,
+        tax_amount: taxAmount,
+        service_charge_amount: serviceCharge,
+        created_at: newOrder.created_at,
+        order_type: orderType,
+        customer_id: selectedCustomer?.id || null,
+        customer_name: selectedCustomer?.name || null,
+        customer_phone: selectedCustomer?.phone || null,
+        pickup_time: pickupTime,
+        order_items: cart.map((item) => ({
+          menu_item_id: item.id,
+          quantity: item.quantity,
+          price_at_order: item.price,
+          menu_items: { name: item.name },
+        })),
+      });
+      setKeypadValue(''); setKeypadDisplay(''); calcRef.current = { buffer: 0, op: null, newNumber: false };
     } catch (e: any) { console.error('[PlaceOrder]', e); setOrderError(e.message || 'Order failed'); }
     setCheckingOut(false); creatingOrderRef.current = false;
-  }, [cart, orderType, grandTotal, taxAmount, serviceCharge, selectedCustomer, selectedTableId, slug, user]);
+  }, [cart, orderType, grandTotal, taxAmount, discountAmount, discount, orderNotes, serviceCharge, selectedCustomer, selectedTableId, slug, user]);
 
-  const handleProcessPayment = useCallback(async () => {
-    if (!currentOrderId || !paymentMethod) return;
-    if (paymentMethod === 'cash' && !keypadValue) { setPaymentError('Enter amount received'); return; }
-    setSavingPayment(true); setPaymentError('');
-    try {
-      const acc = accounts.find((a) => a.payment_method === paymentMethod);
-      if (!acc) { setPaymentError('Account not found for ' + paymentMethod); setSavingPayment(false); return; }
-      const received = paymentMethod === 'cash' ? parseFloat(keypadValue) : grandTotal;
-      const changeDue = paymentMethod === 'cash' ? Math.max(0, received - grandTotal) : 0;
-      const payments: PaymentInput[] = [{ account_id: acc.id, payment_method: paymentMethod, amount: grandTotal, cash_received: paymentMethod === 'cash' ? received : null, change_due: paymentMethod === 'cash' ? changeDue : null, reference_number: (paymentMethod !== 'cash' ? keypadValue : null) || null, notes: null, customer_id: selectedCustomer?.id || null, idempotency_key: currentOrderId + '_' + Date.now() + '_' + genId() }];
-      const r = await processPayments(slug, currentOrderId, payments);
-      if (!r.success) { setPaymentError(r.error || 'Payment failed'); setSavingPayment(false); return; }
-      publish('payments', 'INSERT', { id: r.data?.id });
-      setSuccessData(r); setShowReceipt(true);
-    } catch (e: any) { setPaymentError(e.message || 'Payment failed'); }
-    setSavingPayment(false);
-  }, [currentOrderId, paymentMethod, keypadValue, grandTotal, accounts, selectedCustomer, slug]);
-
-  const handlePayClick = useCallback(() => {
-    if (!currentOrderId || cart.length === 0) return;
-    if (!paymentMethod) { setPaymentError('Select a payment method first'); return; }
-    setOrderError('');
-    const pm = paymentMethod;
-    const kv = pm === 'cash' ? (keypadValue || String(Math.ceil(grandTotal))) : '';
-    if (pm === 'cash' && !kv) { setPaymentError('Enter amount received'); return; }
-    const acc = accounts.find((a) => a.payment_method === pm);
-    if (!acc) { setPaymentError('Account not found for ' + pm); return; }
-    const received = pm === 'cash' ? parseFloat(kv) : grandTotal;
-    const changeDue = pm === 'cash' ? Math.max(0, received - grandTotal) : 0;
-    setSavingPayment(true);
-    processPayments(slug, currentOrderId, [{ account_id: acc.id, payment_method: pm, amount: grandTotal, cash_received: pm === 'cash' ? received : null, change_due: pm === 'cash' ? changeDue : null, reference_number: (pm !== 'cash' ? kv : null) || null, notes: null, customer_id: selectedCustomer?.id || null, idempotency_key: currentOrderId + '_' + Date.now() + '_' + genId() }]).then((r) => {
-      if (!r.success) { setPaymentError(r.error || 'Payment failed'); setSavingPayment(false); return; }
-      publish('payments', 'INSERT', { id: r.data?.id });
-      setSuccessData(r); setShowReceipt(true); setSavingPayment(false);
-    }).catch((e: any) => { setPaymentError(e.message || 'Payment failed'); setSavingPayment(false); });
-  }, [currentOrderId, cart, paymentMethod, keypadValue, grandTotal, accounts, selectedCustomer, slug]);
+  const handlePaymentSuccess = useCallback(() => {
+    setPaymentOrder(null);
+    setCart([]);
+    setSelectedTableId(null);
+    setSelectedCustomer(null);
+    setCustomerSearch('');
+    setCustomerResults([]);
+    setDiscount(null);
+    setOrderNotes('');
+    setKeypadValue('');
+    setKeypadDisplay('');
+    setShowCalculator(false);
+    setPromoCode('');
+    setPromoError('');
+    calcRef.current = { buffer: 0, op: null, newNumber: false };
+  }, []);
 
   const filteredItems = useMemo(() => {
     let items = menuItems;
@@ -328,9 +314,9 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
   const orderCount = cart.reduce((s, i) => s + i.quantity, 0);
 
   const receiptData = useMemo(() => {
-    if (!showReceipt) return null;
-    return { orderNumber: currentOrderNumber, status: 'paid', total: grandTotal, createdAt: new Date().toISOString(), orderType, customerName: selectedCustomer?.name || null, customerPhone: selectedCustomer?.phone || null, items: cart.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price })), taxAmount, serviceChargeAmount: serviceCharge, tableNumber: selectedTableId ? tables.find((t) => t.id === selectedTableId)?.table_number || null : null };
-  }, [showReceipt, currentOrderNumber, grandTotal, orderType, selectedCustomer, cart, taxAmount, serviceCharge, selectedTableId, tables]);
+    if (!showReceipt || !receiptOrder) return null;
+    return { orderNumber: receiptOrder.order_number, status: 'paid', total: Number(receiptOrder.total), createdAt: receiptOrder.created_at || new Date().toISOString(), orderType: receiptOrder.order_type, customerName: receiptOrder.customer_name, customerPhone: receiptOrder.customer_phone, items: (receiptOrder.order_items || []).map((i: any) => ({ name: i.menu_items?.name || 'Unknown', quantity: i.quantity, price: Number(i.price_at_order) })), taxAmount: Number(receiptOrder.tax_amount ?? 0), serviceChargeAmount: Number(receiptOrder.service_charge_amount ?? 0), tableNumber: null };
+  }, [showReceipt, receiptOrder]);
 
   if (!isLoaded || !authReady) {
     return <div className="flex-1 flex items-center justify-center bg-gray-50"><div className="text-center"><div className="w-8 h-8 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin mx-auto mb-2" /><p className="text-gray-500 text-sm">Loading POS...</p></div></div>;
@@ -339,7 +325,38 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
   return (
     <div className="flex-1 flex flex-col bg-gray-50 min-w-0 overflow-hidden" style={{ fontFamily: 'inherit' }}>
       {showReceipt && receiptData && (
-        <ReceiptView data={receiptData} brandName={brandName} theme={theme} onClose={() => { setShowReceipt(false); setSuccessData(null); handleNewOrder(); }} currencySymbol={currencySymbol} />
+        <ReceiptView data={receiptData} brandName={brandName} theme={theme} onClose={() => { setShowReceipt(false); setReceiptOrder(null); handleNewOrder(); }} currencySymbol={currencySymbol} />
+      )}
+
+      {paymentOrder && !receiptOrder && (
+        <PaymentModal
+          slug={slug}
+          theme={theme}
+          currencySymbol={currencySymbol}
+          orderId={paymentOrder.id}
+          orderNumber={paymentOrder.order_number}
+          orderTotal={Number(paymentOrder.total)}
+          amountPaid={0}
+          amountDue={Number(paymentOrder.total)}
+          customerId={paymentOrder.customer_id}
+          customerName={paymentOrder.customer_name}
+          customerPhone={paymentOrder.customer_phone}
+          orderType={paymentOrder.order_type}
+          items={(paymentOrder.order_items || []).map((oi: any) => ({
+            name: oi.menu_items?.name || 'Unknown',
+            quantity: oi.quantity,
+            price: Number(oi.price_at_order),
+          }))}
+          taxAmount={Number(paymentOrder.tax_amount ?? 0)}
+          serviceChargeAmount={Number(paymentOrder.service_charge_amount ?? 0)}
+          brandName={brandName}
+          onClose={() => setPaymentOrder(null)}
+          onSuccess={(r: any) => {
+            setReceiptOrder(paymentOrder);
+            setPaymentOrder(null);
+            setShowReceipt(true);
+          }}
+        />
       )}
 
       {showCustomerModal && (
@@ -460,8 +477,8 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
         <div className="w-[340px] xl:w-[380px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden hidden md:flex">
           <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between shrink-0">
             <div>
-              <h2 className="font-bold text-gray-800" style={{ fontSize: '15px' }}>{currentOrderId ? '#ORD-' + String(currentOrderNumber).padStart(5, '0') : 'New Order'}</h2>
-              <p className="text-xs text-gray-400">{orderCount} item{orderCount !== 1 ? 's' : ''}{currentOrderId ? ' - Awaiting Payment' : ''}</p>
+              <h2 className="font-bold text-gray-800" style={{ fontSize: '15px' }}>New Order</h2>
+              <p className="text-xs text-gray-400">{orderCount} item{orderCount !== 1 ? 's' : ''}</p>
             </div>
             <div className="flex items-center gap-1.5">
               <button onClick={() => setShowCustomerModal(true)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">{selectedCustomer ? selectedCustomer.name : 'Customer'}</button>
@@ -529,24 +546,14 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
           )}
 
           <div className="border-t border-gray-200 px-4 py-3 flex gap-2 shrink-0">
-            {currentOrderId ? (
-              <>
-                <button onClick={() => { setCurrentOrderId(null); setCurrentOrderNumber(0); setPaymentView('selection'); setPaymentMethod(''); setKeypadValue(''); setKeypadDisplay(''); }} className="flex-1 py-2.5 rounded-xl text-xs font-semibold border border-gray-200 text-gray-500 hover:bg-gray-50">Back</button>
-                <button onClick={() => setPaymentView('selection')} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-all hover:shadow-lg" style={{ backgroundColor: '#C9972B' }}>Pay Now</button>
-              </>
-            ) : (
-              <>
-                <button onClick={handleClearCart} className="flex-1 py-2.5 rounded-xl text-xs font-semibold border border-gray-200 text-gray-500 hover:bg-gray-50">Hold</button>
-                <button onClick={handlePlaceOrder} disabled={cart.length === 0 || checkingOut} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg" style={{ backgroundColor: cart.length > 0 ? '#C9972B' : '#9CA3AF' }}>{checkingOut ? 'Placing...' : 'Place Order'}</button>
-              </>
-            )}
+            <button onClick={handleClearCart} className="flex-1 py-2.5 rounded-xl text-xs font-semibold border border-gray-200 text-gray-500 hover:bg-gray-50">Clear</button>
+            <button onClick={handlePlaceOrder} disabled={cart.length === 0 || checkingOut} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg" style={{ backgroundColor: cart.length > 0 ? '#C9972B' : '#9CA3AF' }}>{checkingOut ? 'Placing...' : 'Place Order'}</button>
           </div>
         </div>
 
         {/* Mobile Cart Bar (shown on small screens) */}
         <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-lg">
           {orderError && <div className="px-4 py-1.5 bg-red-50 border-b border-red-100 text-[10px] text-red-600 text-center font-medium">{orderError}</div>}
-          {paymentError && <div className="px-4 py-1.5 bg-red-50 border-b border-red-100 text-[10px] text-red-600 text-center font-medium">{paymentError}</div>}
           {cart.length > 0 && (
             <div className="flex gap-1 px-3 py-1.5 border-b border-gray-100 overflow-x-auto">
               {(Object.keys(ORDER_TYPE_LABELS) as OrderTypeOption[]).map((type) => (
@@ -564,7 +571,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
             </div>
             <button onClick={() => setShowCalculator(!showCalculator)} className={'px-2 py-1.5 text-[10px] font-semibold rounded-md border transition-colors ' + (showCalculator ? 'bg-gray-800 text-white border-gray-800' : 'border-gray-200 text-gray-500')}>{showCalculator ? 'Hide Calc' : 'Calc'}</button>
             <button onClick={() => setShowCustomerModal(true)} className="px-2.5 py-1.5 text-[10px] font-semibold border border-gray-200 rounded-md text-gray-600">Customer</button>
-            <button onClick={currentOrderId ? () => setPaymentView('selection') : handlePlaceOrder} disabled={cart.length === 0 || checkingOut || savingPayment} className="px-5 py-1.5 rounded-md text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: cart.length > 0 ? '#C9972B' : '#9CA3AF' }}>{savingPayment ? '...' : checkingOut ? '...' : currentOrderId ? (paymentMethod ? 'Pay ' + currencySymbol + grandTotal.toFixed(2) : 'Select Method') : 'Order'}</button>
+            <button onClick={handlePlaceOrder} disabled={cart.length === 0 || checkingOut} className="px-5 py-1.5 rounded-md text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: cart.length > 0 ? '#C9972B' : '#9CA3AF' }}>{checkingOut ? 'Placing...' : 'Order'}</button>
           </div>
         </div>
 
@@ -681,33 +688,15 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
             </button>
           </div>
 
-          {/* Payment Method Row (visible only after order placed) */}
-          {currentOrderId && (
-            <div className="px-2 py-1.5 border-b border-gray-200 flex gap-1 overflow-x-auto shrink-0">
-              {['cash', 'card', 'jazzcash', 'easypaisa', 'bank_transfer'].map((pm) => (
-                <button key={pm} onClick={() => {
-                  if (paymentMethod === pm) { setPaymentMethod(''); return; }
-                  setPaymentMethod(pm); setPaymentView('input');
-                  if (pm === 'cash') { setKeypadValue(String(Math.ceil(grandTotal))); setKeypadDisplay(String(Math.ceil(grandTotal))); }
-                  else { setKeypadValue(''); setKeypadDisplay(''); }
-                }}
-                  className={'flex-1 py-1.5 rounded-lg text-[9px] font-semibold transition-all border ' + (paymentMethod === pm ? 'text-white border-transparent shadow-sm' : 'text-gray-500 border-gray-200 hover:bg-gray-50')}
-                  style={paymentMethod === pm ? { backgroundColor: '#C9972B' } : {}}
-                >{pm === 'cash' ? '\u{1F4B5}' : pm === 'card' ? '\u{1F4B3}' : pm === 'jazzcash' ? '\u{1F4F1}' : pm === 'easypaisa' ? '\u{1F4F1}' : '\u{1F3E6}'}</button>
-              ))}
-            </div>
-          )}
-
           {/* Keypad - always functional */}
           <div className="p-2 border-b border-gray-200 shrink-0">
             {keypadValue && (
               <div className="mb-1.5 px-2 py-1 bg-gray-50 rounded-lg border border-gray-200 text-center">
-                <span className="text-[10px] text-gray-400">{currentOrderId && paymentMethod ? (paymentMethod === 'cash' ? 'Cash Received' : 'Reference / Amount') : 'Calculator'}</span>
+                <span className="text-[10px] text-gray-400">Calculator</span>
                 <p className="text-base font-extrabold text-gray-900">{currencySymbol}{(parseFloat(keypadValue) || 0).toFixed(2)}</p>
               </div>
             )}
             <NumericKeypad value={keypadValue} onChange={(v) => { setKeypadValue(v); setKeypadDisplay(v); }} onClear={() => { calcRef.current = { buffer: 0, op: null, newNumber: false }; setKeypadValue(''); setKeypadDisplay(''); }} onOperator={handleOperator} calcNewNumberRef={calcRef} />
-            {paymentError && <p className="text-[10px] text-red-600 text-center mt-1">{paymentError}</p>}
           </div>
 
           {/* Payment Summary - flex-1 fills remaining space, scrolls only if needed */}
@@ -718,27 +707,6 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
             {taxAmount > 0 && <div className="flex justify-between text-gray-500"><span>Tax ({(settings?.taxRate || 0).toFixed(0)}%)</span><span>{currencySymbol}{taxAmount.toFixed(2)}</span></div>}
             <div className="border-t border-gray-200 pt-1" />
             <div className="flex justify-between font-bold text-gray-900 text-sm"><span>Grand Total</span><span>{currencySymbol}{grandTotal.toFixed(2)}</span></div>
-            {currentOrderId && paymentMethod && (
-              <>
-                <div className="border-t border-gray-200 pt-1 border-dashed" />
-                <div className="flex justify-between text-blue-600 font-medium"><span>Paid</span><span>{currencySymbol}{(parseFloat(keypadValue) || 0).toFixed(2)}</span></div>
-                {(parseFloat(keypadValue) || 0) > 0 && (parseFloat(keypadValue) || 0) < grandTotal && (
-                  <div className="flex justify-between text-amber-600 font-medium"><span>Remaining</span><span>{currencySymbol}{(grandTotal - (parseFloat(keypadValue) || 0)).toFixed(2)}</span></div>
-                )}
-                {(parseFloat(keypadValue) || 0) >= grandTotal && (
-                  <div className="flex justify-between text-green-600 font-medium"><span>Change</span><span>{currencySymbol}{((parseFloat(keypadValue) || 0) - grandTotal).toFixed(2)}</span></div>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Pay Button - shrink-0 sticks to bottom */}
-          <div className="border-t border-gray-200 px-3 py-2 shrink-0">
-            <button onClick={handlePayClick}
-              disabled={!currentOrderId || cart.length === 0 || savingPayment}
-              className="w-full py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg active:scale-[0.98]"
-              style={{ backgroundColor: cart.length > 0 ? '#C9972B' : '#9CA3AF' }}
-            >{savingPayment ? 'Processing...' : 'Pay ' + currencySymbol + grandTotal.toFixed(2)}</button>
           </div>
         </div>
       </div>
