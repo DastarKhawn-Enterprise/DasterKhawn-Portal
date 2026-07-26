@@ -30,6 +30,10 @@ interface Order {
   total: number;
   tax_amount?: number;
   service_charge_amount?: number;
+  discount_amount?: number;
+  discount_type?: string | null;
+  discount_value?: number | null;
+  notes?: string | null;
   created_at: string;
   order_type?: string;
   customer_name?: string | null;
@@ -90,7 +94,7 @@ const statusColor: Record<string, string> = {
   cancelled: 'bg-red-50 text-red-700 border border-red-200',
 };
 
-const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, payment_status, amount_paid, amount_due, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
+const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, service_charge_amount, discount_amount, discount_type, discount_value, notes, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, payment_status, amount_paid, amount_due, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
 
 const ORDER_TYPE_BADGE: Record<string, string> = {
   dine_in: 'bg-purple-50 text-purple-700 border border-purple-200',
@@ -520,7 +524,6 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
       const items = cart.map((item) => ({ order_id: order.id, menu_item_id: item.id, quantity: item.quantity, price_at_order: item.price }));
       const [itemsResult] = await Promise.all([
         supa(slug, { table: 'order_items', method: 'insert', body: items }),
-        deductInventorySupa(slug, cart, order.id, user?.id).catch((e) => console.error('[Inventory deduct]', e)),
         effectiveOrderType === 'dine_in' && selectedTableId
           ? supa(slug, { table: 'tables', method: 'update', eq: ['id', selectedTableId], body: { status: 'occupied', current_order_id: order.id } })
           : Promise.resolve({ ok: true } as const),
@@ -560,7 +563,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
     creatingOrderRef.current = false;
-  }, [cart, grandTotal, taxAmt, discountAmount, discount, orderNotes, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, slug, resetCustomerFields, cfg.newOrderMode, router, user]);
+  }, [cart, grandTotal, taxAmt, discountAmount, discount, orderNotes, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, slug, resetCustomerFields, cfg.newOrderMode, router]);
 
   const handlePaymentSuccess = useCallback((_result: any) => {
     const order = paymentOrderRef.current;
@@ -573,24 +576,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
         }
       }).catch(e => console.error('[Invoice num]', e));
     }
-    setPaymentOrder(null);
-    setCart([]);
-    setSelectedTableId(null);
-    setSelectedCustomer(null);
-    setCustomerSearch('');
-    setCustomerResults([]);
-    resetCustomerFields();
-    setDiscount(null);
-    setOrderNotes('');
-    setKeypadValue('');
-    setKeypadDisplay('');
-    setShowCalculator(false);
-    setPromoCode('');
-    setPromoError('');
-    calcRef.current = { buffer: 0, op: null, newNumber: false };
-    if (cfg.newOrderMode) router.push(`/${slug}/pos/orders`);
-    fetchOrdersInitial();
-  }, [slug, cfg.newOrderMode, router, resetCustomerFields, fetchOrdersInitial, user]);
+  }, [slug, user]);
 
   // Status update
   const updateStatus = useCallback(async (orderId: string, newStatus: string) => {
@@ -646,6 +632,12 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
         quantity: oi.quantity,
       }))
     );
+    if (selectedOrder.discount_type && selectedOrder.discount_value) {
+      setDiscount({ type: selectedOrder.discount_type as 'percentage' | 'fixed', value: Number(selectedOrder.discount_value) });
+    } else {
+      setDiscount(null);
+    }
+    setOrderNotes(selectedOrder.notes || '');
     setEditingOrder(true);
   }, [selectedOrder]);
 
@@ -670,7 +662,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     if (!selectedOrder || !selectedId) return;
     setUpdating(selectedId);
     try {
-      const subtotal = editCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const editSubtotal = editCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
       const orderTypeEdit = selectedOrder?.order_type || effectiveOrderType;
       const isDinIn = orderTypeEdit === 'dine_in';
       const isTakeaway = orderTypeEdit === 'takeaway';
@@ -679,16 +671,18 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
       let serviceCharge = 0;
       if (settings?.serviceChargeEnabled && settings.serviceChargeRate > 0) {
         if ((isDinIn && settings.serviceChargeDineIn) || (isTakeaway && settings.serviceChargeTakeaway) || (isDelivery && settings.serviceChargeDelivery) || (isDriveThru && settings.serviceChargeDriveThru)) {
-          serviceCharge = subtotal * (settings.serviceChargeRate / 100);
+          serviceCharge = editSubtotal * (settings.serviceChargeRate / 100);
         }
       }
-      const taxableAmount = settings?.taxServiceCharge ? subtotal + serviceCharge : subtotal;
+      const taxableAmount = settings?.taxServiceCharge ? editSubtotal + serviceCharge : editSubtotal;
       let taxAmount = 0;
       if (settings?.taxEnabled && settings.taxRate > 0) {
         taxAmount = taxableAmount * (settings.taxRate / 100);
       }
-      const total = subtotal + serviceCharge + taxAmount;
+      const editDiscountAmount = discount ? (discount.type === 'percentage' ? (editSubtotal + serviceCharge + taxAmount) * (discount.value / 100) : discount.value) : 0;
+      const total = Math.max(0, editSubtotal + serviceCharge + taxAmount - editDiscountAmount);
 
+      // Delete old order_items and insert new ones
       await supa(slug, { table: 'order_items', method: 'delete', eq: ['order_id', selectedId] });
       if (editCart.length > 0) {
         const items = editCart.map((item) => ({
@@ -699,21 +693,37 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
         }));
         await supa(slug, { table: 'order_items', method: 'insert', body: items });
       }
-      await supa(slug, { table: 'orders', method: 'update', eq: ['id', selectedId], body: { total, tax_amount: taxAmount } });
+      // Update order with all recalculated fields
+      await supa(slug, {
+        table: 'orders', method: 'update', eq: ['id', selectedId],
+        body: {
+          total, tax_amount: taxAmount, service_charge_amount: serviceCharge,
+          discount_amount: editDiscountAmount || null,
+          discount_type: discount?.type || null, discount_value: discount?.value || null,
+          notes: orderNotes || null, updated_at: new Date().toISOString(),
+        },
+      });
+      // Re-deduct inventory for the updated items
+      deductInventorySupa(slug, editCart, selectedId, user?.id).catch(e => console.error('[Edit inventory]', e));
 
       publish('orders', 'UPDATE', { id: selectedId });
 
       setOrders((prev) =>
         prev.map((o) =>
           o.id === selectedId
-            ? { ...o, total, tax_amount: taxAmount, service_charge_amount: serviceCharge, order_items: editCart.map((ci) => ({ menu_item_id: ci.id, quantity: ci.quantity, price_at_order: ci.price, menu_items: { name: ci.name } })) }
+            ? {
+                ...o, total, tax_amount: taxAmount, service_charge_amount: serviceCharge,
+                discount_amount: editDiscountAmount, discount_type: discount?.type || null,
+                discount_value: discount?.value || null, notes: orderNotes || null,
+                order_items: editCart.map((ci) => ({ menu_item_id: ci.id, quantity: ci.quantity, price_at_order: ci.price, menu_items: { name: ci.name } })),
+              }
             : o
         )
       );
       setEditingOrder(false);
     } catch (e) { console.error('[Edit Order]', e); }
     setUpdating(null);
-  }, [selectedOrder, selectedId, editCart, settings, slug, effectiveOrderType]);
+  }, [selectedOrder, selectedId, editCart, discount, orderNotes, settings, slug, effectiveOrderType, user]);
 
   const handleCancelEdit = useCallback(() => {
     setEditingOrder(false);
@@ -915,12 +925,13 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                     {selectedOrder.status === 'ready' && (
                       <ActionButton label="Complete Order" color="bg-green-600 hover:bg-green-700" disabled={updating === selectedOrder.id} onClick={() => updateStatus(selectedOrder.id, 'completed')} updating={updating === selectedOrder.id} />
                     )}
-                    <ActionButton label="Print Bill" color="bg-gray-600 hover:bg-gray-700" disabled={false} onClick={() => handlePrintBill(selectedOrder)} updating={false} />
                     {selectedOrder.status !== 'completed' && selectedOrder.status !== 'cancelled' && (
                       <ActionButton label="Edit Order" color="bg-indigo-600 hover:bg-indigo-700" disabled={false} onClick={handleStartEdit} updating={false} />
                     )}
-                    {selectedOrder.status !== 'cancelled' && selectedOrder.payment_status !== 'paid' && (
-                      <ActionButton label="Pay Now" color="bg-green-600 hover:bg-green-700" disabled={updating === selectedOrder.id} onClick={() => setPaymentOrder(selectedOrder)} updating={false} />
+                    {selectedOrder.payment_status !== 'paid' ? (
+                      <ActionButton label="Generate Invoice" color="bg-green-600 hover:bg-green-700" disabled={updating === selectedOrder.id} onClick={() => setPaymentOrder(selectedOrder)} updating={false} />
+                    ) : (
+                      <ActionButton label="Print Invoice" color="bg-gray-600 hover:bg-gray-700" disabled={false} onClick={() => handlePrintBill(selectedOrder)} updating={false} />
                     )}
                     {selectedOrder.status !== 'cancelled' && (
                       <ActionButton label="Cancel Order" color="bg-red-600 hover:bg-red-700" disabled={updating === selectedOrder.id} onClick={() => updateStatus(selectedOrder.id, 'cancelled')} updating={updating === selectedOrder.id} />
@@ -1594,7 +1605,25 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
         taxAmount={Number(paymentOrder.tax_amount ?? 0)}
         serviceChargeAmount={Number(paymentOrder.service_charge_amount ?? 0)}
         brandName={brandName}
-        onClose={() => setPaymentOrder(null)}
+        onClose={() => {
+          setPaymentOrder(null);
+          setCart([]);
+          setSelectedTableId(null);
+          setSelectedCustomer(null);
+          setCustomerSearch('');
+          setCustomerResults([]);
+          resetCustomerFields();
+          setDiscount(null);
+          setOrderNotes('');
+          setKeypadValue('');
+          setKeypadDisplay('');
+          setShowCalculator(false);
+          setPromoCode('');
+          setPromoError('');
+          calcRef.current = { buffer: 0, op: null, newNumber: false };
+          if (cfg.newOrderMode) router.push(`/${slug}/pos/orders`);
+          fetchOrdersInitial();
+        }}
         onSuccess={handlePaymentSuccess}
       />
     )}
