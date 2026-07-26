@@ -973,7 +973,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                         <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Quick Add Items</h3>
                         {updating === selectedOrder.id && <span className="text-xs text-gray-400">Updating...</span>}
                       </div>
-                      <div className="max-h-64 overflow-y-auto">
+                      <div className="overflow-y-auto">
                         {menuItems.length > 0 ? (
                           <MenuGrid menuItems={menuItems} onAddToCart={handleQuickAddToOrder} theme={theme} currencySymbol={settings?.currencySymbol} searchQuery={menuSearch} onSearchChange={setMenuSearch} mostOrderedItems={mostOrderedItems} />
                         ) : (

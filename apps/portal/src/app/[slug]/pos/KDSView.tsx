@@ -1,10 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useEvent } from './use-event';
+import { useUser } from '@clerk/nextjs';
+import { useEvent, usePublish } from './use-event';
 import { usePOS } from './pos-context';
-import type { ThemeConfig } from '@sat-sys/pos-ui';
+import { MenuGrid } from '@sat-sys/pos-ui';
+import type { MenuItem, ThemeConfig } from '@sat-sys/pos-ui';
 import { fetchKDSOrders, updateKDSOrderStatus } from './orders-actions';
+import { supa } from './supa-query';
+import { deductInventorySupa } from './inventory-utils';
 
 interface KDSOrderItem {
   menu_item_id: string;
@@ -137,6 +141,7 @@ function OrderCard({
   onComplete,
   onCancel,
   onSelect,
+  onAddItem,
 }: {
   order: KDSOrder;
   theme: ThemeConfig;
@@ -146,6 +151,7 @@ function OrderCard({
   onComplete: () => void;
   onCancel: () => void;
   onSelect: () => void;
+  onAddItem?: () => void;
 }) {
   const elapsed = Date.now() - new Date(order.created_at).getTime();
   const overdue = elapsed > ELAPSED_THRESHOLD_MS;
@@ -227,13 +233,25 @@ function OrderCard({
           </button>
         )}
         {order.status !== 'completed' && order.status !== 'cancelled' && (
-          <button
-            onClick={onCancel}
-            disabled={updating}
-            className="px-3 py-2 rounded-xl text-sm font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
-          >
-            Cancel
-          </button>
+          <>
+            {onAddItem && (
+              <button
+                onClick={onAddItem}
+                disabled={updating}
+                className="px-3 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                style={{ backgroundColor: '#6366f1' }}
+              >
+                + Item
+              </button>
+            )}
+            <button
+              onClick={onCancel}
+              disabled={updating}
+              className="px-3 py-2 rounded-xl text-sm font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+            >
+              Cancel
+            </button>
+          </>
         )}
       </div>
     </div>
@@ -286,6 +304,7 @@ function ListView({
   onReady,
   onComplete,
   onCancel,
+  onAddItem,
 }: {
   orders: KDSOrder[];
   theme: ThemeConfig;
@@ -294,6 +313,7 @@ function ListView({
   onReady: (id: string) => void;
   onComplete: (id: string) => void;
   onCancel: (id: string) => void;
+  onAddItem?: (id: string) => void;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -365,13 +385,25 @@ function ListView({
                       </button>
                     )}
                     {order.status !== 'completed' && order.status !== 'cancelled' && (
-                      <button
-                        onClick={() => onCancel(order.id)}
-                        disabled={updating}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
-                      >
-                        Cancel
-                      </button>
+                      <>
+                        {onAddItem && (
+                          <button
+                            onClick={() => onAddItem(order.id)}
+                            disabled={updating}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
+                            style={{ backgroundColor: '#6366f1' }}
+                          >
+                            +Item
+                          </button>
+                        )}
+                        <button
+                          onClick={() => onCancel(order.id)}
+                          disabled={updating}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                      </>
                     )}
                   </div>
                 </td>
@@ -493,6 +525,8 @@ function DetailPanel({
 }
 
 export default function KDSView({ slug, theme, brandName }: Props) {
+  const { user } = useUser();
+  const publish = usePublish();
   const [orders, setOrders] = useState<KDSOrder[]>([]);
   const [activeTab, setActiveTab] = useState<StatusTab>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -506,6 +540,10 @@ export default function KDSView({ slug, theme, brandName }: Props) {
   const [orderTypeFilter, setOrderTypeFilter] = useState<OrderTypeFilter>('all');
   const [stationFilter, setStationFilter] = useState('all');
   const [branchFilter, setBranchFilter] = useState('all');
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [quickAddOrderId, setQuickAddOrderId] = useState<string | null>(null);
+  const [quickAddUpdating, setQuickAddUpdating] = useState(false);
+  const [menuSearch, setMenuSearch] = useState('');
 
   const ordersRef = useRef(orders);
   ordersRef.current = orders;
@@ -549,6 +587,36 @@ export default function KDSView({ slug, theme, brandName }: Props) {
   }, [fetchOrders]);
 
   useEvent('orders', () => { fetchOrders(); });
+
+  useEffect(() => {
+    supa(slug, { table: 'menu_items', select: 'id, name, description, price, category, available', order: 'name', limit: 500 }).then((r) => { if (r.ok) setMenuItems(r.data ?? []); }).catch(() => {});
+  }, [slug]);
+
+  const handleQuickAdd = useCallback(async (item: MenuItem) => {
+    if (!quickAddOrderId) return;
+    setQuickAddUpdating(true);
+    const order = orders.find((o) => o.id === quickAddOrderId);
+    if (!order) { setQuickAddUpdating(false); return; }
+    try {
+      const currentItems = order.order_items || [];
+      const existing = currentItems.find((oi) => oi.menu_item_id === item.id);
+      const newItems = existing
+        ? currentItems.map((oi) => (oi.menu_item_id === item.id ? { menu_item_id: oi.menu_item_id, quantity: oi.quantity + 1, price_at_order: Number(oi.price_at_order) } : { menu_item_id: oi.menu_item_id, quantity: oi.quantity, price_at_order: Number(oi.price_at_order) }))
+        : [...currentItems.map((oi) => ({ menu_item_id: oi.menu_item_id, quantity: oi.quantity, price_at_order: Number(oi.price_at_order) })), { menu_item_id: item.id, quantity: 1, price_at_order: item.price }];
+      await supa(slug, { table: 'order_items', method: 'delete', eq: ['order_id', quickAddOrderId] });
+      if (newItems.length > 0) {
+        await supa(slug, { table: 'order_items', method: 'insert', body: newItems.map((ni) => ({ ...ni, order_id: quickAddOrderId })) });
+      }
+      await supa(slug, { table: 'orders', method: 'update', eq: ['id', quickAddOrderId], body: { updated_at: new Date().toISOString() } });
+      deductInventorySupa(slug, [{ id: item.id, quantity: 1 }], quickAddOrderId, user?.id).catch((e) => console.error('[KDS QuickAdd inventory]', e));
+      publish('orders', 'UPDATE', { id: quickAddOrderId });
+      setOrders((prev) => prev.map((o) => (o.id === quickAddOrderId ? { ...o, order_items: newItems.map((ni) => ({ menu_item_id: ni.menu_item_id, quantity: ni.quantity, price_at_order: ni.price_at_order, menu_items: { name: (ni.menu_item_id === item.id ? item.name : (currentItems.find((ci) => ci.menu_item_id === ni.menu_item_id)?.menu_items?.name || 'Unknown')) } })) } : o)));
+      if (selectedOrder?.id === quickAddOrderId) {
+        setSelectedOrder((prev) => prev ? { ...prev, order_items: newItems.map((ni) => ({ menu_item_id: ni.menu_item_id, quantity: ni.quantity, price_at_order: ni.price_at_order, menu_items: { name: (ni.menu_item_id === item.id ? item.name : (currentItems.find((ci) => ci.menu_item_id === ni.menu_item_id)?.menu_items?.name || 'Unknown')) } })) } : null);
+      }
+    } catch (e) { console.error('[KDS QuickAdd]', e); }
+    setQuickAddUpdating(false);
+  }, [quickAddOrderId, orders, selectedOrder, slug, user, publish]);
 
   const handleStatusUpdate = useCallback(async (orderId: string, newStatus: string) => {
     setUpdating(orderId);
@@ -715,6 +783,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
                       onComplete={() => handleStatusUpdate(order.id, 'completed')}
                       onCancel={() => handleStatusUpdate(order.id, 'cancelled')}
                       onSelect={() => setSelectedOrder(order)}
+                      onAddItem={order.status !== 'completed' && order.status !== 'cancelled' ? () => { setQuickAddOrderId(order.id); setMenuSearch(''); } : undefined}
                     />
                   ))}
                 </div>
@@ -737,6 +806,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
               onReady={(id) => handleStatusUpdate(id, 'ready')}
               onComplete={(id) => handleStatusUpdate(id, 'completed')}
               onCancel={(id) => handleStatusUpdate(id, 'cancelled')}
+              onAddItem={(id) => { setQuickAddOrderId(id); setMenuSearch(''); }}
             />
           )
         )}
@@ -750,6 +820,29 @@ export default function KDSView({ slug, theme, brandName }: Props) {
 
       {/* Bottom Bar */}
       <BottomBar orders={orders} lastUpdated={lastUpdated} />
+
+      {/* Quick Add Modal */}
+      {quickAddOrderId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setQuickAddOrderId(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-bold text-gray-800">Add Items to Order</h2>
+              <button onClick={() => setQuickAddOrderId(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {menuItems.length > 0 ? (
+                <MenuGrid menuItems={menuItems} onAddToCart={handleQuickAdd} theme={theme} currencySymbol="Rs." searchQuery={menuSearch} onSearchChange={setMenuSearch} />
+              ) : (
+                <div className="flex items-center justify-center py-12"><p className="text-gray-400">Loading menu...</p></div>
+              )}
+            </div>
+            <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-between">
+              <span className="text-xs text-gray-400">{quickAddUpdating ? 'Adding...' : 'Click + on any item to add to order'}</span>
+              <button onClick={() => setQuickAddOrderId(null)} className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Done</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Detail Panel */}
       <DetailPanel
