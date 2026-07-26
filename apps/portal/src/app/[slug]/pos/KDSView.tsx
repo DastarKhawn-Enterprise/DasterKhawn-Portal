@@ -543,12 +543,14 @@ export default function KDSView({ slug, theme, brandName }: Props) {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [quickAddOrderId, setQuickAddOrderId] = useState<string | null>(null);
   const [quickAddUpdating, setQuickAddUpdating] = useState(false);
+  const [quickAddItems, setQuickAddItems] = useState<{ id: string; name: string; price: number; quantity: number }[]>([]);
   const [menuSearch, setMenuSearch] = useState('');
 
   const ordersRef = useRef(orders);
   ordersRef.current = orders;
   const prevCountRef = useRef(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchOrders = useCallback(async () => {
     setFetchLoading(true);
@@ -579,6 +581,11 @@ export default function KDSView({ slug, theme, brandName }: Props) {
     setLastUpdated(Date.now());
   }, [slug, activeTab, soundEnabled]);
 
+  const debouncedFetchOrders = useCallback(() => {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = setTimeout(() => fetchOrders(), 1200);
+  }, [fetchOrders]);
+
   const { setPageTitle } = usePOS();
   useEffect(() => { setPageTitle('Kitchen Display'); }, [setPageTitle]);
 
@@ -586,37 +593,57 @@ export default function KDSView({ slug, theme, brandName }: Props) {
     fetchOrders();
   }, [fetchOrders]);
 
-  useEvent('orders', () => { fetchOrders(); });
+  useEvent('orders', () => { debouncedFetchOrders(); });
 
   useEffect(() => {
     supa(slug, { table: 'menu_items', select: 'id, name, description, price, category, available', order: 'name', limit: 500 }).then((r) => { if (r.ok) setMenuItems(r.data ?? []); }).catch(() => {});
   }, [slug]);
 
-  const handleQuickAdd = useCallback(async (item: MenuItem) => {
-    if (!quickAddOrderId) return;
+  const handleQuickAdd = useCallback((item: MenuItem) => {
+    setQuickAddItems((prev) => {
+      const existing = prev.find((i) => i.id === item.id);
+      if (existing) return prev.map((i) => (i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i));
+      return [...prev, { id: item.id, name: item.name, price: item.price, quantity: 1 }];
+    });
+  }, []);
+
+  const handleQuickAddDone = useCallback(async () => {
+    if (!quickAddOrderId || quickAddItems.length === 0) { setQuickAddOrderId(null); setQuickAddItems([]); return; }
     setQuickAddUpdating(true);
     const order = orders.find((o) => o.id === quickAddOrderId);
-    if (!order) { setQuickAddUpdating(false); return; }
+    if (!order) { setQuickAddUpdating(false); setQuickAddOrderId(null); setQuickAddItems([]); return; }
     try {
       const currentItems = order.order_items || [];
-      const existing = currentItems.find((oi) => oi.menu_item_id === item.id);
-      const newItems = existing
-        ? currentItems.map((oi) => (oi.menu_item_id === item.id ? { menu_item_id: oi.menu_item_id, quantity: oi.quantity + 1, price_at_order: Number(oi.price_at_order) } : { menu_item_id: oi.menu_item_id, quantity: oi.quantity, price_at_order: Number(oi.price_at_order) }))
-        : [...currentItems.map((oi) => ({ menu_item_id: oi.menu_item_id, quantity: oi.quantity, price_at_order: Number(oi.price_at_order) })), { menu_item_id: item.id, quantity: 1, price_at_order: item.price }];
+      const merged: { menu_item_id: string; quantity: number; price_at_order: number }[] = [...currentItems.map((oi) => ({ menu_item_id: oi.menu_item_id, quantity: oi.quantity, price_at_order: Number(oi.price_at_order) }))];
+      for (const qa of quickAddItems) {
+        const existingIdx = merged.findIndex((m) => m.menu_item_id === qa.id);
+        if (existingIdx >= 0) {
+          merged[existingIdx] = { ...merged[existingIdx], quantity: merged[existingIdx].quantity + qa.quantity };
+        } else {
+          merged.push({ menu_item_id: qa.id, quantity: qa.quantity, price_at_order: qa.price });
+        }
+      }
+      const invCart = quickAddItems.map((qa) => ({ id: qa.id, quantity: qa.quantity }));
       await supa(slug, { table: 'order_items', method: 'delete', eq: ['order_id', quickAddOrderId] });
-      if (newItems.length > 0) {
-        await supa(slug, { table: 'order_items', method: 'insert', body: newItems.map((ni) => ({ ...ni, order_id: quickAddOrderId })) });
+      if (merged.length > 0) {
+        await supa(slug, { table: 'order_items', method: 'insert', body: merged.map((m) => ({ ...m, order_id: quickAddOrderId })) });
       }
       await supa(slug, { table: 'orders', method: 'update', eq: ['id', quickAddOrderId], body: { updated_at: new Date().toISOString() } });
-      deductInventorySupa(slug, [{ id: item.id, quantity: 1 }], quickAddOrderId, user?.id).catch((e) => console.error('[KDS QuickAdd inventory]', e));
+      deductInventorySupa(slug, invCart, quickAddOrderId, user?.id).catch((e) => console.error('[KDS QuickAdd inventory]', e));
       publish('orders', 'UPDATE', { id: quickAddOrderId });
-      setOrders((prev) => prev.map((o) => (o.id === quickAddOrderId ? { ...o, order_items: newItems.map((ni) => ({ menu_item_id: ni.menu_item_id, quantity: ni.quantity, price_at_order: ni.price_at_order, menu_items: { name: (ni.menu_item_id === item.id ? item.name : (currentItems.find((ci) => ci.menu_item_id === ni.menu_item_id)?.menu_items?.name || 'Unknown')) } })) } : o)));
+      const allNames = new Map<string, string>();
+      for (const oi of currentItems) allNames.set(oi.menu_item_id, oi.menu_items?.name || 'Unknown');
+      for (const qa of quickAddItems) allNames.set(qa.id, qa.name);
+      const newOrderItems = merged.map((m) => ({ menu_item_id: m.menu_item_id, quantity: m.quantity, price_at_order: m.price_at_order, menu_items: { name: allNames.get(m.menu_item_id) || 'Unknown' } }));
+      setOrders((prev) => prev.map((o) => (o.id === quickAddOrderId ? { ...o, order_items: newOrderItems } : o)));
       if (selectedOrder?.id === quickAddOrderId) {
-        setSelectedOrder((prev) => prev ? { ...prev, order_items: newItems.map((ni) => ({ menu_item_id: ni.menu_item_id, quantity: ni.quantity, price_at_order: ni.price_at_order, menu_items: { name: (ni.menu_item_id === item.id ? item.name : (currentItems.find((ci) => ci.menu_item_id === ni.menu_item_id)?.menu_items?.name || 'Unknown')) } })) } : null);
+        setSelectedOrder((prev) => prev ? { ...prev, order_items: newOrderItems } : null);
       }
     } catch (e) { console.error('[KDS QuickAdd]', e); }
     setQuickAddUpdating(false);
-  }, [quickAddOrderId, orders, selectedOrder, slug, user, publish]);
+    setQuickAddOrderId(null);
+    setQuickAddItems([]);
+  }, [quickAddOrderId, quickAddItems, orders, selectedOrder, slug, user, publish]);
 
   const handleStatusUpdate = useCallback(async (orderId: string, newStatus: string) => {
     setUpdating(orderId);
@@ -823,11 +850,11 @@ export default function KDSView({ slug, theme, brandName }: Props) {
 
       {/* Quick Add Modal */}
       {quickAddOrderId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setQuickAddOrderId(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { if (!quickAddUpdating) { setQuickAddOrderId(null); setQuickAddItems([]); } }}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
               <h2 className="text-lg font-bold text-gray-800">Add Items to Order</h2>
-              <button onClick={() => setQuickAddOrderId(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+              <button onClick={() => { setQuickAddOrderId(null); setQuickAddItems([]); }} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
             </div>
             <div className="flex-1 overflow-y-auto">
               {menuItems.length > 0 ? (
@@ -836,9 +863,25 @@ export default function KDSView({ slug, theme, brandName }: Props) {
                 <div className="flex items-center justify-center py-12"><p className="text-gray-400">Loading menu...</p></div>
               )}
             </div>
-            <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-between">
-              <span className="text-xs text-gray-400">{quickAddUpdating ? 'Adding...' : 'Click + on any item to add to order'}</span>
-              <button onClick={() => setQuickAddOrderId(null)} className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Done</button>
+            {quickAddItems.length > 0 && (
+              <div className="px-5 py-2 border-t border-gray-100 bg-gray-50 max-h-32 overflow-y-auto">
+                <div className="text-xs font-semibold text-gray-600 mb-1">To Add ({quickAddItems.reduce((s, i) => s + i.quantity, 0)})</div>
+                {quickAddItems.map((qa) => (
+                  <div key={qa.id} className="flex items-center justify-between text-xs py-0.5">
+                    <span className="truncate">{qa.quantity}&times; {qa.name}</span>
+                    <button onClick={() => setQuickAddItems((prev) => prev.filter((i) => i.id !== qa.id))} className="text-red-400 hover:text-red-600 ml-2">&times;</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-between gap-3">
+              <span className="text-xs text-gray-400">{quickAddUpdating ? 'Saving...' : quickAddItems.length > 0 ? `${quickAddItems.reduce((s, i) => s + i.quantity, 0)} item(s) to add` : 'Click + on any item to add'}</span>
+              <div className="flex gap-2">
+                <button onClick={() => { setQuickAddOrderId(null); setQuickAddItems([]); }} disabled={quickAddUpdating} className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+                <button onClick={handleQuickAddDone} disabled={quickAddItems.length === 0 || quickAddUpdating} className="px-4 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>
+                  {quickAddUpdating ? 'Saving...' : `Done (${quickAddItems.reduce((s, i) => s + i.quantity, 0)})`}
+                </button>
+              </div>
             </div>
           </div>
         </div>

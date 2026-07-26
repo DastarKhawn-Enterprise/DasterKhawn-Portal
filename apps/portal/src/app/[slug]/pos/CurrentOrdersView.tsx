@@ -158,6 +158,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
   const [updating, setUpdating] = useState<string | null>(null);
   const fetchingRef = useRef(false);
   const creatingOrderRef = useRef(false);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Customer fields (takeaway / delivery / drive_thru)
   const [customerName, setCustomerName] = useState('');
@@ -365,8 +366,11 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     fetchingRef.current = false;
   }, [slug, cfg.statusFilter, cfg.excludeStatus]);
 
-  // Auto-refresh when events come in
-  useEvent('orders', () => { fetchOrdersInitial(); });
+  // Auto-refresh when events come in (debounced to avoid flooding)
+  useEvent('orders', () => {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = setTimeout(() => fetchOrdersInitial(), 1200);
+  });
   const publish = usePublish();
 
   useEffect(() => {
