@@ -296,10 +296,10 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
 
   const handlePayClick = useCallback(() => {
     if (!currentOrderId || cart.length === 0) return;
+    if (!paymentMethod) { setPaymentError('Select a payment method first'); return; }
     setOrderError('');
-    const pm = paymentMethod || 'cash';
+    const pm = paymentMethod;
     const kv = pm === 'cash' ? (keypadValue || String(Math.ceil(grandTotal))) : '';
-    if (!paymentMethod) { setPaymentMethod(pm); if (pm === 'cash') { setKeypadValue(kv); setKeypadDisplay(kv); } }
     if (pm === 'cash' && !kv) { setPaymentError('Enter amount received'); return; }
     const acc = accounts.find((a) => a.payment_method === pm);
     if (!acc) { setPaymentError('Account not found for ' + pm); return; }
@@ -561,7 +561,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
             </div>
             <button onClick={() => setShowCalculator(!showCalculator)} className={'px-2 py-1.5 text-[10px] font-semibold rounded-md border transition-colors ' + (showCalculator ? 'bg-gray-800 text-white border-gray-800' : 'border-gray-200 text-gray-500')}>{showCalculator ? 'Hide Calc' : 'Calc'}</button>
             <button onClick={() => setShowCustomerModal(true)} className="px-2.5 py-1.5 text-[10px] font-semibold border border-gray-200 rounded-md text-gray-600">Customer</button>
-            <button onClick={currentOrderId ? handlePayClick : handlePlaceOrder} disabled={cart.length === 0 || checkingOut || savingPayment} className="px-5 py-1.5 rounded-md text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: cart.length > 0 ? '#C9972B' : '#9CA3AF' }}>{savingPayment ? '...' : checkingOut ? '...' : currentOrderId ? 'Pay' : 'Order'}</button>
+            <button onClick={currentOrderId ? () => setPaymentView('selection') : handlePlaceOrder} disabled={cart.length === 0 || checkingOut || savingPayment} className="px-5 py-1.5 rounded-md text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: cart.length > 0 ? '#C9972B' : '#9CA3AF' }}>{savingPayment ? '...' : checkingOut ? '...' : currentOrderId ? (paymentMethod ? 'Pay ' + currencySymbol + grandTotal.toFixed(2) : 'Select Method') : 'Order'}</button>
           </div>
         </div>
 
