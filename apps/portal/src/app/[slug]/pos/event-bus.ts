@@ -19,6 +19,7 @@ export class EventBus {
   private reconnectAttempts = 0;
   private subscribedTables = new Set<string>();
   private destroyed = false;
+  private connectAttempt = 0;
 
   constructor(slug: string, supabaseUrl: string, supabaseAnonKey: string) {
     this.slug = slug;
@@ -69,6 +70,7 @@ export class EventBus {
     if (this.destroyed) return;
     this.setStatus('connecting');
     this.reconnectAttempts = 0;
+    this.connectAttempt++;
     this.doConnect();
   }
 
@@ -85,6 +87,28 @@ export class EventBus {
     this.channel = client.channel(channelName, {
       config: { broadcast: { self: true } },
     });
+
+    // Add ALL postgres_changes listeners BEFORE subscribe()
+    // This is critical — cannot add postgres_changes callbacks after subscribe()
+    for (const table of this.subscribedTables) {
+      if (!(SUPPORTED_TABLES as readonly string[]).includes(table as any)) continue;
+      this.channel.on(
+        'postgres_changes' as any,
+        { event: '*', schema: 'public', table },
+        (raw: any) => {
+          const payload: EventPayload = {
+            table,
+            event: raw.event_type as 'INSERT' | 'UPDATE' | 'DELETE',
+            new: raw.new ?? null,
+            old: raw.old ?? null,
+            timestamp: Date.now(),
+            slug: this.slug,
+          };
+          this.dispatch(table, payload);
+          this.broadcastToOtherTabs(payload);
+        },
+      );
+    }
 
     this.channel
       .on('system', { event: 'system' }, (msg: any) => {
@@ -104,32 +128,19 @@ export class EventBus {
           this.setStatus('disconnected');
         }
       });
-
-    this.subscribedTables.forEach((table) => {
-      this.addTableSubscription(table);
-    });
   }
 
-  private addTableSubscription(table: string) {
-    if (!this.channel) return;
-    if (!(SUPPORTED_TABLES as readonly string[]).includes(table as any)) return;
-
-    this.channel.on(
-      'postgres_changes' as any,
-      { event: '*', schema: 'public', table },
-      (raw: any) => {
-        const payload: EventPayload = {
-          table,
-          event: raw.event_type as 'INSERT' | 'UPDATE' | 'DELETE',
-          new: raw.new ?? null,
-          old: raw.old ?? null,
-          timestamp: Date.now(),
-          slug: this.slug,
-        };
-        this.dispatch(table, payload);
-        this.broadcastToOtherTabs(payload);
-      },
-    );
+  private handlePgChange(table: string, raw: any) {
+    const payload: EventPayload = {
+      table,
+      event: raw.event_type as 'INSERT' | 'UPDATE' | 'DELETE',
+      new: raw.new ?? null,
+      old: raw.old ?? null,
+      timestamp: Date.now(),
+      slug: this.slug,
+    };
+    this.dispatch(table, payload);
+    this.broadcastToOtherTabs(payload);
   }
 
   private dispatch(table: string, payload: EventPayload) {
@@ -169,7 +180,12 @@ export class EventBus {
 
     if (table !== '*' && !this.subscribedTables.has(table)) {
       this.subscribedTables.add(table);
-      this.addTableSubscription(table);
+      // Reconnect to add the new table listener (all listeners added before subscribe in doConnect)
+      if (this.channel && this.status === 'connected') {
+        this.doConnect();
+      } else if (!this.channel) {
+        this.connect();
+      }
     }
 
     return () => {
@@ -230,11 +246,12 @@ export class EventBus {
 const busInstances = new Map<string, EventBus>();
 
 export function getEventBus(slug: string, supabaseUrl: string, supabaseAnonKey: string): EventBus {
-  let bus = busInstances.get(slug);
-  if (!bus) {
-    bus = new EventBus(slug, supabaseUrl, supabaseAnonKey);
-    busInstances.set(slug, bus);
+  const existing = busInstances.get(slug);
+  if (existing && !existing['destroyed']) {
+    return existing;
   }
+  const bus = new EventBus(slug, supabaseUrl, supabaseAnonKey);
+  busInstances.set(slug, bus);
   return bus;
 }
 
@@ -256,4 +273,5 @@ const SUPPORTED_TABLES = [
   'sales_summary', 'expenses',
   'settings', 'business_settings',
   'kitchen_tickets', 'kitchen_items',
+  'item_ledger', 'accounts', 'account_transactions',
 ] as const;

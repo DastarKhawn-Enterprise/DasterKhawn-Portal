@@ -26,7 +26,7 @@ export default function RootLayout({
 }) {
   return (
     <ClerkProvider afterSignInUrl="/dashboard">
-      <html lang="en">
+      <html lang="en" suppressHydrationWarning>
         <body>
           <PwaRegister />
           {children}

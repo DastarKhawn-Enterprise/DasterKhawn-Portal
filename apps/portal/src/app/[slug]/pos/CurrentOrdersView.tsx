@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import { usePOS } from './pos-context';
 import { useRouter } from 'next/navigation';
 import { useAuth, useUser } from '@clerk/nextjs';
@@ -106,6 +106,33 @@ const ORDER_TYPE_DISPLAY: Record<string, string> = {
   third_party: '3rd Party',
 };
 
+function NumericKeypadInner({ value, onChange, onClear, onOperator, calcNewNumberRef }: { value: string; onChange: (v: string) => void; onClear: () => void; onOperator?: (op: '+' | '-', currentValue: string) => void; calcNewNumberRef?: React.MutableRefObject<{ newNumber: boolean }> }) {
+  const press = (k: string) => {
+    if (k === 'backspace') { onChange(value.slice(0, -1)); return; }
+    if (k === 'clear') { onClear(); return; }
+    if (k === '.' && value.includes('.')) return;
+    if (k === '.' && value === '') { onChange('0.'); return; }
+    if (k === '+') { onOperator?.('+', value); return; }
+    if (k === '-') { onOperator?.('-', value); return; }
+    if (calcNewNumberRef?.current.newNumber) { calcNewNumberRef.current.newNumber = false; onChange(k); }
+    else onChange(value + k);
+  };
+  return (
+    <div className="grid grid-cols-4 gap-1">
+      {[['7','8','9','backspace'],['4','5','6','+'],['1','2','3','-'],['0','00','.','clear']].map((row, ri) => row.map((k) => (
+        <button key={ri+k} onClick={() => press(k)}
+          className={'min-h-[52px] xl:min-h-[56px] rounded-xl text-sm font-bold transition-all active:scale-95 select-none ' + (
+            k === 'backspace' || k === 'clear' ? 'bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-600 border border-red-200' :
+            k === '+' || k === '-' ? 'bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-600 border border-blue-200' :
+            'bg-gray-50 hover:bg-gray-200 active:bg-gray-300 text-gray-800 border border-gray-200'
+          )}
+        >{k === 'backspace' ? '⌫' : k === 'clear' ? 'C' : k === '+' ? '+' : k === '-' ? '−' : k}</button>
+      )))}
+    </div>
+  );
+}
+const NumericKeypad = memo(NumericKeypadInner);
+
 export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }: Props) {
   const router = useRouter();
   const cfg = useMemo(() => ({ title: 'Active Orders', orderType: null, showCustomerFields: false, ...viewConfig }), [viewConfig]);
@@ -148,6 +175,27 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
   // Edit order
   const [editingOrder, setEditingOrder] = useState(false);
   const [editCart, setEditCart] = useState<CartItem[]>([]);
+
+  // Discount
+  const [discount, setDiscount] = useState<{ type: 'percentage' | 'fixed'; value: number } | null>(null);
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('percentage');
+  const [discountValue, setDiscountValue] = useState('');
+
+  // Order notes
+  const [orderNotes, setOrderNotes] = useState('');
+  const [showNotesModal, setShowNotesModal] = useState(false);
+
+  // Promo code
+  const [showPromoModal, setShowPromoModal] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoError, setPromoError] = useState('');
+
+  // Calculator
+  const [showCalculator, setShowCalculator] = useState(false);
+  const [keypadValue, setKeypadValue] = useState('');
+  const [keypadDisplay, setKeypadDisplay] = useState('');
+  const calcRef = useRef({ buffer: 0, op: null as '+' | '-' | null, newNumber: false });
 
   // Settings (tax, currency, footer)
   const [settings, setSettings] = useState<{ taxEnabled: boolean; taxRate: number; currencySymbol: string; footerText: string; serviceChargeEnabled: boolean; serviceChargeRate: number; serviceChargeDineIn: boolean; serviceChargeTakeaway: boolean; serviceChargeDelivery: boolean; serviceChargeDriveThru: boolean; taxServiceCharge: boolean } | null>(null);
@@ -269,6 +317,9 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     return () => { cancelled = true; };
   }, [authReady, slug]);
 
+  const keypadValueRef = useRef(keypadValue);
+  keypadValueRef.current = keypadValue;
+
   // Customer search debounce
   useEffect(() => {
     if (!authReady) return;
@@ -344,28 +395,96 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     setVehiclePlateNumber('');
   }, []);
 
+  const currencySymbolVal = settings?.currencySymbol || 'Rs.';
+  const subtotal = useMemo(() => cart.reduce((s, i) => s + i.price * i.quantity, 0), [cart]);
+  const isDineIn = effectiveOrderType === 'dine_in';
+  const isTakeaway = effectiveOrderType === 'takeaway';
+  const isDelivery = effectiveOrderType === 'delivery';
+  const isDriveThru = effectiveOrderType === 'drive_thru';
+  const serviceChargeRate = settings?.serviceChargeRate || 0;
+  const scApplicable = settings?.serviceChargeEnabled && serviceChargeRate > 0 && (
+    (isDineIn && settings?.serviceChargeDineIn) ||
+    (isTakeaway && settings?.serviceChargeTakeaway) ||
+    (isDelivery && settings?.serviceChargeDelivery) ||
+    (isDriveThru && settings?.serviceChargeDriveThru)
+  );
+  const serviceChargeAmt = useMemo(() => scApplicable ? subtotal * (serviceChargeRate / 100) : 0, [scApplicable, subtotal, serviceChargeRate]);
+  const taxableAmount = useMemo(() => settings?.taxServiceCharge ? subtotal + serviceChargeAmt : subtotal, [settings, subtotal, serviceChargeAmt]);
+  const taxAmt = useMemo(() => (settings?.taxEnabled && settings.taxRate > 0) ? taxableAmount * (settings.taxRate / 100) : 0, [settings, taxableAmount]);
+  const discountAmount = useMemo(() => {
+    if (!discount) return 0;
+    return discount.type === 'percentage' ? (subtotal + serviceChargeAmt + taxAmt) * (discount.value / 100) : discount.value;
+  }, [discount, subtotal, serviceChargeAmt, taxAmt]);
+  const grandTotal = useMemo(() => Math.max(0, subtotal + serviceChargeAmt + taxAmt - discountAmount), [subtotal, serviceChargeAmt, taxAmt, discountAmount]);
+
+  const handleOperator = useCallback((op: '+' | '-', currentValue: string) => {
+    const curr = parseFloat(currentValue) || 0;
+    const c = calcRef.current;
+    let result = curr;
+    if (c.op === '+') result = c.buffer + curr;
+    else if (c.op === '-') result = c.buffer - curr;
+    if (c.op !== null) { const str = String(result); setKeypadValue(str); setKeypadDisplay(str); }
+    c.buffer = result;
+    c.op = op;
+    c.newNumber = true;
+  }, []);
+
+  // Keyboard listener for calculator keypad
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!showCalculator) return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      let k: string | null = null;
+      if (e.key >= '0' && e.key <= '9') k = e.key;
+      else if (e.key === '00') k = '00';
+      else if (e.key === '.' || (e.key === 'Decimal' && e.code === 'NumpadDecimal')) k = '.';
+      else if (e.key === 'Backspace') k = 'backspace';
+      else if (e.key === 'Delete' || e.key === 'Escape') k = 'clear';
+      else if (e.key === '+' || e.code === 'NumpadAdd') k = '+';
+      else if (e.key === '-' || e.code === 'NumpadSubtract') k = '-';
+      else if (e.code === 'Numpad0') k = '0';
+      else if (e.code === 'Numpad1') k = '1';
+      else if (e.code === 'Numpad2') k = '2';
+      else if (e.code === 'Numpad3') k = '3';
+      else if (e.code === 'Numpad4') k = '4';
+      else if (e.code === 'Numpad5') k = '5';
+      else if (e.code === 'Numpad6') k = '6';
+      else if (e.code === 'Numpad7') k = '7';
+      else if (e.code === 'Numpad8') k = '8';
+      else if (e.code === 'Numpad9') k = '9';
+      else if (e.key === 'Enter' || e.code === 'NumpadEnter') {
+        const cur = parseFloat(keypadValueRef.current) || 0;
+        const cc = calcRef.current;
+        if (cc.op === '+') { const r = cc.buffer + cur; const s = String(r); setKeypadValue(s); setKeypadDisplay(s); }
+        else if (cc.op === '-') { const r = cc.buffer - cur; const s = String(r); setKeypadValue(s); setKeypadDisplay(s); }
+        else return;
+        cc.buffer = 0; cc.op = null; cc.newNumber = true;
+        return;
+      }
+      if (k === null) return;
+      e.preventDefault();
+      if (k === 'clear') { calcRef.current = { buffer: 0, op: null, newNumber: false }; setKeypadValue(''); setKeypadDisplay(''); return; }
+      if (k === 'backspace') { setKeypadValue((prev) => prev.slice(0, -1)); setKeypadDisplay((prev) => prev.slice(0, -1)); return; }
+      if (k === '+' && keypadValueRef.current) { handleOperator('+', keypadValueRef.current); return; }
+      if (k === '-' && keypadValueRef.current) { handleOperator('-', keypadValueRef.current); return; }
+      if (k === '.' && keypadValueRef.current.includes('.')) return;
+      if (k === '.' && keypadValueRef.current === '') { setKeypadValue('0.'); setKeypadDisplay('0.'); return; }
+      const c = calcRef.current;
+      if (c.newNumber) { c.newNumber = false; setKeypadValue(k); setKeypadDisplay(k); }
+      else { setKeypadValue((prev) => prev + k); setKeypadDisplay((prev) => prev + k); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [showCalculator, handleOperator]);
+
   const handleCheckout = useCallback(async () => {
     if (cart.length === 0 || creatingOrderRef.current) return;
     creatingOrderRef.current = true;
     setCheckingOut(true);
     try {
-      const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-      const isDinIn = effectiveOrderType === 'dine_in';
-      const isTakeaway = effectiveOrderType === 'takeaway';
-      const isDelivery = effectiveOrderType === 'delivery';
-      const isDriveThru = effectiveOrderType === 'drive_thru';
-      let serviceCharge = 0;
-      if (settings?.serviceChargeEnabled && settings.serviceChargeRate > 0) {
-        if ((isDinIn && settings.serviceChargeDineIn) || (isTakeaway && settings.serviceChargeTakeaway) || (isDelivery && settings.serviceChargeDelivery) || (isDriveThru && settings.serviceChargeDriveThru)) {
-          serviceCharge = subtotal * (settings.serviceChargeRate / 100);
-        }
-      }
-      const taxableAmount = settings?.taxServiceCharge ? subtotal + serviceCharge : subtotal;
-      let taxAmount = 0;
-      if (settings?.taxEnabled && settings.taxRate > 0) {
-        taxAmount = taxableAmount * (settings.taxRate / 100);
-      }
-      const total = subtotal + serviceCharge + taxAmount;
+      const total = grandTotal;
 
       let pickupTime: string | null = null;
       if (!pickupASAP && pickupScheduledTime && effectiveOrderType === 'takeaway') {
@@ -379,7 +498,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
         ? cfg.showCustomerFields
         : effectiveOrderType !== 'dine_in';
 
-      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total, tax_amount: taxAmount, order_type: effectiveOrderType, customer_id: selectedCustomer?.id || null };
+      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total, tax_amount: taxAmt, discount_amount: discountAmount, discount_type: discount?.type || null, discount_value: discount?.value || null, notes: orderNotes || null, order_type: effectiveOrderType, customer_id: selectedCustomer?.id || null };
       if (shouldCaptureCustomer) {
         if (customerName) orderPayload.customer_name = customerName;
         if (customerPhone) orderPayload.customer_phone = customerPhone;
@@ -415,8 +534,8 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
         order_number: order.order_number,
         status: 'pending',
         total,
-        tax_amount: taxAmount,
-        service_charge_amount: serviceCharge,
+        tax_amount: taxAmt,
+        service_charge_amount: serviceChargeAmt,
         created_at: order.created_at,
         order_type: effectiveOrderType,
         customer_id: selectedCustomer?.id || null,
@@ -435,7 +554,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
     creatingOrderRef.current = false;
-  }, [cart, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, slug, resetCustomerFields, cfg.newOrderMode, router, user]);
+  }, [cart, grandTotal, taxAmt, discountAmount, discount, orderNotes, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, slug, resetCustomerFields, cfg.newOrderMode, router, user]);
 
   const handlePaymentSuccess = useCallback(() => {
     setPaymentOrder(null);
@@ -445,6 +564,14 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     setCustomerSearch('');
     setCustomerResults([]);
     resetCustomerFields();
+    setDiscount(null);
+    setOrderNotes('');
+    setKeypadValue('');
+    setKeypadDisplay('');
+    setShowCalculator(false);
+    setPromoCode('');
+    setPromoError('');
+    calcRef.current = { buffer: 0, op: null, newNumber: false };
     if (cfg.newOrderMode) router.push(`/${slug}/pos/orders`);
     fetchOrdersInitial();
   }, [slug, cfg.newOrderMode, router, resetCustomerFields, fetchOrdersInitial]);
@@ -479,6 +606,14 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     setSelectedId(null);
     setSelectedTableId(null);
     resetCustomerFields();
+    setDiscount(null);
+    setOrderNotes('');
+    setKeypadValue('');
+    setKeypadDisplay('');
+    setShowCalculator(false);
+    setPromoCode('');
+    setPromoError('');
+    calcRef.current = { buffer: 0, op: null, newNumber: false };
   }, [resetCustomerFields]);
 
   const handlePrintBill = useCallback((order: Order) => {
@@ -1009,6 +1144,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                 ) : (
                   <div className="relative flex-1 max-w-xs">
                     <input
+                      id="customer-search-input"
                       type="text"
                       value={customerSearch}
                       onChange={(e) => setCustomerSearch(e.target.value)}
@@ -1067,7 +1203,10 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
             <div className="w-[380px] flex-shrink-0 flex flex-col border-l border-gray-200 bg-white">
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
                 <span className="text-sm font-semibold text-gray-700">Cart ({cart.reduce((s, i) => s + i.quantity, 0)})</span>
-                <span className="text-sm font-bold">{settings?.currencySymbol || 'Rs.'}{cart.reduce((s, i) => s + i.price * i.quantity, 0).toFixed(2)}</span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setShowCalculator(!showCalculator)} className="text-[10px] px-2 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 font-medium">{showCalculator ? 'Hide Calc' : 'Calc'}</button>
+                  <span className="text-sm font-bold">{currencySymbolVal}{subtotal.toFixed(2)}</span>
+                </div>
               </div>
               <div className="flex-1 overflow-y-auto scrollbar-hide px-4 py-3 space-y-2">
                 {cart.length === 0 ? (
@@ -1077,7 +1216,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                     <div key={item.id} className="flex items-center gap-2 p-2 rounded border border-gray-200">
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium truncate">{item.name}</div>
-                        <div className="text-xs text-gray-400">{settings?.currencySymbol || 'Rs.'}{item.price.toFixed(2)} each</div>
+                        <div className="text-xs text-gray-400">{currencySymbolVal}{item.price.toFixed(2)} each</div>
                       </div>
                       <div className="flex items-center gap-1">
                         <button onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">−</button>
@@ -1089,6 +1228,29 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                   ))
                 )}
               </div>
+              {showCalculator && (
+                <div className="px-4 pb-2 border-t border-gray-200 pt-2">
+                  {keypadValue && <div className="text-right text-sm font-bold text-gray-800 mb-1">{currencySymbolVal}{(parseFloat(keypadValue) || 0).toFixed(2)}</div>}
+                  <NumericKeypad value={keypadValue} onChange={(v) => { setKeypadValue(v); setKeypadDisplay(v); }} onClear={() => { calcRef.current = { buffer: 0, op: null, newNumber: false }; setKeypadValue(''); setKeypadDisplay(''); }} onOperator={handleOperator} calcNewNumberRef={calcRef} />
+                </div>
+              )}
+              {cart.length > 0 && (
+                <div className="px-4 pb-2 border-t border-gray-200 pt-2 space-y-1 text-xs">
+                  <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>{currencySymbolVal}{subtotal.toFixed(2)}</span></div>
+                  {serviceChargeAmt > 0 && <div className="flex justify-between text-gray-500"><span>Service Charge ({(settings?.serviceChargeRate || 0).toFixed(0)}%)</span><span>{currencySymbolVal}{serviceChargeAmt.toFixed(2)}</span></div>}
+                  {taxAmt > 0 && <div className="flex justify-between text-gray-500"><span>Tax ({(settings?.taxRate || 0).toFixed(0)}%)</span><span>{currencySymbolVal}{taxAmt.toFixed(2)}</span></div>}
+                  {discount && <div className="flex justify-between text-green-600"><span>Discount ({discount.type === 'percentage' ? discount.value + '%' : currencySymbolVal + discount.value})</span><span>-{currencySymbolVal}{discountAmount.toFixed(2)}</span></div>}
+                  <div className="flex justify-between font-extrabold text-gray-900 border-t border-gray-200 pt-1.5 text-sm"><span>Total</span><span>{currencySymbolVal}{grandTotal.toFixed(2)}</span></div>
+                </div>
+              )}
+              {cart.length > 0 && (
+                <div className="px-4 pb-2 flex gap-2">
+                  <button onClick={() => setShowNotesModal(true)} className="flex-1 text-[10px] px-2 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium">{orderNotes ? 'Edit Note' : 'Note'}</button>
+                  <button onClick={() => setShowDiscountModal(true)} className="flex-1 text-[10px] px-2 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium">{discount ? `Disc (${discount.type === 'percentage' ? discount.value + '%' : currencySymbolVal + discount.value})` : 'Discount'}</button>
+                  <button onClick={() => setShowPromoModal(true)} className="flex-1 text-[10px] px-2 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium">Promo</button>
+                  <button onClick={() => document.getElementById('customer-search-input')?.focus()} className="flex-1 text-[10px] px-2 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium">{selectedCustomer ? selectedCustomer.name : 'Customer'}</button>
+                </div>
+              )}
               <div className="px-4 py-3 border-t border-gray-200">
                 <button
                   onClick={handleCheckout}
@@ -1096,7 +1258,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                   className="w-full py-2.5 rounded-lg text-sm font-bold text-white disabled:opacity-50"
                   style={{ backgroundColor: theme.primaryColor }}
                 >
-                  {checkingOut ? 'Processing...' : `Place Order — ${settings?.currencySymbol || 'Rs.'}${cart.reduce((s, i) => s + i.price * i.quantity, 0).toFixed(2)}`}
+                  {checkingOut ? 'Processing...' : `Place Order — ${currencySymbolVal}${grandTotal.toFixed(2)}`}
                 </button>
               </div>
             </div>
@@ -1331,6 +1493,69 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
       </div>
       )}
     </div>
+    {/* Notes Modal */}
+    {showNotesModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowNotesModal(false)}>
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-800">Order Notes</h2>
+            <button onClick={() => setShowNotesModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+          </div>
+          <textarea value={orderNotes} onChange={(e) => setOrderNotes(e.target.value)} placeholder="Kitchen instructions, special requests..." className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg resize-none h-28" autoFocus />
+          <button onClick={() => setShowNotesModal(false)} className="w-full mt-3 py-2.5 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: theme.primaryColor }}>Save</button>
+        </div>
+      </div>
+    )}
+
+    {/* Discount Modal */}
+    {showDiscountModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowDiscountModal(false)}>
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold text-gray-800">Add Discount</h2><button onClick={() => setShowDiscountModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button></div>
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <button onClick={() => setDiscountType('percentage')} className={'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ' + (discountType === 'percentage' ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:bg-gray-50')}>%</button>
+              <button onClick={() => setDiscountType('fixed')} className={'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ' + (discountType === 'fixed' ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:bg-gray-50')}>Fixed</button>
+            </div>
+            <input type="number" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} placeholder={discountType === 'percentage' ? 'Enter percentage...' : 'Enter amount...'} className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg" min="0" step="0.01" autoFocus />
+            <div className="flex gap-2">
+              <button onClick={() => setShowDiscountModal(false)} className="flex-1 py-2.5 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Cancel</button>
+              {discount && <button onClick={() => { setDiscount(null); setShowDiscountModal(false); }} className="flex-1 py-2.5 rounded-lg text-sm font-semibold border border-red-200 text-red-600 hover:bg-red-50">Remove</button>}
+              <button onClick={() => { const v = parseFloat(discountValue); if (v > 0) { setDiscount({ type: discountType, value: v }); } else { setDiscount(null); } setShowDiscountModal(false); }} className="flex-1 py-2.5 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: theme.primaryColor }}>{discount ? 'Update' : 'Apply'}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Promo Code Modal */}
+    {showPromoModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowPromoModal(false)}>
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-800">Promo Code</h2>
+            <button onClick={() => setShowPromoModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+          </div>
+          <div className="space-y-3">
+            <input type="text" value={promoCode} onChange={(e) => { setPromoCode(e.target.value); setPromoError(''); }} placeholder="Enter promo code..." className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg uppercase" autoFocus />
+            {promoError && <p className="text-xs text-red-600">{promoError}</p>}
+            <button onClick={async () => {
+              if (!promoCode.trim()) { setPromoError('Enter a promo code'); return; }
+              const r = await supa(slug, { table: 'settings', select: 'promo_codes', limit: 1 }).catch(() => null);
+              const codes = r?.ok && r.data?.[0]?.promo_codes ? r.data[0].promo_codes : null;
+              if (codes?.[promoCode.trim().toUpperCase()]) {
+                const p = codes[promoCode.trim().toUpperCase()];
+                setDiscount({ type: p.type || 'percentage', value: p.value });
+                setShowPromoModal(false); setPromoCode(''); setPromoError('');
+              } else {
+                setPromoError('Invalid or expired promo code');
+              }
+            }} className="w-full py-2.5 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: theme.primaryColor }}>Apply</button>
+          </div>
+        </div>
+      </div>
+    )}
+
     {paymentOrder && !receiptOrder && (
       <PaymentModal
         slug={slug}
@@ -1388,7 +1613,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
   );
 }
 
-function ActionButton({ label, color, disabled, onClick, updating }: { label: string; color: string; disabled: boolean; onClick: () => void; updating: boolean }) {
+const ActionButton = memo(function ActionButton({ label, color, disabled, onClick, updating }: { label: string; color: string; disabled: boolean; onClick: () => void; updating: boolean }) {
   return (
     <button
       onClick={onClick}
@@ -1398,4 +1623,4 @@ function ActionButton({ label, color, disabled, onClick, updating }: { label: st
       {updating ? '...' : label}
     </button>
   );
-}
+});

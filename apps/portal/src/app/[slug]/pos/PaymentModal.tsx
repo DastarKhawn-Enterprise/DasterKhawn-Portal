@@ -7,6 +7,7 @@ import { supa, supaRpc } from './supa-query';
 import { processPayments, type PaymentInput } from './payment-actions';
 import ReceiptView from './ReceiptView';
 import PaymentMethodLogo from './PaymentMethodLogo';
+import { usePublish } from './use-event';
 
 interface Props {
   slug: string;
@@ -79,6 +80,7 @@ export default function PaymentModal({
   brandName, onClose, onSuccess,
 }: Props) {
   const { user } = useUser();
+  const publish = usePublish();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loadingAccs, setLoadingAccs] = useState(true);
   const [fetchError, setFetchError] = useState('');
@@ -183,14 +185,30 @@ export default function PaymentModal({
   const isFullyCovered = remaining <= 0 && paymentLines.length > 0;
 
   const handleConfirm = useCallback(async () => {
-    if (paymentLines.length === 0 || !isFullyCovered) {
-      setError('Payments do not cover the full amount');
+    if (paymentLines.length === 0) {
+      setError('Select at least one payment method');
       return;
     }
+    const seenMethods = new Set<string>();
     for (const l of paymentLines) {
       if (!l.account_id) { setError('Select an account for all payments'); return; }
+      if (!l.payment_method) { setError('All payments must have a method selected'); return; }
+      if (seenMethods.has(l.payment_method)) { setError(`Duplicate payment method "${METHOD_LABELS[l.payment_method] || l.payment_method}". Use Split Payment for multiple methods.`); return; }
+      seenMethods.add(l.payment_method);
       const amt = parseFloat(l.amount);
-      if (!amt || amt <= 0) { setError('All payment amounts must be positive'); return; }
+      if (!amt || amt <= 0) { setError('All payment amounts must be greater than zero'); return; }
+      if (l.payment_method === 'cash') {
+        const received = parseFloat(l.cash_received) || 0;
+        if (received < amt) { setError(`Cash received (${currencySymbol}${received.toFixed(2)}) is less than amount due (${currencySymbol}${amt.toFixed(2)})`); return; }
+      }
+    }
+    if (!isFullyCovered && due > 0) {
+      setError(`Payments (${currencySymbol}${totalFromLines.toFixed(2)}) do not cover the full amount due (${currencySymbol}${due.toFixed(2)})`);
+      return;
+    }
+    if (remaining > 0) {
+      setError(`Remaining amount ${currencySymbol}${remaining.toFixed(2)} must be covered`);
+      return;
     }
     setSaving(true);
     setError('');
@@ -212,6 +230,8 @@ export default function PaymentModal({
         setSaving(false);
         return;
       }
+      publish('orders', 'UPDATE', { id: orderId, payment_status: 'paid' });
+      publish('payments', 'INSERT', { order_id: orderId });
       setResult(r);
       setShowReceipt(true);
       onSuccess(r);
@@ -219,7 +239,7 @@ export default function PaymentModal({
       setError(e.message || 'Payment failed');
     }
     setSaving(false);
-  }, [paymentLines, isFullyCovered, slug, orderId, customerId, onSuccess]);
+  }, [paymentLines, isFullyCovered, totalFromLines, remaining, due, currencySymbol, slug, orderId, customerId, onSuccess, publish]);
 
   if (showReceipt && result) {
     return (

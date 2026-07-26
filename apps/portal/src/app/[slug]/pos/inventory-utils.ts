@@ -51,7 +51,7 @@ export async function deductInventorySupa(slug: string, cart: CartItem[], orderI
   const ingResult = await supa(slug, {
     table: 'menu_item_ingredients',
     select: 'menu_item_id, inventory_item_id, quantity_used',
-    filter: { menu_item_id: menuItemIds.join(',') },
+    in: ['menu_item_id', menuItemIds],
     limit: 5000,
   });
   if (!ingResult.ok || !ingResult.data) return;

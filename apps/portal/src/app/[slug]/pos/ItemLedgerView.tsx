@@ -67,6 +67,8 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [ledgerError, setLedgerError] = useState('');
+  const [itemsError, setItemsError] = useState('');
 
   const [showPurchaseForm, setShowPurchaseForm] = useState(false);
   const [purchaseItemId, setPurchaseItemId] = useState('');
@@ -84,15 +86,25 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
   const fetchItems = useCallback(async () => {
     if (!isLoaded) return;
     setLoading(true);
+    setItemsError('');
     try {
       const result = await supa(slug, { table: 'inventory_items', select: 'id, name, unit, current_stock', order: 'name' });
-      if (result.ok && result.data) setItems(result.data as InventoryItem[]);
-    } catch (e) { console.error('[Ledger] fetch items', e); }
-    setLoading(false);
+      if (result.ok && result.data) {
+        setItems(result.data as InventoryItem[]);
+      } else if (!result.ok) {
+        setItemsError(result.error || 'Failed to load items');
+      }
+    } catch (e: any) {
+      console.error('[Ledger] fetch items', e);
+      setItemsError(e?.message || 'Failed to load items');
+    } finally {
+      setLoading(false);
+    }
   }, [isLoaded, slug]);
 
   const fetchLedger = useCallback(async (date: string) => {
     setLedgerLoading(true);
+    setLedgerError('');
     try {
       const dayStart = `${date}T00:00:00`;
       const dayEnd = `${date}T23:59:59.999`;
@@ -104,15 +116,23 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
         order: { column: 'created_at', ascending: false },
         limit: 200,
       });
-      if (result.ok && result.data) setLedger(result.data as LedgerEntry[]);
-    } catch (e) { console.error('[Ledger] fetch', e); }
-    setLedgerLoading(false);
+      if (result.ok && result.data) {
+        setLedger(result.data as LedgerEntry[]);
+      } else if (!result.ok) {
+        setLedgerError(result.error || 'Failed to load ledger');
+      }
+    } catch (e: any) {
+      console.error('[Ledger] fetch', e);
+      setLedgerError(e?.message || 'Failed to load ledger');
+    } finally {
+      setLedgerLoading(false);
+    }
   }, [slug]);
 
   const { setPageTitle } = usePOS();
   useEffect(() => { setPageTitle('Item Ledger'); }, [setPageTitle]);
   useEffect(() => { fetchItems(); }, [fetchItems]);
-  useEvent('item_ledger', () => { fetchItems(); });
+  useEvent('item_ledger', () => { fetchItems(); fetchLedger(selectedDate); });
 
   useEffect(() => {
     fetchLedger(selectedDate);
@@ -276,7 +296,12 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
           </div>
         )}
 
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm mb-4">{error}</div>}
+        {(error || ledgerError) && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm mb-4 flex items-center justify-between">
+          <span>{error || ledgerError}</span>
+          <button onClick={() => { fetchLedger(selectedDate); fetchItems(); }} className="ml-2 px-2 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200 font-medium">Retry</button>
+        </div>}
+
+        {itemsError && <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded text-sm mb-4">{itemsError}</div>}
 
         {/* Transaction history — all items */}
         {ledgerLoading ? (
