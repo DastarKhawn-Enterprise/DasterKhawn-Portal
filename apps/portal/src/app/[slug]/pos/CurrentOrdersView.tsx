@@ -18,6 +18,7 @@ import { generateInvoiceNumber } from './invoice-utils';
 import { generateUniqueOrderNumber } from './order-utils';
 import { validateCustomerName } from './customer-validation';
 import { sortOrdersNewestFirst } from './order-sort-utils';
+import { useBusinessDate } from './business-date-context';
 
 interface OrderItem {
   menu_item_id: string;
@@ -164,6 +165,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
   const fetchingRef = useRef(false);
   const creatingOrderRef = useRef(false);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bd = useBusinessDate();
 
   // Customer fields (takeaway / delivery / drive_thru)
   const [customerName, setCustomerName] = useState('');
@@ -357,6 +359,8 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     setFetchLoading(true);
     setFetchError('');
     const opts: any = { table: 'orders', select: SELECT_ORDER_FIELDS, order: [{ column: 'created_at', ascending: false }, { column: 'order_number', ascending: false }], limit: 200 };
+    opts.gte = ['created_at', bd.start];
+    opts.lte = ['created_at', bd.end];
     if (cfg.statusFilter) {
       opts.eq = ['status', cfg.statusFilter];
     } else if (cfg.excludeStatus && cfg.excludeStatus.length > 0) {
@@ -371,7 +375,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     }
     setFetchLoading(false);
     fetchingRef.current = false;
-  }, [slug, cfg.statusFilter, cfg.excludeStatus]);
+  }, [slug, cfg.statusFilter, cfg.excludeStatus, bd.start, bd.end]);
 
   const scheduleRefresh = useCallback(() => {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
@@ -380,6 +384,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
 
   // Realtime — apply changes immediately (new orders at the TOP), then reconcile with a debounced refetch
   useEvent('orders', (payload) => {
+    if (!bd.isToday) return;
     const { event, new: row, old } = payload as any;
     const id = row?.id ?? old?.id;
     if (!id) { scheduleRefresh(); return; }
@@ -642,12 +647,12 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
           menu_items: { name: item.name },
         })),
       };
-      setOrders((prev) => [newOrder, ...prev]);
+      setOrders((prev) => bd.isToday ? [newOrder, ...prev] : prev);
       setPaymentOrder(newOrder);
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
     creatingOrderRef.current = false;
-  }, [cart, grandTotal, taxAmt, discountAmount, discount, orderNotes, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, slug, resetCustomerFields, cfg.newOrderMode, router]);
+  }, [cart, grandTotal, taxAmt, discountAmount, discount, orderNotes, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, slug, resetCustomerFields, cfg.newOrderMode, router, bd.isToday]);
 
   const handlePaymentSuccess = useCallback((_result: any) => {
     const order = paymentOrderRef.current;

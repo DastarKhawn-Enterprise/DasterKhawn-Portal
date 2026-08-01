@@ -10,6 +10,7 @@ import { fetchKDSOrders, updateKDSOrderStatus } from './orders-actions';
 import { supa } from './supa-query';
 import { deductInventorySupa } from './inventory-utils';
 import { updateCustomerLoyaltySupa } from './customer-utils';
+import { useBusinessDate } from './business-date-context';
 import ReceiptView from './ReceiptView';
 import PaymentModal from './PaymentModal';
 import { generateInvoiceNumber } from './invoice-utils';
@@ -599,6 +600,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
   const prevCountRef = useRef(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bd = useBusinessDate();
 
   const fetchOrders = useCallback(async () => {
     setFetchLoading(true);
@@ -608,6 +610,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
       slug,
       activeTab === 'all' ? undefined : activeTab,
       excludeCompleted && activeTab === 'all' ? ['completed', 'cancelled'] : undefined,
+      { start: bd.start, end: bd.end },
     );
     if (result.ok && result.data) {
       const prev = prevCountRef.current;
@@ -627,7 +630,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
     }
     setFetchLoading(false);
     setLastUpdated(Date.now());
-  }, [slug, activeTab, soundEnabled]);
+  }, [slug, activeTab, soundEnabled, bd.start, bd.end]);
 
   const debouncedFetchOrders = useCallback(() => {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
@@ -643,6 +646,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
 
   // Realtime — apply changes immediately (new orders at the TOP), then reconcile with a debounced refetch
   useEvent('orders', (payload) => {
+    if (!bd.isToday) return;
     const { event, new: row, old } = payload as any;
     const id = row?.id ?? old?.id;
     if (id) {

@@ -4,7 +4,7 @@ import { supa } from './supa-query';
 
 const KDS_SELECT = 'id, order_number, status, total, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, payment_status, tax_amount, service_charge_amount, discount_amount, discount_type, discount_value, notes, invoice_number, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
 
-export async function fetchKDSOrders(slug: string, statusFilter?: string, excludeStatus?: string[]) {
+export async function fetchKDSOrders(slug: string, statusFilter?: string, excludeStatus?: string[], dateRange?: { start: string; end: string }) {
   const opts: any = {
     table: 'orders',
     select: KDS_SELECT,
@@ -14,6 +14,10 @@ export async function fetchKDSOrders(slug: string, statusFilter?: string, exclud
     ],
     limit: 200,
   };
+  if (dateRange) {
+    opts.gte = ['created_at', dateRange.start];
+    opts.lte = ['created_at', dateRange.end];
+  }
   if (statusFilter) {
     opts.eq = ['status', statusFilter];
   } else if (excludeStatus && excludeStatus.length > 0) {

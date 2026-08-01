@@ -6,6 +6,7 @@ import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { hasPermission } from './permissions';
 import { useEvent } from './use-event';
+import { useBusinessDate } from './business-date-context';
 import { DonutChart, BarChart, LineChart, Heatmap } from './reports-charts';
 import {
   getOverviewData, getSalesData, getOrdersData, getItemsData,
@@ -30,28 +31,6 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'pnl', label: 'Profit & Loss' },
 ];
 
-function getDateRange(preset: string, customStart?: string, customEnd?: string): DateRange {
-  const now = new Date();
-  let start: Date; let end: Date;
-  switch (preset) {
-    case 'today':
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      end = now; break;
-    case 'week': {
-      const day = now.getDay(); const diff = day === 0 ? 6 : day - 1;
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff);
-      end = now; break;
-    }
-    case 'month':
-      start = new Date(now.getFullYear(), now.getMonth(), 1);
-      end = now; break;
-    default:
-      start = customStart ? new Date(customStart) : new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      end = customEnd ? new Date(customEnd + 'T23:59:59') : now; break;
-  }
-  return { start: start.toISOString(), end: end.toISOString() };
-}
-
 function pctChange(current: number, previous: number): string {
   if (previous === 0) return current > 0 ? '+100%' : '—';
   const change = ((current - previous) / previous) * 100;
@@ -70,12 +49,10 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
   const role = (meta?.role ?? '') as string;
   const canView = hasPermission(perms, role, 'reports:view');
   const [tab, setTab] = useState<TabId>('overview');
-  const [preset, setPreset] = useState('today');
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
   const [filters, setFilters] = useState<ReportFilters>({ includeCancelled: false, includeRefunded: false });
   const [showFilters, setShowFilters] = useState(false);
   const [loading, setLoading] = useState(false);
+  const bd = useBusinessDate();
 
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [sales, setSales] = useState<SalesData | null>(null);
@@ -86,7 +63,7 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
   const [customers, setCustomers] = useState<CustomerData | null>(null);
   const [pnl, setPnl] = useState<PnLData | null>(null);
 
-  const dr = useMemo(() => getDateRange(preset, customStart, customEnd), [preset, customStart, customEnd]);
+  const dr = useMemo<DateRange>(() => ({ start: bd.start, end: bd.end }), [bd.start, bd.end]);
 
   const fetchTab = useCallback(async (t: TabId) => {
     setLoading(true);
@@ -113,7 +90,7 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
   }, [isLoaded, canView, tab, fetchTab]);
 
   // Auto-refresh reports when related data changes
-  useEvent('orders', () => { fetchTab(tab); });
+  useEvent('orders', () => { if (bd.isToday) fetchTab(tab); });
 
   // Export CSV
   const handleExport = useCallback(() => {
@@ -172,20 +149,9 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
         {/* Header */}
         <div className="flex items-center justify-end gap-2 mb-3 print:hidden">
           <div className="flex items-center gap-1.5 flex-wrap">
-            {['today', 'week', 'month', 'custom'].map((p) => (
-              <button key={p} onClick={() => setPreset(p)}
-                className={`px-2.5 py-1.5 rounded text-xs font-semibold transition-colors ${preset === p ? 'text-white' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}`}
-                style={preset === p ? { backgroundColor: theme.primaryColor } : {}}>
-                {p === 'today' ? 'Today' : p === 'week' ? 'This Week' : p === 'month' ? 'This Month' : 'Custom'}
-              </button>
-            ))}
-            {preset === 'custom' && (
-              <div className="flex items-center gap-1">
-                <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="px-2 py-1.5 text-xs border border-gray-300 rounded w-32" />
-                <span className="text-xs text-gray-400">to</span>
-                <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="px-2 py-1.5 text-xs border border-gray-300 rounded w-32" />
-              </div>
-            )}
+            <span className="px-2.5 py-1.5 rounded text-xs font-semibold bg-white border border-gray-300 text-gray-700">
+              📅 {bd.isToday ? 'Today' : bd.display}
+            </span>
             <button onClick={() => setShowFilters(true)} className="px-2.5 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded hover:bg-gray-50">Filters</button>
             <button onClick={handleExport} className="px-2.5 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded hover:bg-gray-50">Export</button>
             <button onClick={handlePrint} className="px-2.5 py-1.5 text-xs font-semibold bg-white border border-gray-300 rounded hover:bg-gray-50">Print</button>

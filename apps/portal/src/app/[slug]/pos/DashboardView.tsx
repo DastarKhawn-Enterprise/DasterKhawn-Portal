@@ -5,6 +5,7 @@ import { useAuth } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { useEvent, usePublish } from './use-event';
 import { supa, supaBatch } from './supa-query';
+import { useBusinessDate } from './business-date-context';
 
 interface Props {
   theme: ThemeConfig;
@@ -41,22 +42,21 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [loaded, setLoaded] = useState(false);
   const fetchingRef = useRef(false);
+  const bd = useBusinessDate();
 
   const fetchAll = useCallback(async () => {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
     try {
-      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date();
-      const start = todayStart.toISOString();
-      const end = todayEnd.toISOString();
+      const start = bd.start;
+      const end = bd.end;
 
       const [completedOrdersRes, activeRes, kitchenRes, tablesRes, recentRes] = await supaBatch(slug, [
         { table: 'orders', select: 'total, order_type', eq: ['status', 'completed'], gte: ['created_at', start], lte: ['created_at', end], limit: 5000 },
         { table: 'orders', select: 'id', notIn: ['status', ['completed', 'cancelled']], head: true },
         { table: 'orders', select: 'status', in: ['status', ['pending', 'in_kitchen', 'ready']] },
         { table: 'tables', select: 'id, status' },
-        { table: 'orders', select: 'id, order_number, customer_name, order_type, total, status, created_at', order: { column: 'created_at', ascending: false }, limit: 10 },
+        { table: 'orders', select: 'id, order_number, customer_name, order_type, total, status, created_at', gte: ['created_at', start], lte: ['created_at', end], order: { column: 'created_at', ascending: false }, limit: 10 },
       ]);
 
       const activeCount = activeRes.ok ? (activeRes.count ?? 0) : 0;
@@ -91,7 +91,7 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
       } catch (e) { console.error('[Dashboard] fetch error:', e); }
     setLoaded(true);
     fetchingRef.current = false;
-  }, [slug]);
+  }, [slug, bd.start, bd.end]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -105,9 +105,9 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
     fetchAll();
   }, [authReady, fetchAll]);
 
-  // Realtime subscriptions — refresh on any orders/tables change
-  useEvent('orders', () => { fetchAll(); });
-  useEvent('tables', () => { fetchAll(); });
+  // Realtime subscriptions — refresh on any orders/tables change (only when viewing today)
+  useEvent('orders', () => { if (bd.isToday) fetchAll(); });
+  useEvent('tables', () => { if (bd.isToday) fetchAll(); });
   const publish = usePublish();
 
   if (!isLoaded || !authReady) {
@@ -115,6 +115,7 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
   }
 
   const maxTypeRevenue = Math.max(...orderTypes.map(t => t.revenue), 1);
+  const periodText = bd.isToday ? 'today' : bd.label.toLowerCase();
 
   return (
     <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
@@ -127,12 +128,12 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
             <div className="bg-white rounded-xl border border-gray-200 p-4">
               <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Orders</p>
               <p className="text-2xl font-medium text-gray-800">{summary.totalOrders}</p>
-              <p className="text-xs text-gray-400 mt-1">completed today</p>
+              <p className="text-xs text-gray-400 mt-1">completed {periodText}</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-200 p-4">
               <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Revenue</p>
               <p className="text-2xl font-medium text-gray-800">{currencySymbol}{summary.totalRevenue.toFixed(2)}</p>
-              <p className="text-xs text-gray-400 mt-1">earned today</p>
+              <p className="text-xs text-gray-400 mt-1">earned {periodText}</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-200 p-4">
               <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Active</p>
@@ -183,9 +184,9 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Sales by Type (Today)</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Sales by Type ({bd.label})</h3>
             {orderTypes.length === 0 ? (
-              <p className="text-sm text-gray-400">No completed orders today.</p>
+              <p className="text-sm text-gray-400">No completed orders {periodText === 'today' ? 'today' : `for ${periodText}`}.</p>
             ) : (
               <div className="space-y-2">
                 {orderTypes.map((row) => (

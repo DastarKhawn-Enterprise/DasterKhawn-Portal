@@ -7,6 +7,7 @@ import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { useEvent, usePublish } from './use-event';
+import { useBusinessDate } from './business-date-context';
 
 interface Props {
   slug: string;
@@ -59,9 +60,8 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
   const isSuperAdmin = role === 'super_admin';
 
   const today = new Date().toISOString().split('T')[0];
-  const [selectedDate, setSelectedDate] = useState(today);
-  const isToday = selectedDate === today;
-  const canEditDate = canEdit && (isToday || isSuperAdmin);
+  const bd = useBusinessDate();
+  const canEditDate = canEdit && (bd.isToday || isSuperAdmin);
 
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
@@ -102,17 +102,15 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
     }
   }, [isLoaded, slug]);
 
-  const fetchLedger = useCallback(async (date: string) => {
+  const fetchLedger = useCallback(async () => {
     setLedgerLoading(true);
     setLedgerError('');
     try {
-      const dayStart = `${date}T00:00:00`;
-      const dayEnd = `${date}T23:59:59.999`;
       const result = await supa(slug, {
         table: 'item_ledger',
         select: 'id,inventory_item_id,movement_type,quantity_change,unit_cost,total_cost,reference_order_id,vendor,notes,created_by,created_at',
-        gte: ['created_at', dayStart],
-        lte: ['created_at', dayEnd],
+        gte: ['created_at', bd.start],
+        lte: ['created_at', bd.end],
         order: { column: 'created_at', ascending: false },
         limit: 200,
       });
@@ -127,16 +125,16 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
     } finally {
       setLedgerLoading(false);
     }
-  }, [slug]);
+  }, [slug, bd.start, bd.end]);
 
   const { setPageTitle } = usePOS();
   useEffect(() => { setPageTitle('Item Ledger'); }, [setPageTitle]);
   useEffect(() => { fetchItems(); }, [fetchItems]);
-  useEvent('item_ledger', () => { fetchItems(); fetchLedger(selectedDate); });
+  useEvent('item_ledger', () => { if (bd.isToday) { fetchItems(); fetchLedger(); } });
 
   useEffect(() => {
-    fetchLedger(selectedDate);
-  }, [fetchLedger, selectedDate]);
+    fetchLedger();
+  }, [fetchLedger]);
 
   // Running balance per item — walk each item's entries backwards from current stock
   const runningBalance = new Map<string, number>();
@@ -225,7 +223,7 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
       setItems((prev) => prev.map((i) =>
         i.id === purchaseItemId ? { ...i, current_stock: Number(i.current_stock) + qty } : i
       ));
-      await fetchLedger(selectedDate);
+      await fetchLedger();
       setShowPurchaseForm(false);
       setPurchaseQty('');
       setPurchaseUnitCost('');
@@ -257,12 +255,9 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
         {/* Date selector */}
         <div className="flex items-center justify-end gap-3 mb-4">
           <div className="flex items-center gap-3">
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-lg"
-            />
+            <span className="px-3 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg">
+              📅 {bd.isToday ? 'Today' : bd.display}
+            </span>
             {!canEditDate && canEdit && (
               <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200">
                 Past date — read only
@@ -274,7 +269,7 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
         {/* Day stats across all items */}
         {ledger.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
-            <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">Day Stats — All Items — {selectedDate}</div>
+            <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">Day Stats — All Items — {bd.dateKey}</div>
             <div className="grid grid-cols-4 gap-3 text-center">
               <div className="bg-green-50 rounded-lg p-2 border border-green-200">
                 <div className="text-lg font-bold text-green-700">+{dayStats.purchase}</div>
@@ -298,7 +293,7 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
 
         {(error || ledgerError) && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm mb-4 flex items-center justify-between">
           <span>{error || ledgerError}</span>
-          <button onClick={() => { fetchLedger(selectedDate); fetchItems(); }} className="ml-2 px-2 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200 font-medium">Retry</button>
+          <button onClick={() => { fetchLedger(); fetchItems(); }} className="ml-2 px-2 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200 font-medium">Retry</button>
         </div>}
 
         {itemsError && <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded text-sm mb-4">{itemsError}</div>}
@@ -310,11 +305,11 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
           </div>
         ) : ledger.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 p-8 text-center mb-4">
-            <p className="text-gray-400 text-sm">No transactions on {selectedDate}.</p>
+            <p className="text-gray-400 text-sm">No transactions on {bd.dateKey}.</p>
           </div>
         ) : (
           <>
-            <h2 className="text-sm font-semibold text-gray-700 mb-2">Transaction History — {selectedDate}</h2>
+            <h2 className="text-sm font-semibold text-gray-700 mb-2">Transaction History — {bd.dateKey}</h2>
             {/* Desktop table */}
             <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-hidden mb-4">
               <table className="w-full text-sm">

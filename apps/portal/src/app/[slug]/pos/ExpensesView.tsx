@@ -8,6 +8,7 @@ import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { processExpense } from './payment-actions';
 import { useEvent, usePublish } from './use-event';
+import { useBusinessDate } from './business-date-context';
 
 interface Props {
   slug: string;
@@ -38,8 +39,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   repairs: 'Repairs', purchases: 'Purchases', other: 'Other',
 };
 
-type DatePreset = 'this-month' | 'this-week' | 'custom';
-
 export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
   const publish = usePublish();
   const { user, isLoaded } = useUser();
@@ -47,12 +46,10 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
   const perms = (meta?.permissions ?? []) as string[];
   const role = (meta?.role ?? '') as string;
   const canEdit = hasPermission(perms, role, 'settings:edit');
+  const bd = useBusinessDate();
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
-  const [datePreset, setDatePreset] = useState<DatePreset>('this-month');
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
 
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -70,41 +67,19 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const getDateRange = useCallback(() => {
-    const now = new Date();
-    let start: Date;
-    const end = now;
-    switch (datePreset) {
-      case 'this-week':
-        const day = now.getDay();
-        const diff = day === 0 ? 6 : day - 1;
-        start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff);
-        break;
-      case 'custom':
-        start = customStart ? new Date(customStart) : new Date(now.getFullYear(), now.getMonth(), 1);
-        if (customEnd) end.setTime(new Date(customEnd + 'T23:59:59').getTime());
-        break;
-      default:
-        start = new Date(now.getFullYear(), now.getMonth(), 1);
-        break;
-    }
-    return { start: start.toISOString(), end: end.toISOString() };
-  }, [datePreset, customStart, customEnd]);
-
   const fetchExpenses = useCallback(async () => {
     if (!isLoaded) return;
     setLoading(true);
     try {
-      const { start, end } = getDateRange();
       const opts: any = { table: 'expenses', select: '*', order: { column: 'expense_date', ascending: false } };
-      opts.gte = ['expense_date', start.split('T')[0]];
-      opts.lte = ['expense_date', end.split('T')[0]];
+      opts.gte = ['expense_date', bd.startDate];
+      opts.lte = ['expense_date', bd.endDate];
       if (categoryFilter) opts.eq = ['category', categoryFilter];
       const result = await supa(slug, opts);
       if (result.ok && result.data) setExpenses(result.data as Expense[]);
     } catch (e) { console.error('[Expenses] fetch', e); }
     setLoading(false);
-  }, [isLoaded, slug, getDateRange, categoryFilter]);
+  }, [isLoaded, slug, bd.startDate, bd.endDate, categoryFilter]);
 
   useEffect(() => {
     fetchExpenses();
@@ -118,7 +93,7 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
     });
   }, [fetchExpenses, slug]);
 
-  useEvent('expenses', () => { fetchExpenses(); });
+  useEvent('expenses', () => { if (bd.isToday) fetchExpenses(); });
 
   const { setPageTitle } = usePOS();
   useEffect(() => { setPageTitle('Expenses'); }, [setPageTitle]);
@@ -203,22 +178,9 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
 
         <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex gap-1.5">
-              {(['this-month', 'this-week', 'custom'] as DatePreset[]).map((p) => (
-                <button key={p} onClick={() => setDatePreset(p)}
-                  className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${datePreset === p ? 'text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                  style={datePreset === p ? { backgroundColor: theme.primaryColor } : {}}>
-                  {p === 'this-month' ? 'This Month' : p === 'this-week' ? 'This Week' : 'Custom'}
-                </button>
-              ))}
-            </div>
-            {datePreset === 'custom' && (
-              <div className="flex items-center gap-2">
-                <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="px-2 py-1.5 text-xs border border-gray-300 rounded" />
-                <span className="text-xs text-gray-400">to</span>
-                <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="px-2 py-1.5 text-xs border border-gray-300 rounded" />
-              </div>
-            )}
+            <span className="px-3 py-1.5 rounded text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200">
+              📅 {bd.isToday ? 'Today' : bd.display}
+            </span>
             <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="px-3 py-1.5 text-xs border border-gray-300 rounded">
               <option value="">All Categories</option>
               {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}

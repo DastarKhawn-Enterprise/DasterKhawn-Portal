@@ -8,6 +8,7 @@ import { supa } from './supa-query';
 import { normalizePhone, checkDuplicatePhone } from './customer-utils';
 import { usePOS } from './pos-context';
 import { useEvent, usePublish } from './use-event';
+import { useBusinessDate, previousRange } from './business-date-context';
 
 interface Props {
   slug: string;
@@ -45,18 +46,6 @@ function formatDate(d: string | null) {
   if (!d) return '-';
   const dt = new Date(d);
   return `${dt.getDate()} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
-}
-function getMonthRange(tz?: string) {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-  return { start: start.toISOString(), end: end.toISOString() };
-}
-function getPrevMonthRange() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-  return { start: start.toISOString(), end: end.toISOString() };
 }
 
 export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true, currencySymbol }: Props) {
@@ -114,8 +103,10 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
 
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
-  const { start: monthStart, end: monthEnd } = useMemo(getMonthRange, []);
-  const { start: prevStart, end: prevEnd } = useMemo(getPrevMonthRange, []);
+  const bd = useBusinessDate();
+  const monthStart = bd.start;
+  const monthEnd = bd.end;
+  const { start: prevStart, end: prevEnd } = previousRange(bd.start, bd.end);
 
   useEffect(() => {
     if (isLoaded) setAuthReady(true);
@@ -156,7 +147,6 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
       avgPrev: countPrev > 0 ? salesPrev / countPrev : 0,
     });
   }, [slug, monthStart, monthEnd, prevStart, prevEnd]);
-
   const fetchTopCustomers = useCallback(async () => {
     const orderRes = await supa(slug, {
       table: 'orders', select: 'customer_id, total',
@@ -220,7 +210,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
     if (!authReady || !canView) return;
     fetchCustomers();
   }, [fetchCustomers, authReady, canView]);
-  useEvent('customers', () => { fetchCustomers(); });
+  useEvent('customers', () => { if (bd.isToday) fetchCustomers(); });
 
   const { setPageTitle } = usePOS();
   useEffect(() => { setPageTitle('Customers'); }, [setPageTitle]);
@@ -404,7 +394,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
 
   const filterOptions: { key: FilterKey; label: string }[] = [
     { key: 'active', label: 'Active' }, { key: 'inactive', label: 'Inactive' },
-    { key: 'new_month', label: 'New This Month' }, { key: 'has_orders', label: 'Has Orders' },
+    { key: 'new_month', label: 'New Customers' }, { key: 'has_orders', label: 'Has Orders' },
     { key: 'no_orders', label: 'No Orders' }, { key: 'high_value', label: 'High Value' },
   ];
 
@@ -426,7 +416,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
           {/* Summary Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
             <SummaryCard label="Total Customers" value={summaryData?.total ?? 0} icon="users" theme={theme} currencySymbol={currencySymbol} format="number" />
-            <SummaryCard label="New This Month" value={summaryData?.newMonth ?? 0} icon="user-plus" theme={theme} currencySymbol={currencySymbol} format="number"
+            <SummaryCard label="New Customers" value={summaryData?.newMonth ?? 0} icon="user-plus" theme={theme} currencySymbol={currencySymbol} format="number"
               previous={summaryData?.newPrev} />
             <SummaryCard label="Customer Sales" value={summaryData?.salesMonth ?? 0} icon="cash" theme={theme} currencySymbol={currencySymbol} format="currency"
               previous={summaryData?.salesPrev} />
@@ -587,7 +577,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
                   <SummaryStat label="Total Customers" value={String(summaryData?.total ?? 0)} />
                   <SummaryStat label="Active" value={String(customers.filter(c => c.status !== 'inactive').length + ' / ' + (summaryData?.total ?? 0))} />
                   <SummaryStat label="Inactive" value={String(customers.filter(c => c.status === 'inactive').length)} />
-                  <SummaryStat label="New This Month" value={String(summaryData?.newMonth ?? 0)} />
+                  <SummaryStat label="New Customers" value={String(summaryData?.newMonth ?? 0)} />
                 </div>
                 <button className="mt-3 w-full text-xs font-medium text-center py-2 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
                   View Customer Report →

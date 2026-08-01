@@ -9,6 +9,7 @@ import { supa } from './supa-query';
 import { processTransfer, processExpense, processAdjustment } from './payment-actions';
 import PaymentMethodLogo from './PaymentMethodLogo';
 import { useEvent, usePublish } from './use-event';
+import { useBusinessDate } from './business-date-context';
 
 interface Props {
   slug: string;
@@ -152,7 +153,7 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
   const [selectedAccId, setSelectedAccId] = useState<string | null>(null);
   const [showTransfer, setShowTransfer] = useState(false);
   const [showIncome, setShowIncome] = useState(false);
-  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
+  const bd = useBusinessDate();
 
   const [tfFrom, setTfFrom] = useState('');
   const [tfTo, setTfTo] = useState('');
@@ -199,23 +200,27 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
         table: 'account_transactions',
         select: 'id,account_id,transaction_type,direction,amount,balance_before,balance_after,reference_number,description,created_by,created_at',
         eq: ['account_id', accountId],
+        gte: ['created_at', bd.start],
+        lte: ['created_at', bd.end],
         order: { column: 'created_at', ascending: false },
         limit: 100,
       });
       if (r.ok && r.data) setTxns(r.data as Transaction[]);
     } catch (e) { console.error('[Txn] fetch', e); }
     setTxnLoading(false);
-  }, [slug]);
+  }, [slug, bd.start, bd.end]);
 
   const fetchRecentTxns = useCallback(async () => {
     try {
       const r = await supa(slug, {
         table: 'account_transactions', select: 'id, account_id, transaction_type, direction, amount, description, reference_number, created_at',
+        gte: ['created_at', bd.start],
+        lte: ['created_at', bd.end],
         order: { column: 'created_at', ascending: false }, limit: 6,
       });
       if (r.ok && r.data) setRecentTxns(r.data as Transaction[]);
     } catch (e) { /* silent */ }
-  }, [slug]);
+  }, [slug, bd.start, bd.end]);
 
   const { setPageTitle } = usePOS();
   useEffect(() => { setPageTitle('Accounts'); }, [setPageTitle]);
@@ -350,8 +355,9 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
         {/* ── HEADER ── */}
         <div className="mb-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
-            <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}
-              className="self-start sm:self-auto px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white w-full sm:w-auto max-w-[180px]" />
+            <span className="self-start sm:self-auto px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg">
+              📅 {bd.isToday ? 'Today' : bd.display}
+            </span>
           </div>
           <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
             {canManage && (
