@@ -34,17 +34,17 @@ export default function MenuGrid({ menuItems, onAddToCart, theme, currencySymbol
     <button
       key={item.id}
       onClick={() => onAddToCart(item)}
-      className="w-full flex items-center gap-3 px-4 py-3 md:py-2.5 rounded-[var(--radius-btn)] transition-all text-left hover:bg-[var(--surface-3)] active:scale-[0.98] active:bg-[var(--surface-3)]"
+      className="w-full flex items-center gap-3 px-4 py-3 md:py-2.5 rounded-lg transition-all text-left hover:bg-gray-50 active:scale-[0.98] active:bg-gray-100"
     >
-      <div className="flex-1 min-w-0">
-        <div className="font-medium text-sm text-[var(--text)] break-words">{item.name}</div>
-        {item.description && <div className="text-xs text-[var(--text-faint)] truncate">{item.description}</div>}
+      <div className="flex-1">
+        <div className="font-medium text-sm text-gray-900 break-words">{item.name}</div>
+        {item.description && <div className="text-xs text-gray-400 truncate">{item.description}</div>}
       </div>
       <div className="flex items-center gap-2">
         <span className="text-sm font-semibold whitespace-nowrap tabular-nums" style={{ color: theme.primaryColor }}>
           {cs}{item.price.toFixed(2)}
         </span>
-        <span className="text-xs flex items-center justify-center w-6 h-6 rounded-full text-white font-bold transition-transform duration-150 active:scale-90" style={{ backgroundColor: theme.primaryColor }}>
+        <span className="text-xs flex items-center justify-center w-6 h-6 rounded-full text-white font-bold" style={{ backgroundColor: theme.primaryColor }}>
           +
         </span>
       </div>
@@ -56,7 +56,7 @@ export default function MenuGrid({ menuItems, onAddToCart, theme, currencySymbol
       {/* Search input */}
       <div className="relative mb-4">
         <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-          <svg className="w-4 h-4 text-[var(--text-faint)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
         </div>
         <input
           ref={inputRef}
@@ -66,10 +66,9 @@ export default function MenuGrid({ menuItems, onAddToCart, theme, currencySymbol
           onFocus={() => setFocused(true)}
           onBlur={() => setTimeout(() => setFocused(false), 200)}
           placeholder="Search menu items..."
-          className="input pl-10"
-        />
+          className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-lg bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent" />
         {searchQuery && (
-          <button onClick={() => { onSearchChange?.(''); inputRef.current?.focus(); }} className="absolute inset-y-0 right-3 flex items-center text-[var(--text-muted)] hover:text-[var(--text)]">✕</button>
+          <button onClick={() => { onSearchChange?.(''); inputRef.current?.focus(); }} className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600">✕</button>
         )}
       </div>
 
@@ -84,7 +83,7 @@ export default function MenuGrid({ menuItems, onAddToCart, theme, currencySymbol
       {/* No results */}
       {isFiltering && filteredCategories.length === 0 && (
         <div className="flex items-center justify-center pt-12">
-          <p className="text-sm text-[var(--text-muted)]">No menu items matching &ldquo;{searchQuery}&rdquo;</p>
+          <p className="text-sm text-gray-400">No menu items matching &ldquo;{searchQuery}&rdquo;</p>
         </div>
       )}
 

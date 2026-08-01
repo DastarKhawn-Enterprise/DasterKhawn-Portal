@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePOS } from './pos-context';
 import { useAuth } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
-import { StatCard } from '@sat-sys/pos-ui';
 import { useEvent, usePublish } from './use-event';
 import { supa, supaBatch } from './supa-query';
 
@@ -23,8 +22,12 @@ const ORDER_TYPE_LABELS: Record<string, string> = {
   dine_in: 'Dine In', takeaway: 'Take Away', delivery: 'Delivery', drive_thru: 'Drive Thru',
 };
 
-const ORDER_TYPE_ICONS: Record<string, string> = {
-  dine_in: '🍽', takeaway: '🛍', delivery: '🚚', drive_thru: '🚗',
+const STATUS_COLORS: Record<string, string> = {
+  pending: 'bg-blue-50 text-blue-700 border border-blue-200',
+  in_kitchen: 'bg-amber-50 text-amber-700 border border-amber-200',
+  ready: 'bg-green-50 text-green-700 border border-green-200',
+  completed: 'bg-gray-50 text-gray-500 border border-gray-200',
+  cancelled: 'bg-red-50 text-red-700 border border-red-200',
 };
 
 export default function DashboardView({ theme, slug, currencySymbol }: Props) {
@@ -85,7 +88,7 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
       }
 
       if (recentRes.ok && recentRes.data) setRecentOrders(recentRes.data as RecentOrder[]);
-    } catch (e) { console.error('[Dashboard] fetch error:', e); }
+      } catch (e) { console.error('[Dashboard] fetch error:', e); }
     setLoaded(true);
     fetchingRef.current = false;
   }, [slug]);
@@ -102,126 +105,75 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
     fetchAll();
   }, [authReady, fetchAll]);
 
+  // Realtime subscriptions — refresh on any orders/tables change
   useEvent('orders', () => { fetchAll(); });
   useEvent('tables', () => { fetchAll(); });
   const publish = usePublish();
 
   if (!isLoaded || !authReady) {
-    return (
-      <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: 'var(--background)' }}>
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--primary)', borderTopColor: 'transparent' }} />
-          <p className="text-sm text-[var(--text-muted)]">Loading...</p>
-        </div>
-      </div>
-    );
+    return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
   }
 
   const maxTypeRevenue = Math.max(...orderTypes.map(t => t.revenue), 1);
 
   return (
-    <div className="flex-1 overflow-y-auto scrollbar-hide p-4 md:p-6" style={{ backgroundColor: 'var(--background)' }}>
-      <div className="max-w-6xl mx-auto space-y-5 anim-fade-up">
-        {/* Header */}
-        <div className="flex items-center justify-end">
-          <button onClick={fetchAll} disabled={fetchingRef.current} className="btn btn-outline btn-sm text-xs">
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Refresh
-          </button>
+    <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex items-center justify-end mb-5">
+          <button onClick={fetchAll} disabled={fetchingRef.current} className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50">Refresh</button>
         </div>
 
-        {/* KPI Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-          <StatCard
-            label="Orders"
-            value={summary.totalOrders}
-            hint="completed today"
-            icon={
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="Revenue"
-            value={`${currencySymbol}${summary.totalRevenue.toFixed(2)}`}
-            hint="earned today"
-            icon={
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="Active"
-            value={summary.activeOrders}
-            hint="orders in progress"
-            icon={
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="Avg Order"
-            value={`${currencySymbol}${summary.avgOrderValue.toFixed(2)}`}
-            hint="per completed order"
-            icon={
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            }
-          />
-        </div>
-
-        {/* Middle Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-          {/* Tables */}
-          <div className="card p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--primary-soft)' }}>
-                <svg className="w-4 h-4" style={{ color: 'var(--primary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-              </div>
-              <h3 className="text-sm font-semibold text-[var(--text)]">Open Tables</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Orders</p>
+              <p className="text-2xl font-medium text-gray-800">{summary.totalOrders}</p>
+              <p className="text-xs text-gray-400 mt-1">completed today</p>
             </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Revenue</p>
+              <p className="text-2xl font-medium text-gray-800">{currencySymbol}{summary.totalRevenue.toFixed(2)}</p>
+              <p className="text-xs text-gray-400 mt-1">earned today</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Active</p>
+              <p className="text-2xl font-medium text-gray-800">{summary.activeOrders}</p>
+              <p className="text-xs text-gray-400 mt-1">orders in progress</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Avg Order</p>
+              <p className="text-2xl font-medium text-gray-800">{currencySymbol}{summary.avgOrderValue.toFixed(2)}</p>
+              <p className="text-xs text-gray-400 mt-1">per completed order</p>
+            </div>
+          </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Open Tables</h3>
             {tables.total === 0 ? (
-              <p className="text-sm text-[var(--text-muted)]">No tables configured.</p>
+              <p className="text-sm text-gray-400">No tables configured.</p>
             ) : (
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold" style={{ color: tables.occupied === tables.total ? 'var(--danger)' : 'var(--success)' }}>
+                <span className="text-3xl font-bold" style={{ color: tables.occupied === tables.total ? theme.primaryColor : '#059669' }}>
                   {tables.occupied}
                 </span>
-                <span className="text-lg text-[var(--text-muted)]">/ {tables.total}</span>
-                <span className="text-sm text-[var(--text-faint)] ml-2">tables occupied</span>
+                <span className="text-lg text-gray-500">/ {tables.total}</span>
+                <span className="text-sm text-gray-400 ml-2">tables occupied</span>
               </div>
             )}
           </div>
 
-          {/* Kitchen */}
-          <div className="card p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[var(--warning-soft)]">
-                <svg className="w-4 h-4 text-[var(--warning)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8V4l8 4-8 4V4l-8 4 8 4v4l-8-4 8 4v4" />
-                </svg>
-              </div>
-              <h3 className="text-sm font-semibold text-[var(--text)]">Kitchen Status</h3>
-            </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Kitchen Status</h3>
             {kitchen.pending + kitchen.in_kitchen + kitchen.ready === 0 ? (
-              <p className="text-sm text-[var(--text-muted)]">No active orders in kitchen.</p>
+              <p className="text-sm text-gray-400">No active orders in kitchen.</p>
             ) : (
-              <div className="space-y-2.5">
-                {([['pending', 'Pending', 'bg-[var(--info)]'], ['in_kitchen', 'In Kitchen', 'bg-[var(--warning)]'], ['ready', 'Ready', 'bg-[var(--success)]']] as const).map(([key, label, dotClass]) => (
+              <div className="space-y-2">
+                {([['pending', 'Pending', 'bg-blue-100'],
+                  ['in_kitchen', 'In Kitchen', 'bg-amber-100'],
+                  ['ready', 'Ready', 'bg-green-100']] as const).map(([key, label, bg]) => (
                   <div key={key} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <span className={`w-2.5 h-2.5 rounded-full ${dotClass}`} />
-                      <span className="text-sm text-[var(--text-soft)]">{label}</span>
-                    </div>
-                    <span className="text-lg font-bold text-[var(--text)] tabular-nums">{kitchen[key]}</span>
+                    <div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${bg} border`} /><span className="text-sm text-gray-600">{label}</span></div>
+                    <span className="text-lg font-bold text-gray-800">{kitchen[key]}</span>
                   </div>
                 ))}
               </div>
@@ -229,40 +181,21 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
           </div>
         </div>
 
-        {/* Bottom Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-          {/* Sales by Type */}
-          <div className="card p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--primary-soft)' }}>
-                <svg className="w-4 h-4" style={{ color: 'var(--primary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-              <h3 className="text-sm font-semibold text-[var(--text)]">Sales by Type (Today)</h3>
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Sales by Type (Today)</h3>
             {orderTypes.length === 0 ? (
-              <p className="text-sm text-[var(--text-muted)]">No completed orders today.</p>
+              <p className="text-sm text-gray-400">No completed orders today.</p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {orderTypes.map((row) => (
                   <div key={row.order_type}>
-                    <div className="flex justify-between text-sm mb-1.5">
-                      <span className="flex items-center gap-2 text-[var(--text-soft)]">
-                        <span className="text-sm">{ORDER_TYPE_ICONS[row.order_type] || '📋'}</span>
-                        {ORDER_TYPE_LABELS[row.order_type] || row.order_type}
-                      </span>
-                      <span className="text-[var(--text)] font-semibold tabular-nums">{currencySymbol}{row.revenue.toFixed(2)}</span>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-gray-600">{ORDER_TYPE_LABELS[row.order_type] || row.order_type}</span>
+                      <span className="text-gray-800 font-medium">{currencySymbol}{row.revenue.toFixed(2)}</span>
                     </div>
-                    <div className="w-full h-2 rounded-full overflow-hidden bg-[var(--surface-3)]">
-                      <div
-                        className="h-full rounded-full transition-all duration-500 ease-out"
-                        style={{
-                          width: `${(row.revenue / maxTypeRevenue) * 100}%`,
-                          backgroundColor: 'var(--primary)',
-                          opacity: 0.5 + (row.revenue / maxTypeRevenue) * 0.5,
-                        }}
-                      />
+                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${(row.revenue / maxTypeRevenue) * 100}%`, backgroundColor: theme.primaryColor }} />
                     </div>
                   </div>
                 ))}
@@ -270,30 +203,22 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
             )}
           </div>
 
-          {/* Recent Activity */}
-          <div className="card p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[var(--success-soft)]">
-                <svg className="w-4 h-4 text-[var(--success)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <h3 className="text-sm font-semibold text-[var(--text)]">Recent Activity</h3>
-            </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Recent Activity</h3>
             {recentOrders.length === 0 ? (
-              <p className="text-sm text-[var(--text-muted)]">No recent orders.</p>
+              <p className="text-sm text-gray-400">No recent orders.</p>
             ) : (
               <div className="space-y-1">
                 {recentOrders.map((order) => (
-                  <div key={order.id} className="flex items-center justify-between py-2 border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-xs text-[var(--text-faint)] font-mono tabular-nums">#{order.order_number}</span>
-                      {order.customer_name && <span className="text-xs text-[var(--text-soft)] font-medium truncate">{order.customer_name}</span>}
-                      <span className="text-xs text-[var(--text-muted)]">{ORDER_TYPE_LABELS[order.order_type] || order.order_type}</span>
+                  <div key={order.id} className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xs text-gray-400 font-mono">#{order.order_number}</span>
+                      {order.customer_name && <span className="text-xs text-gray-700 font-medium truncate">{order.customer_name}</span>}
+                      <span className="text-xs text-gray-500">{ORDER_TYPE_LABELS[order.order_type] || order.order_type}</span>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="badge text-[10px] py-0.5 px-1.5">{order.status}</span>
-                      <span className="text-xs font-semibold text-[var(--text)] tabular-nums w-16 text-right">{currencySymbol}{Number(order.total).toFixed(2)}</span>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold border ${STATUS_COLORS[order.status] || ''}`}>{order.status}</span>
+                      <span className="text-xs font-medium text-gray-700 w-14 text-right">{currencySymbol}{Number(order.total).toFixed(2)}</span>
                     </div>
                   </div>
                 ))}

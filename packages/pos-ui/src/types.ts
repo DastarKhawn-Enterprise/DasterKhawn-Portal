@@ -14,4 +14,9 @@ export interface CartItem {
   quantity: number;
 }
 
-export type { ThemeConfig } from './theme';
+export interface ThemeConfig {
+  primaryColor: string;
+  secondaryColor: string;
+  logoUrl: string;
+  fontFamily: string;
+}

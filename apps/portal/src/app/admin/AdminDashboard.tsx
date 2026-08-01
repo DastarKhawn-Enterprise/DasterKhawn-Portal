@@ -383,16 +383,6 @@ function ThemeModal({
     secondaryColor: tenant.theme_config?.secondaryColor || '#1a1a1a',
     logoUrl: tenant.theme_config?.logoUrl || '',
     fontFamily: tenant.theme_config?.fontFamily || 'Inter',
-    accentColor: tenant.theme_config?.accentColor || '',
-    backgroundColor: tenant.theme_config?.backgroundColor || '',
-    sidebarColor: tenant.theme_config?.sidebarColor || '',
-    surfaceColor: tenant.theme_config?.surfaceColor || '',
-    headerColor: tenant.theme_config?.headerColor || '',
-    cardColor: tenant.theme_config?.cardColor || '',
-    borderColor: tenant.theme_config?.borderColor || '',
-    textColor: tenant.theme_config?.textColor || '',
-    mutedTextColor: tenant.theme_config?.mutedTextColor || '',
-    radius: tenant.theme_config?.radius || 18,
   });
   const [saving, setSaving] = useState(false);
 
@@ -416,42 +406,19 @@ function ThemeModal({
           <ColorField label="Secondary Color" value={theme.secondaryColor} onChange={(v) => update('secondaryColor', v)} />
           <TextField label="Logo URL" value={theme.logoUrl} onChange={(v) => update('logoUrl', v)} placeholder="https://..." />
           <TextField label="Font Family" value={theme.fontFamily} onChange={(v) => update('fontFamily', v)} placeholder="Inter" />
-
-          <div className="border-t border-gray-200 pt-4 mt-4">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Advanced Theme Tokens</p>
-            <div className="grid grid-cols-2 gap-3">
-              <ColorField label="Accent" value={theme.accentColor || ''} onChange={(v) => update('accentColor', v)} placeholder="defaults to primary" />
-              <ColorField label="Background" value={theme.backgroundColor || ''} onChange={(v) => update('backgroundColor', v)} placeholder="#f6f7f9" />
-              <ColorField label="Surface" value={theme.surfaceColor || ''} onChange={(v) => update('surfaceColor', v)} placeholder="#ffffff" />
-              <ColorField label="Card" value={theme.cardColor || ''} onChange={(v) => update('cardColor', v)} placeholder="#ffffff" />
-              <ColorField label="Header" value={theme.headerColor || ''} onChange={(v) => update('headerColor', v)} placeholder="#ffffff" />
-              <ColorField label="Border" value={theme.borderColor || ''} onChange={(v) => update('borderColor', v)} placeholder="#e6e8ec" />
-              <ColorField label="Text" value={theme.textColor || ''} onChange={(v) => update('textColor', v)} placeholder="#111827" />
-              <ColorField label="Muted Text" value={theme.mutedTextColor || ''} onChange={(v) => update('mutedTextColor', v)} placeholder="#6b7280" />
-            </div>
-            <div className="mt-3">
-              <TextField label={`Card Radius: ${theme.radius || 18}px`} value={String(theme.radius || 18)} onChange={(v) => update('radius', v as any)} placeholder="18" />
-            </div>
-          </div>
         </div>
 
         {/* Live preview */}
-        <div className="mt-6 border rounded-lg overflow-hidden" style={{ borderColor: theme.borderColor || undefined }}>
-          <div className="px-4 py-2 text-sm font-bold text-white" style={{ backgroundColor: theme.primaryColor }}>
-            Primary Color — Preview
+        <div className="mt-6 border rounded-lg overflow-hidden">
+          <div className="px-4 py-2 text-white text-sm font-bold" style={{ backgroundColor: theme.primaryColor }}>
+            Preview Header
           </div>
-          <div className="px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: theme.secondaryColor || theme.primaryColor }}>
-            Secondary Color — Preview
+          <div className="px-4 py-3 text-white text-sm" style={{ backgroundColor: theme.secondaryColor }}>
+            Preview Footer
           </div>
-          <div className="px-4 py-3 text-sm" style={{ backgroundColor: theme.backgroundColor || '#f6f7f9' }}>
-            <div className="p-3 rounded-lg mb-2 text-white" style={{ backgroundColor: theme.accentColor || theme.primaryColor }}>
-              Accent Button Preview
-            </div>
-            <p style={{ fontFamily: theme.fontFamily, color: theme.textColor || '#111827' }}>
-              Text sample in {theme.fontFamily || 'system font'}
-            </p>
-            <p className="text-xs mt-1" style={{ color: theme.mutedTextColor || '#6b7280' }}>Muted text sample</p>
-          </div>
+          <p className="px-4 py-2 text-sm" style={{ fontFamily: theme.fontFamily }}>
+            Sample text in {theme.fontFamily || 'system font'}
+          </p>
         </div>
 
         <div className="flex gap-3 justify-end mt-6">
@@ -475,12 +442,10 @@ function ColorField({
   label,
   value,
   onChange,
-  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
-  placeholder?: string;
 }) {
   return (
     <div>
@@ -488,14 +453,13 @@ function ColorField({
       <div className="flex gap-2 items-center">
         <input
           type="color"
-          value={value || '#ffffff'}
+          value={value}
           onChange={(e) => onChange(e.target.value)}
           className="w-10 h-10 rounded border cursor-pointer"
         />
         <input
           type="text"
           value={value}
-          placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
           className="flex-1 border rounded px-3 py-1.5 text-sm font-mono"
         />

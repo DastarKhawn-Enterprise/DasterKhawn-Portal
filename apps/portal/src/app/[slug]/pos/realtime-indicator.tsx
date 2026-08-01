@@ -5,10 +5,10 @@ import { useRealtimeStatus } from './use-event';
 
 function StatusDot({ status }: { status: ConnectionStatus }) {
   const colors: Record<ConnectionStatus, string> = {
-    connected: 'bg-[var(--success)]',
-    connecting: 'bg-[var(--warning)] anim-pulse-soft',
-    reconnecting: 'bg-[var(--warning)] anim-pulse-soft',
-    disconnected: 'bg-[var(--danger)]',
+    connected: 'bg-green-500',
+    connecting: 'bg-yellow-400 animate-pulse',
+    reconnecting: 'bg-yellow-400 animate-pulse',
+    disconnected: 'bg-red-500',
   };
   const labels: Record<ConnectionStatus, string> = {
     connected: 'Live',
@@ -19,7 +19,7 @@ function StatusDot({ status }: { status: ConnectionStatus }) {
   return (
     <div className="flex items-center gap-1.5" title={labels[status]}>
       <span className={'w-2 h-2 rounded-full ' + colors[status]} />
-      <span className="text-[9px] text-[var(--text-faint)] hidden xl:inline">{labels[status]}</span>
+      <span className="text-[9px] text-gray-400 hidden xl:inline">{labels[status]}</span>
     </div>
   );
 }
