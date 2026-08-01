@@ -7,7 +7,7 @@ import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
 import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
 import ReceiptView from './ReceiptView';
 import { deductInventorySupa } from './inventory-utils';
-import { updateCustomerLoyaltySupa, searchCustomersSupa } from './customer-utils';
+import { updateCustomerLoyaltySupa, searchCustomersSupa, findOrCreateCustomerSupa } from './customer-utils';
 import { supa } from './supa-query';
 import { useEvent, usePublish } from './use-event';
 import { generateUniqueOrderNumber } from './order-utils';
@@ -39,6 +39,7 @@ interface Order {
   created_at: string;
   customer_id?: string | null;
   customer_name?: string | null;
+  customer_phone?: string | null;
   order_items: OrderItem[];
 }
 
@@ -85,6 +86,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
   const [selectedTable, setSelectedTable] = useState<TableRecord | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [checkingOut, setCheckingOut] = useState(false);
+  const [checkoutError, setCheckoutError] = useState('');
   const [tableOrder, setTableOrder] = useState<Order | null>(null);
   const [tableOrderLoading, setTableOrderLoading] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
@@ -281,7 +283,25 @@ export default function DineInView({ slug, theme, brandName }: Props) {
       return;
     }
     setCheckingOut(true);
+    setCheckoutError('');
     try {
+      // Auto-create/resolve the customer BEFORE placing the order (no popup, no manual Customers page visit).
+      let resolvedCustomerId: string | null = selectedCustomer?.id || null;
+      let resolvedCustomerPhone: string | null = selectedCustomer?.phone || null;
+      if (!resolvedCustomerId) {
+        const custResult = await findOrCreateCustomerSupa(slug, { name: customerName, phone: selectedCustomer?.phone || null });
+        if (!custResult.ok) {
+          setCheckoutError(custResult.error || 'Failed to save customer');
+          setCheckingOut(false);
+          return;
+        }
+        resolvedCustomerId = custResult.data.id;
+        resolvedCustomerPhone = custResult.data.phone || null;
+        if (custResult.data.created) {
+          publish('customers', 'INSERT', { id: custResult.data.id });
+        }
+        setSelectedCustomer({ id: custResult.data.id, name: custResult.data.name, phone: custResult.data.phone });
+      }
       const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
       const isDineIn = true;
       let serviceCharge = 0;
@@ -299,7 +319,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
       const orderR = await supa(slug, {
         table: 'orders',
         method: 'insert',
-        body: { status: 'pending', source: 'pos', order_number: orderNumber, total, tax_amount: taxAmount, table_id: selectedTable.id, customer_id: selectedCustomer?.id || null, customer_name: customerName.trim(), customer_phone: selectedCustomer?.phone || null },
+        body: { status: 'pending', source: 'pos', order_number: orderNumber, total, tax_amount: taxAmount, table_id: selectedTable.id, customer_id: resolvedCustomerId, customer_name: customerName.trim(), customer_phone: resolvedCustomerPhone },
         select: 'id, order_number, created_at',
       });
       if (!orderR.ok || !orderR.data?.[0]) { console.error('[DineIn Checkout]', orderR.error); setCheckingOut(false); return; }
@@ -325,8 +345,9 @@ export default function DineInView({ slug, theme, brandName }: Props) {
         tax_amount: taxAmount,
         service_charge_amount: serviceCharge,
         created_at: order.created_at,
-        customer_id: selectedCustomer?.id || null,
+        customer_id: resolvedCustomerId,
         customer_name: customerName.trim(),
+        customer_phone: resolvedCustomerPhone,
         order_items: cart.map((item) => ({
           menu_item_id: item.id,
           quantity: item.quantity,
@@ -356,6 +377,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
         const coR = await supa(slug, { table: 'orders', select: 'customer_id, total', eq: ['id', orderId], single: true });
         if (coR.ok && coR.data?.customer_id) {
           await updateCustomerLoyaltySupa(slug, coR.data.customer_id, Number(coR.data.total));
+          publish('customers', 'UPDATE', { id: coR.data.customer_id });
         }
       }
 
@@ -596,6 +618,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
                 ) : (
                   <div className="flex-1 flex items-center justify-center"><p className="text-gray-400">Loading menu...</p></div>
                 )}
+                {checkoutError && <div className="px-4 py-2 bg-red-50 border-b border-red-100 text-[11px] text-red-600 font-medium">{checkoutError}</div>}
                 <CartSidebar
                   cartItems={cart}
                   onUpdateQuantity={handleUpdateQuantity}

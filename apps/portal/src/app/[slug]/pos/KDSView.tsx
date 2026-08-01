@@ -9,6 +9,7 @@ import type { MenuItem, ThemeConfig } from '@sat-sys/pos-ui';
 import { fetchKDSOrders, updateKDSOrderStatus } from './orders-actions';
 import { supa } from './supa-query';
 import { deductInventorySupa } from './inventory-utils';
+import { updateCustomerLoyaltySupa } from './customer-utils';
 import ReceiptView from './ReceiptView';
 import PaymentModal from './PaymentModal';
 import { generateInvoiceNumber } from './invoice-utils';
@@ -757,6 +758,14 @@ export default function KDSView({ slug, theme, brandName }: Props) {
     setUpdating(orderId);
     try {
       await updateKDSOrderStatus(slug, orderId, newStatus);
+      // Award loyalty/update customer profile when an order is completed and linked to a customer
+      if (newStatus === 'completed') {
+        const coR = await supa(slug, { table: 'orders', select: 'customer_id, total', eq: ['id', orderId], single: true });
+        if (coR.ok && coR.data?.customer_id) {
+          await updateCustomerLoyaltySupa(slug, coR.data.customer_id, Number(coR.data.total));
+          publish('customers', 'UPDATE', { id: coR.data.customer_id });
+        }
+      }
       setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)));
       if (selectedOrder?.id === orderId) {
         setSelectedOrder((prev) => prev ? { ...prev, status: newStatus } : null);

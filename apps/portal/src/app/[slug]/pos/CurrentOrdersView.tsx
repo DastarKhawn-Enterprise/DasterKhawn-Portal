@@ -9,7 +9,7 @@ import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
 import ReceiptView from './ReceiptView';
 import PaymentModal from './PaymentModal';
 import { deductInventorySupa } from './inventory-utils';
-import { updateCustomerLoyaltySupa, searchCustomersSupa } from './customer-utils';
+import { updateCustomerLoyaltySupa, searchCustomersSupa, findOrCreateCustomerSupa } from './customer-utils';
 import { supa } from './supa-query';
 import useOfflineSync from '@/hooks/useOfflineSync';
 import { getCachedMenuItems, getCachedSettings } from '@/lib/offline-db';
@@ -154,6 +154,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [checkingOut, setCheckingOut] = useState(false);
+  const [checkoutError, setCheckoutError] = useState('');
   const [orders, setOrders] = useState<Order[]>([]);
   const [fetchError, setFetchError] = useState('');
   const [fetchLoading, setFetchLoading] = useState(false);
@@ -550,6 +551,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     }
     creatingOrderRef.current = true;
     setCheckingOut(true);
+    setCheckoutError('');
     try {
       const total = grandTotal;
 
@@ -565,12 +567,32 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
         ? cfg.showCustomerFields
         : effectiveOrderType !== 'dine_in';
 
+      // Auto-create/resolve the customer BEFORE placing the order (no popup, no manual Customers page visit).
+      let resolvedCustomerId: string | null = selectedCustomer?.id || null;
+      let resolvedCustomerPhone: string | null = selectedCustomer?.phone || null;
+      if (!resolvedCustomerId) {
+        const custPhone = shouldCaptureCustomer ? customerPhone || null : null;
+        const custResult = await findOrCreateCustomerSupa(slug, { name: customerName, phone: custPhone || null });
+        if (!custResult.ok) {
+          setCheckoutError(custResult.error || 'Failed to save customer');
+          setCheckingOut(false);
+          creatingOrderRef.current = false;
+          return;
+        }
+        resolvedCustomerId = custResult.data.id;
+        resolvedCustomerPhone = custResult.data.phone || null;
+        if (custResult.data.created) {
+          publish('customers', 'INSERT', { id: custResult.data.id });
+        }
+        setSelectedCustomer({ id: custResult.data.id, name: custResult.data.name, phone: custResult.data.phone });
+      }
+
       const orderNumber = await generateUniqueOrderNumber(slug);
-      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', order_number: orderNumber, total, tax_amount: taxAmt, order_type: effectiveOrderType, customer_id: selectedCustomer?.id || null };
+      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', order_number: orderNumber, total, tax_amount: taxAmt, order_type: effectiveOrderType, customer_id: resolvedCustomerId };
       orderPayload.customer_name = customerName.trim();
       if (shouldCaptureCustomer) {
         if (customerPhone) orderPayload.customer_phone = customerPhone;
-        else if (selectedCustomer?.phone) orderPayload.customer_phone = selectedCustomer.phone;
+        else if (resolvedCustomerPhone) orderPayload.customer_phone = resolvedCustomerPhone;
         if (effectiveOrderType === 'takeaway') orderPayload.pickup_time = pickupTime;
       }
       if (effectiveOrderType === 'dine_in' && selectedTableId) {
@@ -609,9 +631,9 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
         service_charge_amount: serviceChargeAmt,
         created_at: order.created_at,
         order_type: effectiveOrderType,
-        customer_id: selectedCustomer?.id || null,
+        customer_id: resolvedCustomerId,
         customer_name: customerName.trim(),
-        customer_phone: shouldCaptureCustomer ? (customerPhone || null) : undefined,
+        customer_phone: shouldCaptureCustomer ? (customerPhone || resolvedCustomerPhone || null) : undefined,
         pickup_time: shouldCaptureCustomer && effectiveOrderType === 'takeaway' ? pickupTime : undefined,
         order_items: cart.map((item) => ({
           menu_item_id: item.id,
@@ -682,6 +704,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
         const orderResult = await supa(slug, { table: 'orders', select: 'customer_id, total', eq: ['id', orderId], single: true });
         if (orderResult.ok && orderResult.data?.customer_id) {
           await updateCustomerLoyaltySupa(slug, orderResult.data.customer_id, Number(orderResult.data.total));
+          publish('customers', 'UPDATE', { id: orderResult.data.customer_id });
         }
       }
 
@@ -1124,6 +1147,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
               ))}
             </div>
             <div className="px-4 py-3 border-t border-gray-100">
+              {checkoutError && <p className="text-[11px] text-red-600 mb-2">{checkoutError}</p>}
               <button
                 onClick={handleCheckout}
                 disabled={cart.length === 0 || checkingOut || !!validateCustomerName(customerName)}
@@ -1381,16 +1405,11 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                   <button
                     onClick={async () => {
                       try {
-                        const result = await supa(slug, { table: 'customers', select: 'id', filter: { name: customerName }, limit: 1 });
-                        let custId: string;
-                        if (result.ok && result.data?.length > 0) {
-                          custId = result.data[0].id;
-                        } else {
-                          const insertResult = await supa(slug, { table: 'customers', method: 'insert', select: 'id', single: true, body: { name: customerName, phone: customerPhone || null, loyalty_points: 0, total_orders: 0, total_spent: 0 } });
-                          if (!insertResult.ok || !insertResult.data) return;
-                          custId = insertResult.data.id;
-                        }
-                        setSelectedCustomer({ id: custId, name: customerName, phone: customerPhone || null });
+                        const result = await findOrCreateCustomerSupa(slug, { name: customerName, phone: customerPhone || null });
+                        if (!result.ok) return;
+                        if (result.data.created) publish('customers', 'INSERT', { id: result.data.id });
+                        setSelectedCustomer({ id: result.data.id, name: result.data.name, phone: result.data.phone });
+                        setCheckoutError('');
                       } catch (e) { console.error('Save customer error', e); }
                     }}
                     className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap"
@@ -1461,6 +1480,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                 </div>
               )}
               <div className="px-4 py-3 border-t border-gray-200">
+                {checkoutError && <p className="text-[11px] text-red-600 mb-2">{checkoutError}</p>}
                 <button
                   onClick={handleCheckout}
                   disabled={cart.length === 0 || checkingOut || !!validateCustomerName(customerName)}
@@ -1689,16 +1709,11 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                 <button
                   onClick={async () => {
                     try {
-                      const result = await supa(slug, { table: 'customers', select: 'id', filter: { name: customerName }, limit: 1 });
-                      let custId: string;
-                      if (result.ok && result.data?.length > 0) {
-                        custId = result.data[0].id;
-                      } else {
-                        const insertResult = await supa(slug, { table: 'customers', method: 'insert', select: 'id', single: true, body: { name: customerName, phone: customerPhone || null, loyalty_points: 0, total_orders: 0, total_spent: 0 } });
-                        if (!insertResult.ok || !insertResult.data) return;
-                        custId = insertResult.data.id;
-                      }
-                      setSelectedCustomer({ id: custId, name: customerName, phone: customerPhone || null });
+                      const result = await findOrCreateCustomerSupa(slug, { name: customerName, phone: customerPhone || null });
+                      if (!result.ok) return;
+                      if (result.data.created) publish('customers', 'INSERT', { id: result.data.id });
+                      setSelectedCustomer({ id: result.data.id, name: result.data.name, phone: result.data.phone });
+                      setCheckoutError('');
                     } catch (e) { console.error('Save customer error', e); }
                   }}
                   className="w-full mt-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium text-left"

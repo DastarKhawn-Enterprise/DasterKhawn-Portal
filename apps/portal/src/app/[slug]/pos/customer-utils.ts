@@ -18,10 +18,12 @@ export function formatPhone(phone: string): string {
 export async function checkDuplicatePhone(slug: string, phone: string, excludeId?: string): Promise<{ id: string; name: string; phone: string | null } | null> {
   if (!phone.trim()) return null;
   const normalized = normalizePhone(phone);
+  const tail = normalized.slice(-6);
   const result = await supa(slug, {
     table: 'customers',
     select: 'id, name, phone',
-    limit: 10,
+    limit: 100,
+    or: `phone.ilike.%${tail}%`,
   });
   if (!result.ok || !result.data) return null;
   const dup = result.data.find((c: any) => {
@@ -29,6 +31,61 @@ export async function checkDuplicatePhone(slug: string, phone: string, excludeId
     return c.phone && normalizePhone(c.phone) === normalized;
   });
   return dup || null;
+}
+
+export async function findOrCreateCustomerSupa(
+  slug: string,
+  input: { name: string; phone?: string | null; email?: string | null; notes?: string | null },
+): Promise<{ ok: true; data: { id: string; name: string; phone: string | null; created: boolean } } | { ok: false; error: string }> {
+  const name = input.name.trim();
+  if (!name) return { ok: false, error: 'Customer name is required' };
+  const normPhone = input.phone?.trim() ? normalizePhone(input.phone.trim()) : null;
+  const lower = name.toLowerCase();
+  const nameQ = `%${name.replace(/[%_\\]/g, '')}%`;
+
+  // Fetch candidates matching name and/or phone (single query), then dedupe in JS.
+  const orParts = [`name.ilike.${nameQ}`];
+  if (normPhone) orParts.push(`phone.ilike.%${normPhone.slice(-6)}%`);
+  const result = await supa(slug, {
+    table: 'customers',
+    select: 'id, name, phone',
+    limit: 100,
+    or: orParts.join(','),
+  });
+  if (result.ok && result.data) {
+    const candidates = result.data as { id: string; name: string; phone: string | null }[];
+    // Priority 1: phone match (if phone provided)
+    if (normPhone) {
+      const byPhone = candidates.find((c) => c.phone && normalizePhone(c.phone) === normPhone);
+      if (byPhone) return { ok: true, data: { id: byPhone.id, name: byPhone.name, phone: byPhone.phone, created: false } };
+    }
+    // Priority 2: exact name + phone match
+    const nameMatches = candidates.filter((c) => c.name && c.name.trim().toLowerCase() === lower);
+    if (normPhone) {
+      const byNamePhone = nameMatches.find((c) => c.phone && normalizePhone(c.phone) === normPhone);
+      if (byNamePhone) return { ok: true, data: { id: byNamePhone.id, name: byNamePhone.name, phone: byNamePhone.phone, created: false } };
+    }
+    // Priority 3: exact name only
+    if (nameMatches.length > 0) {
+      const first = nameMatches[0];
+      return { ok: true, data: { id: first.id, name: first.name, phone: first.phone, created: false } };
+    }
+  }
+
+  const body: Record<string, any> = { name, phone: normPhone, loyalty_points: 0, total_orders: 0, total_spent: 0 };
+  if (input.email?.trim()) body.email = input.email.trim();
+  if (input.notes?.trim()) body.notes = input.notes.trim();
+  const createResult = await supa(slug, {
+    table: 'customers',
+    method: 'insert',
+    select: 'id, name, phone',
+    single: true,
+    body,
+  });
+  if (!createResult.ok || !createResult.data) {
+    return { ok: false, error: createResult.error || 'Failed to create customer' };
+  }
+  return { ok: true, data: { id: createResult.data.id, name: createResult.data.name, phone: createResult.data.phone ?? normPhone, created: true } };
 }
 
 export async function updateCustomerLoyalty(client: SupabaseClient, customerId: string, orderTotal: number): Promise<void> {

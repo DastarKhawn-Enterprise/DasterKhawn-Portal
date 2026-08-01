@@ -5,7 +5,7 @@ import { useAuth } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { supa } from './supa-query';
 import { usePOS } from './pos-context';
-import { searchCustomersSupa, checkDuplicatePhone, normalizePhone } from './customer-utils';
+import { searchCustomersSupa, checkDuplicatePhone, normalizePhone, findOrCreateCustomerSupa } from './customer-utils';
 import { usePublish } from './use-event';
 import { generateUniqueOrderNumber } from './order-utils';
 import { validateCustomerName } from './customer-validation';
@@ -249,10 +249,28 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
     }
     creatingOrderRef.current = true; setCheckingOut(true); setOrderError('');
     try {
+      // Auto-create/resolve the customer BEFORE placing the order (no popup, no manual Customers page visit).
+      let resolvedCustomerId: string | null = selectedCustomer?.id || null;
+      let resolvedCustomerPhone: string | null = selectedCustomer?.phone || null;
+      if (!resolvedCustomerId) {
+        const custResult = await findOrCreateCustomerSupa(slug, { name: customerName, phone: selectedCustomer?.phone || null });
+        if (!custResult.ok) {
+          setOrderError(custResult.error || 'Failed to save customer');
+          setCheckingOut(false);
+          creatingOrderRef.current = false;
+          return;
+        }
+        resolvedCustomerId = custResult.data.id;
+        resolvedCustomerPhone = custResult.data.phone || null;
+        if (custResult.data.created) {
+          publish('customers', 'INSERT', { id: custResult.data.id });
+        }
+        setSelectedCustomer({ id: custResult.data.id, name: custResult.data.name, phone: custResult.data.phone });
+      }
       let pickupTime: string | null = null;
       if (orderType === 'takeaway' || orderType === 'delivery') { const d = new Date(); d.setMinutes(d.getMinutes() + 20); pickupTime = d.toISOString(); }
       const orderNumber = await generateUniqueOrderNumber(slug);
-      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', order_number: orderNumber, total: grandTotal, tax_amount: taxAmount, order_type: orderType, customer_id: selectedCustomer?.id || null, customer_name: customerName.trim(), customer_phone: selectedCustomer?.phone || null, pickup_time: pickupTime };
+      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', order_number: orderNumber, total: grandTotal, tax_amount: taxAmount, order_type: orderType, customer_id: resolvedCustomerId, customer_name: customerName.trim(), customer_phone: resolvedCustomerPhone, pickup_time: pickupTime };
       if (orderType === 'dine_in' && selectedTableId) orderPayload.table_id = selectedTableId;
       const orderResult = await supa(slug, { table: 'orders', method: 'insert', select: 'id, order_number, created_at', single: true, body: orderPayload });
       if (!orderResult.ok || !orderResult.data) { setOrderError(orderResult.error || 'Failed to create order'); setCheckingOut(false); creatingOrderRef.current = false; return; }
