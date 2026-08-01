@@ -15,6 +15,16 @@ export interface ThemeConfig {
   secondaryColor: string;
   logoUrl: string;
   fontFamily: string;
+  accentColor?: string;
+  backgroundColor?: string;
+  sidebarColor?: string;
+  surfaceColor?: string;
+  headerColor?: string;
+  cardColor?: string;
+  borderColor?: string;
+  textColor?: string;
+  mutedTextColor?: string;
+  radius?: number;
 }
 
 export const PERMISSIONS = {

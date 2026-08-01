@@ -71,11 +71,11 @@ export default function ReceiptView({ data, brandName, theme, onClose, footerTex
     <>
       {/* Screen modal */}
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="card bg-[var(--surface-2)] rounded-lg shadow-xl w-full max-w-sm mx-4 p-6 anim-fade" onClick={(e) => e.stopPropagation()}>
           {content}
           <button
             onClick={onClose}
-            className="no-print mt-4 w-full px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium"
+            className="no-print btn btn-primary mt-4 w-full px-4 py-2 rounded border border-[var(--border)] text-[var(--text)] hover:bg-[var(--surface-3)] text-sm font-medium"
           >
             Close
           </button>
@@ -98,14 +98,14 @@ function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData
 
   return (
     <div className="text-sm">
-      <div className="text-center mb-4 pb-3 border-b-2 border-dashed border-gray-300">
-        <div className="text-lg font-bold" style={{ color: theme.primaryColor }}>
+      <div className="text-center mb-4 pb-3 border-b-2 border-dashed border-[var(--border)]">
+        <div className="text-lg font-bold" style={{ color: 'var(--primary)' }}>
           {brandName}
         </div>
-        <div className="text-xs text-gray-500 mt-0.5">Order Receipt</div>
+        <div className="text-xs text-[var(--text-muted)] mt-0.5">Order Receipt</div>
       </div>
 
-      <div className="mb-3 space-y-0.5 text-xs text-gray-600">
+      <div className="mb-3 space-y-0.5 text-xs text-[var(--text-muted)]">
         <div className="flex justify-between">
           <span>Order #</span>
           <span className="font-semibold">{data.orderNumber}</span>
@@ -144,7 +144,7 @@ function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData
 
       <table className="w-full text-xs mb-3">
         <thead>
-          <tr className="border-t border-b border-gray-300 text-gray-500">
+          <tr className="border-t border-b border-[var(--border)] text-[var(--text-muted)]">
             <th className="text-left py-1 font-medium">Item</th>
             <th className="text-center py-1 font-medium">Qty</th>
             <th className="text-right py-1 font-medium">Price</th>
@@ -163,28 +163,28 @@ function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData
         </tbody>
       </table>
 
-      <div className="border-t border-gray-300 pt-2 space-y-0.5 text-xs">
-        <div className="flex justify-between text-gray-500">
+      <div className="border-t border-[var(--border)] pt-2 space-y-0.5 text-xs">
+        <div className="flex justify-between text-[var(--text-muted)]">
           <span>Subtotal</span>
           <span>{curr}{subtotal.toFixed(2)}</span>
         </div>
-        <div className="flex justify-between text-gray-500">
+        <div className="flex justify-between text-[var(--text-muted)]">
           <span>Tax</span>
           <span>{curr}{tax.toFixed(2)}</span>
         </div>
         {(data.serviceChargeAmount ?? 0) > 0 && (
-          <div className="flex justify-between text-gray-500">
+          <div className="flex justify-between text-[var(--text-muted)]">
             <span>Service Charge</span>
             <span>{curr}{(data.serviceChargeAmount ?? 0).toFixed(2)}</span>
           </div>
         )}
-        <div className="flex justify-between font-bold text-sm border-t border-gray-300 pt-1">
+        <div className="flex justify-between font-bold text-sm border-t border-[var(--border)] pt-1">
           <span>Total</span>
           <span>{curr}{data.total.toFixed(2)}</span>
         </div>
       </div>
 
-      <div className="text-center mt-4 pt-3 border-t-2 border-dashed border-gray-300 text-xs text-gray-400">
+      <div className="text-center mt-4 pt-3 border-t-2 border-dashed border-[var(--border)] text-xs text-[var(--text-faint)]">
         <p>{footerText || 'Thank you for your order!'}</p>
       </div>
     </div>

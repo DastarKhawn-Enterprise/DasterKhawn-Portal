@@ -1,5 +1,5 @@
 'use client';
-import type { ThemeConfig } from './types';
+import type { ThemeConfig } from './theme';
 
 interface CheckoutButtonProps {
   onCheckout: () => void;
@@ -12,8 +12,8 @@ export default function CheckoutButton({ onCheckout, disabled, theme }: Checkout
     <button
       onClick={onCheckout}
       disabled={disabled}
-      className="w-full py-3 rounded-lg font-bold text-white transition-opacity disabled:opacity-40"
-      style={{ backgroundColor: theme.primaryColor }}
+      className="btn btn-lg w-full !rounded-[var(--radius-btn)]"
+      style={{ backgroundColor: theme.primaryColor, color: 'var(--primary-contrast)' }}
     >
       {disabled ? 'Cart Empty' : 'Checkout'}
     </button>
