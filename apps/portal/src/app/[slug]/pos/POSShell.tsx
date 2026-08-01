@@ -129,14 +129,14 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
               </a>
             )}
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <input
               type="text"
               placeholder="Search menu, orders..."
-              className="hidden md:block w-64 px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-500 placeholder-gray-400"
+              className="hidden lg:block w-48 xl:w-56 px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-500 placeholder-gray-400"
               disabled
             />
-            <button className="md:hidden text-gray-400 text-lg p-1">🔍</button>
+            <button className="lg:hidden text-gray-400 text-lg p-1">🔍</button>
             <BusinessDatePicker />
             <RealtimeIndicator />
             <UserButton afterSignOutUrl="/" />

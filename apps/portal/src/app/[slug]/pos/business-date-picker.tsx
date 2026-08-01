@@ -80,7 +80,7 @@ export default function BusinessDatePicker() {
     <div className="relative" ref={wrapRef}>
       <button
         onClick={() => setOpen((p) => !p)}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors hover:bg-gray-50"
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-white text-xs font-medium transition-colors hover:bg-gray-50"
         style={{ borderColor: theme.primaryColor, color: theme.secondaryColor }}
         title={bd.label}
       >
