@@ -15,6 +15,8 @@ import useOfflineSync from '@/hooks/useOfflineSync';
 import { getCachedMenuItems, getCachedSettings } from '@/lib/offline-db';
 import { useEvent, usePublish } from './use-event';
 import { generateInvoiceNumber } from './invoice-utils';
+import { generateUniqueOrderNumber } from './order-utils';
+import { validateCustomerName } from './customer-validation';
 
 interface OrderItem {
   menu_item_id: string;
@@ -154,6 +156,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
   const [orders, setOrders] = useState<Order[]>([]);
   const [fetchError, setFetchError] = useState('');
   const [fetchLoading, setFetchLoading] = useState(false);
+  const [orderSearch, setOrderSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
   const fetchingRef = useRef(false);
@@ -165,6 +168,8 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
   const [customerPhone, setCustomerPhone] = useState('');
   const [pickupASAP, setPickupASAP] = useState(true);
   const [pickupScheduledTime, setPickupScheduledTime] = useState('');
+  const [customerNameError, setCustomerNameError] = useState('');
+  const customerNameRef = useRef<HTMLInputElement>(null);
 
   // Order type selector (all-orders view only)
   const [selectedOrderType, setSelectedOrderType] = useState<OrderTypeOption>('dine_in');
@@ -404,6 +409,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     setPickupScheduledTime('');
     setVehicleType('');
     setVehiclePlateNumber('');
+    setCustomerNameError('');
   }, []);
 
   const currencySymbolVal = settings?.currencySymbol || 'Rs.';
@@ -492,6 +498,12 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
 
   const handleCheckout = useCallback(async () => {
     if (cart.length === 0 || creatingOrderRef.current) return;
+    const nameError = validateCustomerName(customerName);
+    if (nameError) {
+      setCustomerNameError(nameError);
+      requestAnimationFrame(() => customerNameRef.current?.focus());
+      return;
+    }
     creatingOrderRef.current = true;
     setCheckingOut(true);
     try {
@@ -509,9 +521,10 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
         ? cfg.showCustomerFields
         : effectiveOrderType !== 'dine_in';
 
-      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total, tax_amount: taxAmt, order_type: effectiveOrderType, customer_id: selectedCustomer?.id || null };
+      const orderNumber = await generateUniqueOrderNumber(slug);
+      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', order_number: orderNumber, total, tax_amount: taxAmt, order_type: effectiveOrderType, customer_id: selectedCustomer?.id || null };
+      orderPayload.customer_name = customerName.trim();
       if (shouldCaptureCustomer) {
-        if (customerName) orderPayload.customer_name = customerName;
         if (customerPhone) orderPayload.customer_phone = customerPhone;
         if (effectiveOrderType === 'takeaway') orderPayload.pickup_time = pickupTime;
       }
@@ -552,7 +565,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
         created_at: order.created_at,
         order_type: effectiveOrderType,
         customer_id: selectedCustomer?.id || null,
-        customer_name: shouldCaptureCustomer ? (customerName || null) : undefined,
+        customer_name: customerName.trim(),
         customer_phone: shouldCaptureCustomer ? (customerPhone || null) : undefined,
         pickup_time: shouldCaptureCustomer && effectiveOrderType === 'takeaway' ? pickupTime : undefined,
         order_items: cart.map((item) => ({
@@ -766,6 +779,16 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
 
   const availableTables = useMemo(() => orderedTables.filter((t) => t.status === 'available'), [orderedTables]);
 
+  const filteredOrders = useMemo(() => {
+    if (!orderSearch.trim()) return orders;
+    const q = orderSearch.trim().toLowerCase();
+    return orders.filter((o) => {
+      const matchNumber = String(o.order_number).toLowerCase().includes(q);
+      const matchCustomer = (o.customer_name || '').toLowerCase().includes(q);
+      return matchNumber || matchCustomer;
+    });
+  }, [orders, orderSearch]);
+
   if (!isLoaded || !authReady) {
     return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
   }
@@ -791,6 +814,16 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
             </button>
           </div>
         </div>
+        <div className="px-3 py-2 border-b border-gray-200 shrink-0">
+          <input
+            type="text"
+            value={orderSearch}
+            onChange={(e) => setOrderSearch(e.target.value)}
+            placeholder="Search by name or order #"
+            aria-label="Search orders by customer name or order number"
+            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-gray-50 focus:bg-white focus:ring-2 outline-none transition-all"
+          />
+        </div>
         <div className="flex-1 overflow-y-auto scrollbar-hide p-3 space-y-3">
           {fetchLoading && (
             <div className="flex items-center justify-center pt-12">
@@ -803,10 +836,10 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
               <button onClick={fetchOrdersInitial} className="px-3 py-1.5 text-xs rounded border border-red-300 text-red-600 hover:bg-red-50">Retry</button>
             </div>
           )}
-          {!fetchLoading && !fetchError && orders.length === 0 && (
-            <p className="text-gray-400 text-sm text-center pt-8">{cfg.statusFilter ? `No ${cfg.title.toLowerCase()}` : 'No active orders'}</p>
+          {!fetchLoading && !fetchError && filteredOrders.length === 0 && (
+            <p className="text-gray-400 text-sm text-center pt-8">{orderSearch ? 'No matching orders' : (cfg.statusFilter ? `No ${cfg.title.toLowerCase()}` : 'No active orders')}</p>
           )}
-          {orders.map((order) => (
+          {filteredOrders.map((order) => (
             <div
               key={order.id}
               className={`relative p-3 rounded-xl border transition-colors cursor-pointer ${
@@ -1047,7 +1080,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
             <div className="px-4 py-3 border-t border-gray-100">
               <button
                 onClick={handleCheckout}
-                disabled={cart.length === 0 || checkingOut}
+                disabled={cart.length === 0 || checkingOut || !!validateCustomerName(customerName)}
                 className="w-full py-2.5 rounded-lg text-sm font-bold text-white disabled:opacity-50"
                 style={{ backgroundColor: theme.primaryColor }}
               >
@@ -1096,6 +1129,21 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
               {/* Compact fields bar */}
               {effectiveOrderType === 'dine_in' && (
                 <div className="flex items-end gap-3 px-4 py-2 border-b border-gray-200">
+                  <div className="flex-1 max-w-52">
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Customer Name <span className="text-red-500">*</span></label>
+                    <input
+                      ref={customerNameRef}
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => { setCustomerName(e.target.value); if (customerNameError) setCustomerNameError(''); }}
+                      placeholder="Enter customer name"
+                      maxLength={100}
+                      aria-invalid={!!customerNameError}
+                      aria-describedby={customerNameError ? 'curorders-customer-name-error' : undefined}
+                      className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (customerNameError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
+                    />
+                    {customerNameError && <p id="curorders-customer-name-error" className="text-[11px] text-red-600 mt-1">{customerNameError}</p>}
+                  </div>
                   <div className="w-56">
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Table</label>
                     {availableTables.length > 0 ? (
@@ -1118,14 +1166,19 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
               {effectiveOrderType === 'takeaway' && (
                 <div className="flex items-end gap-3 px-4 py-2 border-b border-gray-200">
                   <div className="flex-1 max-w-52">
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Customer Name</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Customer Name <span className="text-red-500">*</span></label>
                     <input
+                      ref={customerNameRef}
                       type="text"
                       value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
+                      onChange={(e) => { setCustomerName(e.target.value); if (customerNameError) setCustomerNameError(''); }}
                       placeholder="Walk-in"
-                      className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                      maxLength={100}
+                      aria-invalid={!!customerNameError}
+                      aria-describedby={customerNameError ? 'curorders-customer-name-error' : undefined}
+                      className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (customerNameError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
                     />
+                    {customerNameError && <p id="curorders-customer-name-error" className="text-[11px] text-red-600 mt-1">{customerNameError}</p>}
                   </div>
                   <div className="flex-1 max-w-44">
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Phone</label>
@@ -1163,14 +1216,19 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
               {effectiveOrderType === 'delivery' && (
                 <div className="flex items-end gap-3 px-4 py-2 border-b border-gray-200">
                   <div className="flex-1 max-w-52">
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Customer Name</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Customer Name <span className="text-red-500">*</span></label>
                     <input
+                      ref={customerNameRef}
                       type="text"
                       value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
+                      onChange={(e) => { setCustomerName(e.target.value); if (customerNameError) setCustomerNameError(''); }}
                       placeholder="Walk-in"
-                      className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                      maxLength={100}
+                      aria-invalid={!!customerNameError}
+                      aria-describedby={customerNameError ? 'curorders-customer-name-error' : undefined}
+                      className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (customerNameError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
                     />
+                    {customerNameError && <p id="curorders-customer-name-error" className="text-[11px] text-red-600 mt-1">{customerNameError}</p>}
                   </div>
                   <div className="flex-1 max-w-44">
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Phone</label>
@@ -1187,14 +1245,19 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
               {effectiveOrderType === 'drive_thru' && (
                 <div className="flex items-end gap-3 px-4 py-2 border-b border-gray-200">
                   <div className="flex-1 max-w-44">
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Customer Name</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Customer Name <span className="text-red-500">*</span></label>
                     <input
+                      ref={customerNameRef}
                       type="text"
                       value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
+                      onChange={(e) => { setCustomerName(e.target.value); if (customerNameError) setCustomerNameError(''); }}
                       placeholder="Walk-in"
-                      className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                      maxLength={100}
+                      aria-invalid={!!customerNameError}
+                      aria-describedby={customerNameError ? 'curorders-customer-name-error' : undefined}
+                      className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (customerNameError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
                     />
+                    {customerNameError && <p id="curorders-customer-name-error" className="text-[11px] text-red-600 mt-1">{customerNameError}</p>}
                   </div>
                   <div className="w-36">
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Phone</label>
@@ -1257,7 +1320,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                         {customerResults.map((r) => (
                           <button
                             key={r.id}
-                            onClick={() => { setSelectedCustomer(r); setCustomerSearch(''); setCustomerResults([]); }}
+                          onClick={() => { setSelectedCustomer(r); setCustomerName(r.name); setCustomerNameError(''); setCustomerSearch(''); setCustomerResults([]); }}
                             className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
                           >
                             <span className="font-medium text-gray-800">{r.name}</span>
@@ -1354,7 +1417,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
               <div className="px-4 py-3 border-t border-gray-200">
                 <button
                   onClick={handleCheckout}
-                  disabled={cart.length === 0 || checkingOut}
+                  disabled={cart.length === 0 || checkingOut || !!validateCustomerName(customerName)}
                   className="w-full py-2.5 rounded-lg text-sm font-bold text-white disabled:opacity-50"
                   style={{ backgroundColor: theme.primaryColor }}
                 >
@@ -1406,14 +1469,19 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
             {effectiveOrderType === 'takeaway' && (
               <div className="px-4 py-3 border-b border-gray-200 space-y-2">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Customer Name</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Customer Name <span className="text-red-500">*</span></label>
                   <input
+                    ref={customerNameRef}
                     type="text"
                     value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
+                    onChange={(e) => { setCustomerName(e.target.value); if (customerNameError) setCustomerNameError(''); }}
                     placeholder="Walk-in"
-                    className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                    maxLength={100}
+                    aria-invalid={!!customerNameError}
+                    aria-describedby={customerNameError ? 'curorders-customer-name-error' : undefined}
+                    className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (customerNameError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
                   />
+                  {customerNameError && <p id="curorders-customer-name-error" className="text-[11px] text-red-600 mt-1">{customerNameError}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number</label>
@@ -1452,14 +1520,19 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
             {effectiveOrderType === 'delivery' && (
               <div className="px-4 py-3 border-b border-gray-200 space-y-2">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Customer Name</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Customer Name <span className="text-red-500">*</span></label>
                   <input
+                    ref={customerNameRef}
                     type="text"
                     value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
+                    onChange={(e) => { setCustomerName(e.target.value); if (customerNameError) setCustomerNameError(''); }}
                     placeholder="Walk-in"
-                    className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                    maxLength={100}
+                    aria-invalid={!!customerNameError}
+                    aria-describedby={customerNameError ? 'curorders-customer-name-error' : undefined}
+                    className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (customerNameError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
                   />
+                  {customerNameError && <p id="curorders-customer-name-error" className="text-[11px] text-red-600 mt-1">{customerNameError}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number</label>
@@ -1477,14 +1550,19 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
             {effectiveOrderType === 'drive_thru' && (
               <div className="px-4 py-3 border-b border-gray-200 space-y-2">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Customer Name</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Customer Name <span className="text-red-500">*</span></label>
                   <input
+                    ref={customerNameRef}
                     type="text"
                     value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
+                    onChange={(e) => { setCustomerName(e.target.value); if (customerNameError) setCustomerNameError(''); }}
                     placeholder="Walk-in"
-                    className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                    maxLength={100}
+                    aria-invalid={!!customerNameError}
+                    aria-describedby={customerNameError ? 'curorders-customer-name-error' : undefined}
+                    className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (customerNameError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
                   />
+                  {customerNameError && <p id="curorders-customer-name-error" className="text-[11px] text-red-600 mt-1">{customerNameError}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number</label>

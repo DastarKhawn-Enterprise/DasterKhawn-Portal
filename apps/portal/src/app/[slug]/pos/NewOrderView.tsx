@@ -7,6 +7,8 @@ import { supa } from './supa-query';
 import { usePOS } from './pos-context';
 import { searchCustomersSupa } from './customer-utils';
 import { usePublish } from './use-event';
+import { generateUniqueOrderNumber } from './order-utils';
+import { validateCustomerName } from './customer-validation';
 
 interface MenuItem { id: string; name: string; description?: string; price: number; category?: string; available?: boolean; }
 interface CartItem { id: string; name: string; price: number; quantity: number; uid: string; image?: string; notes?: string; }
@@ -106,6 +108,10 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerPhone, setNewCustomerPhone] = useState('');
+
+  const [customerName, setCustomerName] = useState('');
+  const [customerNameError, setCustomerNameError] = useState('');
+  const customerNameRef = useRef<HTMLInputElement>(null);
 
   const [discount, setDiscount] = useState<{ type: 'percentage' | 'fixed'; value: number } | null>(null);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
@@ -216,6 +222,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
   const handleClearCart = useCallback(() => {
     setCart([]); setSpecialInstructions(''); setOrderNotes(''); setDiscount(null); setSelectedCustomer(null);
     setSelectedTableId(null); setKeypadValue(''); setKeypadDisplay(''); setOrderError('');
+    setCustomerName(''); setCustomerNameError('');
     calcRef.current = { buffer: 0, op: null, newNumber: false };
   }, []);
 
@@ -232,11 +239,18 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
 
   const handlePlaceOrder = useCallback(async () => {
     if (cart.length === 0 || creatingOrderRef.current) return;
+    const nameError = validateCustomerName(customerName);
+    if (nameError) {
+      setCustomerNameError(nameError);
+      requestAnimationFrame(() => customerNameRef.current?.focus());
+      return;
+    }
     creatingOrderRef.current = true; setCheckingOut(true); setOrderError('');
     try {
       let pickupTime: string | null = null;
       if (orderType === 'takeaway' || orderType === 'delivery') { const d = new Date(); d.setMinutes(d.getMinutes() + 20); pickupTime = d.toISOString(); }
-      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', total: grandTotal, tax_amount: taxAmount, order_type: orderType, customer_id: selectedCustomer?.id || null, customer_name: selectedCustomer?.name || null, customer_phone: selectedCustomer?.phone || null, pickup_time: pickupTime };
+      const orderNumber = await generateUniqueOrderNumber(slug);
+      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', order_number: orderNumber, total: grandTotal, tax_amount: taxAmount, order_type: orderType, customer_id: selectedCustomer?.id || null, customer_name: customerName.trim(), customer_phone: selectedCustomer?.phone || null, pickup_time: pickupTime };
       if (orderType === 'dine_in' && selectedTableId) orderPayload.table_id = selectedTableId;
       const orderResult = await supa(slug, { table: 'orders', method: 'insert', select: 'id, order_number, created_at', single: true, body: orderPayload });
       if (!orderResult.ok || !orderResult.data) { setOrderError(orderResult.error || 'Failed to create order'); setCheckingOut(false); creatingOrderRef.current = false; return; }
@@ -253,7 +267,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
       calcRef.current = { buffer: 0, op: null, newNumber: false };
     } catch (e: any) { console.error('[PlaceOrder]', e); setOrderError(e.message || 'Order failed'); }
     setCheckingOut(false); creatingOrderRef.current = false;
-  }, [cart, orderType, grandTotal, taxAmount, serviceCharge, selectedCustomer, selectedTableId, slug]);
+  }, [cart, orderType, grandTotal, taxAmount, serviceCharge, selectedCustomer, customerName, selectedTableId, slug]);
 
   const filteredItems = useMemo(() => {
     let items = menuItems;
@@ -301,7 +315,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
               {customerResults.length > 0 && (
                 <div className="border border-gray-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
                   {customerResults.map((r) => (
-                    <button key={r.id} onClick={async () => { const detail = await supa(slug, { table: 'customers', select: 'id, name, phone, total_orders, total_spent, loyalty_points, credit_balance', eq: ['id', r.id], single: true }); if (detail.ok && detail.data) setSelectedCustomer(detail.data as Customer); else setSelectedCustomer({ id: r.id, name: r.name, phone: r.phone }); setShowCustomerModal(false); }}
+                    <button key={r.id} onClick={async () => { const detail = await supa(slug, { table: 'customers', select: 'id, name, phone, total_orders, total_spent, loyalty_points, credit_balance', eq: ['id', r.id], single: true }); if (detail.ok && detail.data) setSelectedCustomer(detail.data as Customer); else setSelectedCustomer({ id: r.id, name: r.name, phone: r.phone }); setCustomerName(r.name); setCustomerNameError(''); setShowCustomerModal(false); }}
                       className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-0 text-sm"
                     ><span className="font-medium text-gray-800">{r.name}</span>{r.phone && <span className="text-gray-400 ml-2">{r.phone}</span>}</button>
                   ))}
@@ -312,7 +326,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
                 <div className="space-y-2">
                   <input type="text" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} placeholder="Full Name" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
                   <input type="tel" value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} placeholder="Phone (optional)" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
-                  <button onClick={async () => { if (!newCustomerName.trim()) return; const result = await supa(slug, { table: 'customers', method: 'insert', select: 'id, name, phone', single: true, body: { name: newCustomerName.trim(), phone: newCustomerPhone.trim() || null, status: 'active' } }); if (result.ok && result.data) { setSelectedCustomer(result.data as Customer); setShowCustomerModal(false); setNewCustomerName(''); setNewCustomerPhone(''); publish('customers', 'INSERT', { id: result.data?.id }); } }}
+                  <button onClick={async () => { if (!newCustomerName.trim()) return; const result = await supa(slug, { table: 'customers', method: 'insert', select: 'id, name, phone', single: true, body: { name: newCustomerName.trim(), phone: newCustomerPhone.trim() || null, status: 'active' } }); if (result.ok && result.data) { setSelectedCustomer(result.data as Customer); setCustomerName(result.data.name); setCustomerNameError(''); setShowCustomerModal(false); setNewCustomerName(''); setNewCustomerPhone(''); publish('customers', 'INSERT', { id: result.data?.id }); } }}
                     className="w-full py-2 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: '#C9972B' }}>Add Customer</button>
                 </div>
               </div>
@@ -408,6 +422,23 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
             ))}
           </div>
 
+          <div className="px-4 py-2 border-b border-gray-200 shrink-0">
+            <label htmlFor="neworder-customer-name" className="block text-xs font-medium text-gray-600 mb-1">Customer Name <span className="text-red-500">*</span></label>
+            <input
+              id="neworder-customer-name"
+              ref={customerNameRef}
+              type="text"
+              value={customerName}
+              onChange={(e) => { setCustomerName(e.target.value); if (customerNameError) setCustomerNameError(''); }}
+              placeholder="Enter customer name"
+              maxLength={100}
+              aria-invalid={!!customerNameError}
+              aria-describedby={customerNameError ? 'neworder-customer-name-error' : undefined}
+              className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (customerNameError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
+            />
+            {customerNameError && <p id="neworder-customer-name-error" className="text-[11px] text-red-600 mt-1">{customerNameError}</p>}
+          </div>
+
           {orderType === 'dine_in' && (
             <div className="px-4 py-2 border-b border-gray-100 shrink-0">
               <select value={selectedTableId || ''} onChange={(e) => setSelectedTableId(e.target.value || null)} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg bg-white">
@@ -460,7 +491,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
 
           <div className="border-t border-gray-200 px-4 py-3 flex gap-2 shrink-0">
             <button onClick={handleClearCart} className="flex-1 py-2.5 rounded-xl text-xs font-semibold border border-gray-200 text-gray-500 hover:bg-gray-50">Clear</button>
-            <button onClick={handlePlaceOrder} disabled={cart.length === 0 || checkingOut} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg" style={{ backgroundColor: cart.length > 0 ? '#C9972B' : '#9CA3AF' }}>{checkingOut ? 'Placing...' : 'Place Order'}</button>
+            <button onClick={handlePlaceOrder} disabled={cart.length === 0 || checkingOut || !!validateCustomerName(customerName)} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg" style={{ backgroundColor: cart.length > 0 && !validateCustomerName(customerName) ? '#C9972B' : '#9CA3AF' }}>{checkingOut ? 'Placing...' : 'Place Order'}</button>
           </div>
         </div>
 
@@ -477,6 +508,18 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
               ))}
             </div>
           )}
+          <div className="px-4 py-1.5 border-b border-gray-100">
+            <input
+              type="text"
+              value={customerName}
+              onChange={(e) => { setCustomerName(e.target.value); if (customerNameError) setCustomerNameError(''); }}
+              placeholder="Customer Name (required)"
+              maxLength={100}
+              aria-invalid={!!customerNameError}
+              className={'w-full px-2.5 py-1.5 text-sm border rounded-md ' + (customerNameError ? 'border-red-400 bg-red-50' : 'border-gray-200')}
+            />
+            {customerNameError && <p className="text-[10px] text-red-600 mt-0.5">{customerNameError}</p>}
+          </div>
           <div className="flex items-center gap-2 px-4 py-2">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-gray-800">{currencySymbol}{grandTotal.toFixed(2)}</p>
@@ -484,7 +527,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
             </div>
             <button onClick={() => setShowCalculator(!showCalculator)} className={'px-2 py-1.5 text-[10px] font-semibold rounded-md border transition-colors ' + (showCalculator ? 'bg-gray-800 text-white border-gray-800' : 'border-gray-200 text-gray-500')}>{showCalculator ? 'Hide Calc' : 'Calc'}</button>
             <button onClick={() => setShowCustomerModal(true)} className="px-2.5 py-1.5 text-[10px] font-semibold border border-gray-200 rounded-md text-gray-600">Customer</button>
-            <button onClick={handlePlaceOrder} disabled={cart.length === 0 || checkingOut} className="px-5 py-1.5 rounded-md text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: cart.length > 0 ? '#C9972B' : '#9CA3AF' }}>{checkingOut ? 'Placing...' : 'Order'}</button>
+            <button onClick={handlePlaceOrder} disabled={cart.length === 0 || checkingOut || !!validateCustomerName(customerName)} className="px-5 py-1.5 rounded-md text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: cart.length > 0 && !validateCustomerName(customerName) ? '#C9972B' : '#9CA3AF' }}>{checkingOut ? 'Placing...' : 'Order'}</button>
           </div>
         </div>
 

@@ -16,7 +16,7 @@ interface SummaryData { totalOrders: number; totalRevenue: number; activeOrders:
 interface KitchenCounts { pending: number; in_kitchen: number; ready: number; }
 interface TableCounts { total: number; occupied: number; }
 interface OrderTypeRow { order_type: string; count: number; revenue: number; }
-interface RecentOrder { id: string; order_number: number; order_type: string; total: number; status: string; created_at: string; }
+interface RecentOrder { id: string; order_number: number; customer_name: string | null; order_type: string; total: number; status: string; created_at: string; }
 
 const ORDER_TYPE_LABELS: Record<string, string> = {
   dine_in: 'Dine In', takeaway: 'Take Away', delivery: 'Delivery', drive_thru: 'Drive Thru',
@@ -56,7 +56,7 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
         { table: 'orders', select: 'id', notIn: ['status', ['completed', 'cancelled']], head: true },
         { table: 'orders', select: 'status', in: ['status', ['pending', 'in_kitchen', 'ready']] },
         { table: 'tables', select: 'id, status' },
-        { table: 'orders', select: 'id, order_number, order_type, total, status, created_at', order: { column: 'created_at', ascending: false }, limit: 10 },
+        { table: 'orders', select: 'id, order_number, customer_name, order_type, total, status, created_at', order: { column: 'created_at', ascending: false }, limit: 10 },
       ]);
 
       const activeCount = activeRes.ok ? (activeRes.count ?? 0) : 0;
@@ -213,6 +213,7 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
                   <div key={order.id} className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xs text-gray-400 font-mono">#{order.order_number}</span>
+                      {order.customer_name && <span className="text-xs text-gray-700 font-medium truncate">{order.customer_name}</span>}
                       <span className="text-xs text-gray-500">{ORDER_TYPE_LABELS[order.order_type] || order.order_type}</span>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">

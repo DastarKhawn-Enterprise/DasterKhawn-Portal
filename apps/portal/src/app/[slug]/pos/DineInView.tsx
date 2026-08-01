@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePOS } from './pos-context';
 import { useAuth } from '@clerk/nextjs';
 import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
@@ -10,6 +10,8 @@ import { deductInventorySupa } from './inventory-utils';
 import { updateCustomerLoyaltySupa, searchCustomersSupa } from './customer-utils';
 import { supa } from './supa-query';
 import { useEvent, usePublish } from './use-event';
+import { generateUniqueOrderNumber } from './order-utils';
+import { validateCustomerName } from './customer-validation';
 
 interface TableRecord {
   id: string;
@@ -36,6 +38,7 @@ interface Order {
   service_charge_amount?: number;
   created_at: string;
   customer_id?: string | null;
+  customer_name?: string | null;
   order_items: OrderItem[];
 }
 
@@ -103,6 +106,9 @@ export default function DineInView({ slug, theme, brandName }: Props) {
   const [customerResults, setCustomerResults] = useState<{ id: string; name: string; phone: string | null }[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string; phone: string | null } | null>(null);
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
+  const [customerName, setCustomerName] = useState('');
+  const [customerNameError, setCustomerNameError] = useState('');
+  const customerNameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -268,6 +274,12 @@ export default function DineInView({ slug, theme, brandName }: Props) {
   // Checkout — creates order with table_id, then updates table to occupied
   const handleCheckout = useCallback(async () => {
     if (cart.length === 0 || !selectedTable) return;
+    const nameError = validateCustomerName(customerName);
+    if (nameError) {
+      setCustomerNameError(nameError);
+      requestAnimationFrame(() => customerNameRef.current?.focus());
+      return;
+    }
     setCheckingOut(true);
     try {
       const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -283,10 +295,11 @@ export default function DineInView({ slug, theme, brandName }: Props) {
       }
       const total = subtotal + serviceCharge + taxAmount;
 
+      const orderNumber = await generateUniqueOrderNumber(slug);
       const orderR = await supa(slug, {
         table: 'orders',
         method: 'insert',
-        body: { status: 'pending', source: 'pos', total, tax_amount: taxAmount, table_id: selectedTable.id, customer_id: selectedCustomer?.id || null },
+        body: { status: 'pending', source: 'pos', order_number: orderNumber, total, tax_amount: taxAmount, table_id: selectedTable.id, customer_id: selectedCustomer?.id || null, customer_name: customerName.trim() },
         select: 'id, order_number, created_at',
       });
       if (!orderR.ok || !orderR.data?.[0]) { console.error('[DineIn Checkout]', orderR.error); setCheckingOut(false); return; }
@@ -313,6 +326,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
         service_charge_amount: serviceCharge,
         created_at: order.created_at,
         customer_id: selectedCustomer?.id || null,
+        customer_name: customerName.trim(),
         order_items: cart.map((item) => ({
           menu_item_id: item.id,
           quantity: item.quantity,
@@ -327,7 +341,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
       setCustomerResults([]);
     } catch (e) { console.error('[DineIn Checkout]', e); }
     setCheckingOut(false);
-  }, [cart, selectedTable, selectedCustomer, settings, slug]);
+  }, [cart, selectedTable, selectedCustomer, customerName, settings, slug]);
 
   // Status update for occupied table — also reverts table on completed/cancelled
   const handleUpdateStatus = useCallback(async (orderId: string, newStatus: string) => {
@@ -538,7 +552,20 @@ export default function DineInView({ slug, theme, brandName }: Props) {
                     </div>
                   ) : (
                     <div className="relative">
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Link Customer (optional)</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Customer Name <span className="text-red-500">*</span></label>
+                      <input
+                        ref={customerNameRef}
+                        type="text"
+                        value={customerName}
+                        onChange={(e) => { setCustomerName(e.target.value); if (customerNameError) setCustomerNameError(''); }}
+                        placeholder="Enter customer name"
+                        maxLength={100}
+                        aria-invalid={!!customerNameError}
+                        aria-describedby={customerNameError ? 'dinein-customer-name-error' : undefined}
+                        className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (customerNameError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
+                      />
+                      {customerNameError && <p id="dinein-customer-name-error" className="text-[11px] text-red-600 mt-1">{customerNameError}</p>}
+                      <label className="block text-xs font-medium text-gray-600 mb-1 mt-3">Link Customer (optional)</label>
                       <input
                         type="text"
                         value={customerSearch}
@@ -552,7 +579,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
                           {customerResults.map((r) => (
                             <button
                               key={r.id}
-                              onClick={() => { setSelectedCustomer(r); setCustomerSearch(''); setCustomerResults([]); }}
+                              onClick={() => { setSelectedCustomer(r); setCustomerName(r.name); setCustomerNameError(''); setCustomerSearch(''); setCustomerResults([]); }}
                               className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
                             >
                               <span className="font-medium text-gray-800">{r.name}</span>
@@ -574,7 +601,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
                   onUpdateQuantity={handleUpdateQuantity}
                   onRemoveItem={handleRemoveItem}
                   onCheckout={handleCheckout}
-                  disabled={cart.length === 0 || checkingOut}
+                  disabled={cart.length === 0 || checkingOut || !!validateCustomerName(customerName)}
                   theme={theme}
                   currencySymbol={settings?.currencySymbol}
                 />
