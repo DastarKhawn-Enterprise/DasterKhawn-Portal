@@ -17,6 +17,7 @@ import { useEvent, usePublish } from './use-event';
 import { generateInvoiceNumber } from './invoice-utils';
 import { generateUniqueOrderNumber } from './order-utils';
 import { validateCustomerName } from './customer-validation';
+import { sortOrdersNewestFirst } from './order-sort-utils';
 
 interface OrderItem {
   menu_item_id: string;
@@ -354,7 +355,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     fetchingRef.current = true;
     setFetchLoading(true);
     setFetchError('');
-    const opts: any = { table: 'orders', select: SELECT_ORDER_FIELDS, order: { column: 'created_at', ascending: false }, limit: 200 };
+    const opts: any = { table: 'orders', select: SELECT_ORDER_FIELDS, order: [{ column: 'created_at', ascending: false }, { column: 'order_number', ascending: false }], limit: 200 };
     if (cfg.statusFilter) {
       opts.eq = ['status', cfg.statusFilter];
     } else if (cfg.excludeStatus && cfg.excludeStatus.length > 0) {
@@ -371,10 +372,53 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     fetchingRef.current = false;
   }, [slug, cfg.statusFilter, cfg.excludeStatus]);
 
-  // Auto-refresh when events come in (debounced to avoid flooding)
-  useEvent('orders', () => {
+  const scheduleRefresh = useCallback(() => {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     refreshTimerRef.current = setTimeout(() => fetchOrdersInitial(), 1200);
+  }, [fetchOrdersInitial]);
+
+  // Realtime — apply changes immediately (new orders at the TOP), then reconcile with a debounced refetch
+  useEvent('orders', (payload) => {
+    const { event, new: row, old } = payload as any;
+    const id = row?.id ?? old?.id;
+    if (!id) { scheduleRefresh(); return; }
+    if (event === 'INSERT') {
+      // Only prepend when we have the full row (postgres_changes). Partial manual publishes
+      // (e.g. local checkout, which prepends its own copy) just trigger the refetch.
+      if (row && row.order_number != null && row.created_at) {
+        setOrders((prev) => {
+          if (prev.some((o) => o.id === id)) return prev;
+          const partial: Order = {
+            id,
+            order_number: Number(row.order_number) || 0,
+            status: row.status || 'pending',
+            total: Number(row.total) || 0,
+            tax_amount: row.tax_amount != null ? Number(row.tax_amount) : undefined,
+            service_charge_amount: row.service_charge_amount != null ? Number(row.service_charge_amount) : undefined,
+            discount_amount: row.discount_amount != null ? Number(row.discount_amount) : undefined,
+            discount_type: row.discount_type ?? null,
+            discount_value: row.discount_value != null ? Number(row.discount_value) : null,
+            notes: row.notes ?? null,
+            created_at: row.created_at,
+            order_type: row.order_type || 'dine_in',
+            customer_name: row.customer_name ?? null,
+            customer_phone: row.customer_phone ?? null,
+            pickup_time: row.pickup_time ?? null,
+            customer_id: row.customer_id ?? null,
+            payment_status: row.payment_status ?? null,
+            amount_paid: row.amount_paid != null ? Number(row.amount_paid) : undefined,
+            amount_due: row.amount_due != null ? Number(row.amount_due) : undefined,
+            order_items: [],
+          };
+          return sortOrdersNewestFirst([partial, ...prev]);
+        });
+      }
+    } else if (event === 'UPDATE') {
+      setOrders((prev) => sortOrdersNewestFirst(prev.map((o) => (o.id === id ? { ...o, ...(row || {}) } : o))));
+    } else if (event === 'DELETE') {
+      setOrders((prev) => prev.filter((o) => o.id !== id));
+    }
+    scheduleRefresh();
   });
   const publish = usePublish();
 
@@ -526,6 +570,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
       orderPayload.customer_name = customerName.trim();
       if (shouldCaptureCustomer) {
         if (customerPhone) orderPayload.customer_phone = customerPhone;
+        else if (selectedCustomer?.phone) orderPayload.customer_phone = selectedCustomer.phone;
         if (effectiveOrderType === 'takeaway') orderPayload.pickup_time = pickupTime;
       }
       if (effectiveOrderType === 'dine_in' && selectedTableId) {
@@ -780,9 +825,10 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
   const availableTables = useMemo(() => orderedTables.filter((t) => t.status === 'available'), [orderedTables]);
 
   const filteredOrders = useMemo(() => {
-    if (!orderSearch.trim()) return orders;
+    const base = sortOrdersNewestFirst(orders);
+    if (!orderSearch.trim()) return base;
     const q = orderSearch.trim().toLowerCase();
-    return orders.filter((o) => {
+    return base.filter((o) => {
       const matchNumber = String(o.order_number).toLowerCase().includes(q);
       const matchCustomer = (o.customer_name || '').toLowerCase().includes(q);
       return matchNumber || matchCustomer;
@@ -1340,7 +1386,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                         if (result.ok && result.data?.length > 0) {
                           custId = result.data[0].id;
                         } else {
-                          const insertResult = await supa(slug, { table: 'customers', method: 'insert', select: 'id', single: true, body: { name: customerName, phone: customerPhone || null, status: 'active' } });
+                          const insertResult = await supa(slug, { table: 'customers', method: 'insert', select: 'id', single: true, body: { name: customerName, phone: customerPhone || null, loyalty_points: 0, total_orders: 0, total_spent: 0 } });
                           if (!insertResult.ok || !insertResult.data) return;
                           custId = insertResult.data.id;
                         }
@@ -1648,7 +1694,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                       if (result.ok && result.data?.length > 0) {
                         custId = result.data[0].id;
                       } else {
-                        const insertResult = await supa(slug, { table: 'customers', method: 'insert', select: 'id', single: true, body: { name: customerName, phone: customerPhone || null, status: 'active' } });
+                        const insertResult = await supa(slug, { table: 'customers', method: 'insert', select: 'id', single: true, body: { name: customerName, phone: customerPhone || null, loyalty_points: 0, total_orders: 0, total_spent: 0 } });
                         if (!insertResult.ok || !insertResult.data) return;
                         custId = insertResult.data.id;
                       }

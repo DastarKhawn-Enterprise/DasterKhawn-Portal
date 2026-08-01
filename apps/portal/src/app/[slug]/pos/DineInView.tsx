@@ -299,7 +299,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
       const orderR = await supa(slug, {
         table: 'orders',
         method: 'insert',
-        body: { status: 'pending', source: 'pos', order_number: orderNumber, total, tax_amount: taxAmount, table_id: selectedTable.id, customer_id: selectedCustomer?.id || null, customer_name: customerName.trim() },
+        body: { status: 'pending', source: 'pos', order_number: orderNumber, total, tax_amount: taxAmount, table_id: selectedTable.id, customer_id: selectedCustomer?.id || null, customer_name: customerName.trim(), customer_phone: selectedCustomer?.phone || null },
         select: 'id, order_number, created_at',
       });
       if (!orderR.ok || !orderR.data?.[0]) { console.error('[DineIn Checkout]', orderR.error); setCheckingOut(false); return; }

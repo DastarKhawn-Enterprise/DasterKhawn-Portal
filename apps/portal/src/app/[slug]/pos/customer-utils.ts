@@ -88,14 +88,17 @@ export async function searchCustomers(client: SupabaseClient, term: string): Pro
 export async function searchCustomersSupa(slug: string, term: string): Promise<{ id: string; name: string; phone: string | null }[]> {
   if (!term.trim()) return [];
   const q = `%${term.trim()}%`;
-  const result = await supa(slug, {
-    table: 'customers',
+  const opts = {
+    table: 'customers' as const,
     select: 'id, name, phone',
     order: 'name',
     limit: 10,
-    filter: { status: 'active' },
     or: `name.ilike.${q},phone.ilike.${q}`,
-  });
+  };
+  let result = await supa(slug, { ...opts, filter: { status: 'active' } });
+  if (!result.ok && /status/i.test(result.error || '')) {
+    result = await supa(slug, opts);
+  }
   if (!result.ok) return [];
   return (result.data ?? []) as { id: string; name: string; phone: string | null }[];
 }

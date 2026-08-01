@@ -8,7 +8,10 @@ export async function fetchKDSOrders(slug: string, statusFilter?: string, exclud
   const opts: any = {
     table: 'orders',
     select: KDS_SELECT,
-    order: { column: 'created_at', ascending: true },
+    order: [
+      { column: 'created_at', ascending: false },
+      { column: 'order_number', ascending: false },
+    ],
     limit: 200,
   };
   if (statusFilter) {

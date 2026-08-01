@@ -12,6 +12,7 @@ import { deductInventorySupa } from './inventory-utils';
 import ReceiptView from './ReceiptView';
 import PaymentModal from './PaymentModal';
 import { generateInvoiceNumber } from './invoice-utils';
+import { sortOrdersNewestFirst } from './order-sort-utils';
 
 interface KDSOrderItem {
   menu_item_id: string;
@@ -639,7 +640,47 @@ export default function KDSView({ slug, theme, brandName }: Props) {
     fetchOrders();
   }, [fetchOrders]);
 
-  useEvent('orders', () => { debouncedFetchOrders(); });
+  // Realtime — apply changes immediately (new orders at the TOP), then reconcile with a debounced refetch
+  useEvent('orders', (payload) => {
+    const { event, new: row, old } = payload as any;
+    const id = row?.id ?? old?.id;
+    if (id) {
+      if (event === 'INSERT') {
+        if (row && row.order_number != null && row.created_at) {
+          setOrders((prev) => {
+            if (prev.some((o) => o.id === id)) return prev;
+            const partial: KDSOrder = {
+              id,
+              order_number: Number(row.order_number) || 0,
+              status: row.status || 'pending',
+              total: Number(row.total) || 0,
+              created_at: row.created_at,
+              order_type: row.order_type || 'dine_in',
+              customer_name: row.customer_name ?? null,
+              customer_phone: row.customer_phone ?? null,
+              pickup_time: row.pickup_time ?? null,
+              customer_id: row.customer_id ?? null,
+              payment_status: row.payment_status ?? null,
+              tax_amount: row.tax_amount != null ? Number(row.tax_amount) : undefined,
+              service_charge_amount: row.service_charge_amount != null ? Number(row.service_charge_amount) : undefined,
+              discount_amount: row.discount_amount != null ? Number(row.discount_amount) : undefined,
+              discount_type: row.discount_type ?? null,
+              discount_value: row.discount_value != null ? Number(row.discount_value) : null,
+              notes: row.notes ?? null,
+              invoice_number: row.invoice_number ?? null,
+              order_items: [],
+            };
+            return sortOrdersNewestFirst([partial, ...prev]);
+          });
+        }
+      } else if (event === 'UPDATE') {
+        setOrders((prev) => sortOrdersNewestFirst(prev.map((o) => (o.id === id ? { ...o, ...(row || {}) } : o))));
+      } else if (event === 'DELETE') {
+        setOrders((prev) => prev.filter((o) => o.id !== id));
+      }
+    }
+    debouncedFetchOrders();
+  });
 
   useEffect(() => {
     supa(slug, { table: 'menu_items', select: 'id, name, description, price, category, available', order: 'name', limit: 500 }).then((r) => { if (r.ok) setMenuItems(r.data ?? []); }).catch(() => {});
@@ -726,7 +767,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
     setUpdating(null);
   }, [slug, selectedOrder]);
 
-  const filteredOrders = orders.filter((o) => {
+  const filteredOrders = sortOrdersNewestFirst(orders).filter((o) => {
     if (search) {
       const q = search.toLowerCase();
       const matchNumber = String(o.order_number).includes(q);

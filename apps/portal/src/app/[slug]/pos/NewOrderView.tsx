@@ -5,7 +5,7 @@ import { useAuth } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { supa } from './supa-query';
 import { usePOS } from './pos-context';
-import { searchCustomersSupa } from './customer-utils';
+import { searchCustomersSupa, checkDuplicatePhone, normalizePhone } from './customer-utils';
 import { usePublish } from './use-event';
 import { generateUniqueOrderNumber } from './order-utils';
 import { validateCustomerName } from './customer-validation';
@@ -108,6 +108,8 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerPhone, setNewCustomerPhone] = useState('');
+  const [newCustomerError, setNewCustomerError] = useState('');
+  const [newCustomerSaving, setNewCustomerSaving] = useState(false);
 
   const [customerName, setCustomerName] = useState('');
   const [customerNameError, setCustomerNameError] = useState('');
@@ -326,8 +328,32 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
                 <div className="space-y-2">
                   <input type="text" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} placeholder="Full Name" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
                   <input type="tel" value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} placeholder="Phone (optional)" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
-                  <button onClick={async () => { if (!newCustomerName.trim()) return; const result = await supa(slug, { table: 'customers', method: 'insert', select: 'id, name, phone', single: true, body: { name: newCustomerName.trim(), phone: newCustomerPhone.trim() || null, status: 'active' } }); if (result.ok && result.data) { setSelectedCustomer(result.data as Customer); setCustomerName(result.data.name); setCustomerNameError(''); setShowCustomerModal(false); setNewCustomerName(''); setNewCustomerPhone(''); publish('customers', 'INSERT', { id: result.data?.id }); } }}
-                    className="w-full py-2 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: '#C9972B' }}>Add Customer</button>
+                  <button onClick={async () => {
+                    const name = newCustomerName.trim();
+                    if (!name) { setNewCustomerError('Name is required'); return; }
+                    setNewCustomerError('');
+                    setNewCustomerSaving(true);
+                    try {
+                      const normPhone = newCustomerPhone.trim() ? normalizePhone(newCustomerPhone.trim()) : null;
+                      if (normPhone) {
+                        const dup = await checkDuplicatePhone(slug, normPhone);
+                        if (dup) {
+                          setNewCustomerError(`Customer "${dup.name}" already exists with this phone`);
+                          setNewCustomerSaving(false);
+                          return;
+                        }
+                      }
+                      const result = await supa(slug, { table: 'customers', method: 'insert', select: 'id, name, phone', single: true, body: { name, phone: normPhone, loyalty_points: 0, total_orders: 0, total_spent: 0 } });
+                      if (result.ok && result.data) {
+                        setSelectedCustomer(result.data as Customer); setCustomerName(result.data.name); setCustomerNameError(''); setShowCustomerModal(false); setNewCustomerName(''); setNewCustomerPhone(''); publish('customers', 'INSERT', { id: result.data?.id });
+                      } else {
+                        setNewCustomerError(result.error || 'Failed to add customer');
+                      }
+                    } catch (e: any) { setNewCustomerError(e.message || 'Failed to add customer'); }
+                    setNewCustomerSaving(false);
+                  }}
+                    className="w-full py-2 rounded-lg text-sm font-bold text-white disabled:opacity-60 disabled:cursor-not-allowed" style={{ backgroundColor: '#C9972B' }} disabled={newCustomerSaving}>{newCustomerSaving ? 'Adding...' : 'Add Customer'}</button>
+                  {newCustomerError && <p className="text-xs text-red-600">{newCustomerError}</p>}
                 </div>
               </div>
             </div>
@@ -408,7 +434,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
               <p className="text-xs text-gray-400">{orderCount} item{orderCount !== 1 ? 's' : ''}</p>
             </div>
             <div className="flex items-center gap-1.5">
-              <button onClick={() => setShowCustomerModal(true)} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">{selectedCustomer ? selectedCustomer.name : 'Customer'}</button>
+              <button onClick={() => { setShowCustomerModal(true); setNewCustomerError(''); }} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">{selectedCustomer ? selectedCustomer.name : 'Customer'}</button>
               <button onClick={handleClearCart} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">New</button>
             </div>
           </div>
@@ -526,7 +552,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
               <p className="text-xs text-gray-400">{orderCount} item{orderCount !== 1 ? 's' : ''}</p>
             </div>
             <button onClick={() => setShowCalculator(!showCalculator)} className={'px-2 py-1.5 text-[10px] font-semibold rounded-md border transition-colors ' + (showCalculator ? 'bg-gray-800 text-white border-gray-800' : 'border-gray-200 text-gray-500')}>{showCalculator ? 'Hide Calc' : 'Calc'}</button>
-            <button onClick={() => setShowCustomerModal(true)} className="px-2.5 py-1.5 text-[10px] font-semibold border border-gray-200 rounded-md text-gray-600">Customer</button>
+            <button onClick={() => { setShowCustomerModal(true); setNewCustomerError(''); }} className="px-2.5 py-1.5 text-[10px] font-semibold border border-gray-200 rounded-md text-gray-600">Customer</button>
             <button onClick={handlePlaceOrder} disabled={cart.length === 0 || checkingOut || !!validateCustomerName(customerName)} className="px-5 py-1.5 rounded-md text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: cart.length > 0 && !validateCustomerName(customerName) ? '#C9972B' : '#9CA3AF' }}>{checkingOut ? 'Placing...' : 'Order'}</button>
           </div>
         </div>
@@ -609,7 +635,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
 
           {/* Action Buttons - 2x2 Grid */}
           <div className="grid grid-cols-2 gap-1 p-2 border-b border-gray-200 shrink-0">
-            <button onClick={() => setShowCustomerModal(true)}
+            <button onClick={() => { setShowCustomerModal(true); setNewCustomerError(''); }}
               className="flex flex-col items-center justify-center py-1.5 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all text-gray-700 active:scale-95 gap-0.5"
             >
               <span className="text-sm leading-none">&#x1F464;</span>
