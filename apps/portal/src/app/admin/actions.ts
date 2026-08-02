@@ -155,7 +155,7 @@ function getTenantMigrationFiles(): { name: string; content: string }[] {
   const allFiles = readdirSync(migrationsDir).filter((f) => f.endsWith('.sql'));
 
   // Files to skip — gateway-only or seed data
-  const skipPatterns = [/^001_gateway/, /^012_add_enabled_modules/, /^seed-/];
+  const skipPatterns = [/^001_gateway/, /^021_staff_metadata/, /^012_add_enabled_modules/, /^seed-/];
 
   const tenantFiles = allFiles.filter(
     (f) => !skipPatterns.some((p) => p.test(f)),
