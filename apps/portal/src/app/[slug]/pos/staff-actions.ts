@@ -165,6 +165,7 @@ export async function createStaffAccount(
   phone?: string,
   employmentStatus?: string,
   customPermissions?: string[],
+  password?: string,
 ): Promise<{ success: boolean; error?: string; credentials?: { email: string; password: string } }> {
   try {
     const access = await requireStaffAccess(slug);
@@ -188,7 +189,7 @@ export async function createStaffAccount(
       ? customPermissions
       : [...(ROLE_DEFAULTS[role] || [])];
 
-    const finalPassword = generatePassword();
+    const finalPassword = password?.trim() || generatePassword();
     const meta: StaffMeta = {
       phone: phone || '',
       employment_status: employmentStatus || 'active',
@@ -209,6 +210,10 @@ export async function createStaffAccount(
             permissions,
             login_enabled: true,
           },
+        });
+        await client.users.updateUser(targetUserId, {
+          password: finalPassword,
+          skipPasswordChecks: true,
         });
       } catch (e2: any) {
         let msg = e2.message || 'Failed to update existing user';

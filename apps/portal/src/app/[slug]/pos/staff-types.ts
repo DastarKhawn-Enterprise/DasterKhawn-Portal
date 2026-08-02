@@ -149,6 +149,7 @@ export interface CreateStaffData {
   phone: string;
   employmentStatus: string;
   permissions: string[];
+  password?: string;
 }
 
 export interface UpdateStaffData {

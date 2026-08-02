@@ -196,8 +196,8 @@ export default function StaffManagementView({ slug }: Props) {
   const startItem = sortedStaff.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const endItem = Math.min(page * PAGE_SIZE, sortedStaff.length);
 
-  const handleCreate = async (data: { email: string; name: string; role: string; phone: string; employmentStatus: string; permissions: string[] }) => {
-    const result = await createStaffAccount(slug, data.email, data.name, data.role, data.phone, data.employmentStatus, data.permissions);
+  const handleCreate = async (data: { email: string; name: string; role: string; phone: string; employmentStatus: string; permissions: string[]; password?: string }) => {
+    const result = await createStaffAccount(slug, data.email, data.name, data.role, data.phone, data.employmentStatus, data.permissions, data.password);
     if (result.success) {
       if (result.credentials) setTempPassword(result.credentials);
       setShowAddModal(false);
@@ -207,8 +207,14 @@ export default function StaffManagementView({ slug }: Props) {
     return result;
   };
 
-  const handleEdit = async (clerkUserId: string, data: { name?: string; role?: string; phone?: string; employmentStatus?: string; permissions?: string[] }) => {
-    const result = await updateStaff(slug, clerkUserId, data);
+  const handleEdit = async (clerkUserId: string, data: { name?: string; role?: string; phone?: string; employmentStatus?: string; permissions?: string[]; password?: string }) => {
+    const result = await updateStaff(slug, clerkUserId, {
+      name: data.name,
+      role: data.role,
+      phone: data.phone,
+      employmentStatus: data.employmentStatus,
+      permissions: data.permissions,
+    });
     if (result.success) {
       setShowEditModal(null);
       fetchData();
@@ -763,7 +769,7 @@ function StaffFormModal({
   title, staff, onSave, onClose,
 }: {
   title: string; staff?: StaffMember;
-  onSave: (data: { email: string; name: string; role: string; phone: string; employmentStatus: string; permissions: string[] }) => Promise<any>;
+  onSave: (data: { email: string; name: string; role: string; phone: string; employmentStatus: string; permissions: string[]; password?: string }) => Promise<any>;
   onClose: () => void;
 }) {
   const [email, setEmail] = useState(staff?.email || '');
@@ -772,6 +778,7 @@ function StaffFormModal({
   const [phone, setPhone] = useState(staff?.phone || '');
   const [employmentStatus, setEmploymentStatus] = useState(staff?.metadata.employment_status || 'active');
   const [perms, setPerms] = useState<string[]>([...(staff?.permissions || ROLE_DEFAULTS.staff || [])]);
+  const [password, setPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -802,6 +809,7 @@ function StaffFormModal({
       phone: phone.trim(),
       employmentStatus,
       permissions: perms,
+      password: password.trim() || undefined,
     });
     if (result.success) {
       setSuccess(true);
@@ -827,6 +835,13 @@ function StaffFormModal({
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1 block">Email/Login ID</label>
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="staff@example.com" required />
+            </div>
+          )}
+
+          {!isEdit && (
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">Password</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Set staff login password (leave blank to auto-generate)" />
             </div>
           )}
 
