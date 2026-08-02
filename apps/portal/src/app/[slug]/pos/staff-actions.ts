@@ -10,7 +10,7 @@ import {
   removeStaffRole,
 } from '@sat-sys/gateway-sdk';
 import type { StaffMember, StaffListResult, StaffMeta, CreateStaffData, UpdateStaffData } from './staff-types';
-import { ROLE_DEFAULTS } from './staff-types';
+import { ROLE_DEFAULTS, getAllPermissions } from './staff-types';
 
 function generatePassword(): string {
   return randomBytes(18)
@@ -62,7 +62,7 @@ async function requireStaffAccess(slug: string): Promise<{
   const user = await client.users.getUser(userId);
   const role = (user.publicMetadata as any)?.role;
   if (role === 'super_admin') {
-    return { authorized: true, tenant, userId, actorRole: 'super_admin', actorPerms: [] };
+    return { authorized: true, tenant, userId, actorRole: 'super_admin', actorPerms: getAllPermissions().map((p) => p.key) };
   }
 
   return { authorized: false, reason: 'Forbidden: missing staff:manage permission' };
