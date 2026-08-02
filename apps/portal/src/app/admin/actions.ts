@@ -334,7 +334,7 @@ export async function createTenant(
     if (existing.data.length > 0) {
       ownerClerkId = existing.data[0].id;
       try {
-        await client.users.updateUser(ownerClerkId, {
+        await client.users.updateUserMetadata(ownerClerkId, {
           publicMetadata: { tenant_id: tenantId, role: 'owner', permissions },
         });
       } catch (e2: any) {
@@ -346,6 +346,8 @@ export async function createTenant(
           emailAddress: [ownerEmail],
           password: finalPassword,
           skipPasswordChecks: true,
+        });
+        await client.users.updateUserMetadata(created.id, {
           publicMetadata: { tenant_id: tenantId, role: 'owner', permissions },
         });
         ownerClerkId = created.id;

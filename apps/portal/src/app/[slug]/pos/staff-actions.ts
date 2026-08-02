@@ -201,6 +201,8 @@ export async function createStaffAccount(
         await client.users.updateUser(targetUserId, {
           firstName: name.split(' ')[0] || name,
           lastName: name.split(' ').slice(1).join(' ') || '',
+        });
+        await client.users.updateUserMetadata(targetUserId, {
           publicMetadata: {
             tenant_id: tenant.id,
             role,
@@ -226,6 +228,8 @@ export async function createStaffAccount(
         emailAddress: [email],
         password: finalPassword,
         skipPasswordChecks: true,
+      });
+      await client.users.updateUserMetadata(created.id, {
         publicMetadata: {
           tenant_id: tenant.id,
           role,
@@ -307,7 +311,7 @@ export async function updateStaff(
     if (!gatewayResult.success) return { success: false, error: gatewayResult.error };
 
     try {
-      await client.users.updateUser(clerkUserId, {
+      await client.users.updateUserMetadata(clerkUserId, {
         publicMetadata: {
           tenant_id: tenant.id,
           role: updates.role || target.role,
@@ -350,7 +354,7 @@ export async function updateStaffPermissions(
 
     const client = await clerkClient();
     try {
-      await client.users.updateUser(clerkUserId, {
+      await client.users.updateUserMetadata(clerkUserId, {
         publicMetadata: {
           tenant_id: tenant.id,
           role: target.role,
@@ -446,7 +450,7 @@ export async function toggleLogin(
     });
 
     try {
-      await client.users.updateUser(clerkUserId, {
+      await client.users.updateUserMetadata(clerkUserId, {
         publicMetadata: {
           ...(target.role ? { role: target.role } : {}),
           permissions: target.permissions,
@@ -536,7 +540,7 @@ export async function removeStaff(
     } catch {}
 
     try {
-      await client.users.updateUser(clerkUserId, {
+      await client.users.updateUserMetadata(clerkUserId, {
         publicMetadata: { tenant_id: null, role: null, permissions: null, login_enabled: false },
       });
     } catch {}
