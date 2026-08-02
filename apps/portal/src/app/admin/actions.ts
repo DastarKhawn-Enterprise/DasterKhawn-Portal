@@ -326,6 +326,7 @@ export async function createTenant(
       'staff:manage', 'settings:edit',
       'accounts:view', 'accounts:manage', 'accounts:transactions',
       'accounts:transfer', 'accounts:adjust',
+      'customers:view', 'customers:create', 'customers:edit', 'customers:manage',
     ];
 
     let ownerClerkId: string;

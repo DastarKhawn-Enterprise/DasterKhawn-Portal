@@ -3,7 +3,7 @@ export function hasPermission(
   role: string,
   required: string,
 ): boolean {
-  return permissions.includes(required) || role === 'super_admin';
+  return permissions.includes(required) || role === 'super_admin' || role === 'owner';
 }
 
 export function decodeJwt(token: string): { permissions: string[]; tenant_role: string } | null {

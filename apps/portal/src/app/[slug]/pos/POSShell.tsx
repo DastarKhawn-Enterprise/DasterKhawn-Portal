@@ -27,7 +27,7 @@ function computeHiddenViews(user: any, enabledModules: Record<string, boolean>):
   const perms: string[] = meta?.permissions ?? [];
   const role: string = meta?.role ?? '';
   const hidden: ViewId[] = [];
-  if (role !== 'super_admin') {
+  if (role !== 'super_admin' && role !== 'owner') {
     if (!perms.includes('staff:manage')) hidden.push('staff');
     if (!perms.includes('menu:edit')) { hidden.push('menu'); hidden.push('inventory'); hidden.push('item-ledger'); }
     if (!perms.includes('reports:view')) hidden.push('reports');

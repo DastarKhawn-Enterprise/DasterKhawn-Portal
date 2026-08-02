@@ -50,7 +50,7 @@ async function requireStaffAccess(slug: string): Promise<{
   const actorPerms = me?.permissions || [];
 
   if (me && (me.role === 'owner' || me.role === 'super_admin')) {
-    return { authorized: true, tenant, userId, actorRole, actorPerms };
+    return { authorized: true, tenant, userId, actorRole: me.role, actorPerms: getAllPermissions().map((p) => p.key) };
   }
 
   if (me && actorPerms.includes('staff:manage')) {
