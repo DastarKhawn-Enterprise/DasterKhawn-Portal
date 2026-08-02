@@ -199,7 +199,9 @@ function buildUrl(baseUrl: string, table: string, opts: QueryOptions) {
   }
 
   if (opts.or) {
-    params.push(`or=${encodeURIComponent(opts.or)}`);
+    const orVal = opts.or.trim();
+    const wrapped = orVal.startsWith('(') ? orVal : `(${orVal})`;
+    params.push(`or=${encodeURIComponent(wrapped)}`);
   }
 
   return `${base}/rest/v1/${table}?${params.join('&')}`;
