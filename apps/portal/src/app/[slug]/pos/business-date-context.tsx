@@ -72,16 +72,16 @@ export function computeRange(mode: BusinessDateMode, dateKey: string): { start: 
   const now = new Date();
   switch (mode) {
     case 'today':
-      return { start: startOfDay(dateKey).toISOString(), end: now.toISOString() };
+      return { start: startOfDay(dateKey).toISOString(), end: endOfDay(dateKey).toISOString() };
     case 'yesterday':
       return { start: startOfDay(dateKey).toISOString(), end: endOfDay(dateKey).toISOString() };
     case 'last7': {
       const s = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
-      return { start: s.toISOString(), end: now.toISOString() };
+      return { start: s.toISOString(), end: endOfDay(todayKey()).toISOString() };
     }
     case 'last30': {
       const s = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
-      return { start: s.toISOString(), end: now.toISOString() };
+      return { start: s.toISOString(), end: endOfDay(todayKey()).toISOString() };
     }
     case 'custom':
       return { start: startOfDay(dateKey).toISOString(), end: endOfDay(dateKey).toISOString() };
