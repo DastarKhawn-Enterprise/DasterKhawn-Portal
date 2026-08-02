@@ -8,9 +8,10 @@ import {
   addStaffRole,
   updateStaffRole,
   removeStaffRole,
+  removeStaffRolesForOtherTenants,
 } from '@sat-sys/gateway-sdk';
-import type { StaffMember, StaffListResult, StaffMeta, CreateStaffData, UpdateStaffData } from './staff-types';
-import { ROLE_DEFAULTS, getAllPermissions } from './staff-types';
+import type { StaffMember, StaffListResult, StaffMeta, CreateStaffData, UpdateStaffData, StaffRole } from './staff-types';
+import { ROLE_DEFAULTS, getAllPermissions, STAFF_ROLES } from './staff-types';
 
 function generatePassword(): string {
   return randomBytes(18)
@@ -171,6 +172,10 @@ export async function createStaffAccount(
     const access = await requireStaffAccess(slug);
     if (!access.authorized) return { success: false, error: access.reason };
 
+    if (!STAFF_ROLES.includes(role as StaffRole)) {
+      return { success: false, error: `Invalid role '${role}'. Valid roles: ${STAFF_ROLES.join(', ')}` };
+    }
+
     if (role !== 'owner' && !access.actorPerms.includes('staff:manage')) {
       return { success: false, error: 'You do not have permission to add staff' };
     }
@@ -222,6 +227,7 @@ export async function createStaffAccount(
       }
       const result = await addStaffRole(targetUserId, tenant.id, role, permissions, meta);
       if (!result.success) return { success: false, error: result.error };
+      try { await removeStaffRolesForOtherTenants(targetUserId, tenant.id, 'owner'); } catch {}
       return { success: true, credentials: { email, password: finalPassword } };
     }
 
@@ -275,6 +281,14 @@ export async function updateStaff(
     const allRows = await getStaffByTenant(tenant.id);
     const target = allRows.find((r) => r.clerk_user_id === clerkUserId);
     if (!target) return { success: false, error: 'Staff not found' };
+
+    if (updates.role && !STAFF_ROLES.includes(updates.role as StaffRole)) {
+      return { success: false, error: `Invalid role '${updates.role}'. Valid roles: ${STAFF_ROLES.join(', ')}` };
+    }
+
+    if (updates.role === 'owner' && access.actorRole !== 'owner' && access.actorRole !== 'super_admin') {
+      return { success: false, error: 'Only owners can assign the owner role' };
+    }
 
     // Last owner protections
     if (updates.role && updates.role !== target.role && target.role === 'owner') {

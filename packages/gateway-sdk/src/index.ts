@@ -358,4 +358,21 @@ export async function removeStaffRole(
   return { success: true };
 }
 
+export async function removeStaffRolesForOtherTenants(
+  clerkUserId: string,
+  keepTenantId: string,
+  skipRole?: string,
+): Promise<{ success: boolean; error?: string }> {
+  const client = getGatewayClient();
+  let query = client
+    .from('staff_roles')
+    .delete()
+    .eq('clerk_user_id', clerkUserId)
+    .neq('tenant_id', keepTenantId);
+  if (skipRole) query = query.neq('role', skipRole);
+  const { error } = await query;
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
 

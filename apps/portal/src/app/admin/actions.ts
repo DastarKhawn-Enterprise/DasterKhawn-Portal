@@ -15,6 +15,7 @@ import {
   updateTenantOwnerClerkId,
   getTenantMenuItemsForTemplate,
   addStaffRole,
+  removeStaffRolesForOtherTenants,
   DEFAULT_ENABLED_MODULES,
   type ThemeConfig,
 } from '@sat-sys/gateway-sdk';
@@ -362,6 +363,9 @@ export async function createTenant(
     if (!staffRoleResult.success) {
       return { success: false, step: 'Assigning owner permissions', error: staffRoleResult.error };
     }
+
+    // Scope the owner account to this tenant only — drop staff/manager memberships in other tenants
+    try { await removeStaffRolesForOtherTenants(ownerClerkId, tenantId, 'owner'); } catch {}
 
     const updateResult = await updateTenantOwnerClerkId(tenantId, ownerClerkId);
     if (!updateResult.success) {
