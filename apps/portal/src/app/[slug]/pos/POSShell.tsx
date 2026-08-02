@@ -19,13 +19,15 @@ interface POSShellProps {
   theme: ThemeConfig;
   slug: string;
   enabledModules: Record<string, boolean>;
+  staffRole?: string;
+  staffPermissions?: string[];
   children: React.ReactNode;
 }
 
-function computeHiddenViews(user: any, enabledModules: Record<string, boolean>): ViewId[] {
+function computeHiddenViews(user: any, enabledModules: Record<string, boolean>, authoritativeRole?: string, authoritativePerms?: string[]): ViewId[] {
   const meta = user?.publicMetadata as Record<string, any> | undefined;
-  const perms: string[] = meta?.permissions ?? [];
-  const role: string = meta?.role ?? '';
+  const perms: string[] = authoritativePerms?.length ? authoritativePerms : (meta?.permissions ?? []);
+  const role: string = authoritativeRole || meta?.role || '';
   const hidden: ViewId[] = [];
   if (role !== 'super_admin' && role !== 'owner') {
     if (!perms.includes('staff:manage')) hidden.push('staff');
@@ -60,7 +62,7 @@ function computeHiddenViews(user: any, enabledModules: Record<string, boolean>):
   return hidden;
 }
 
-export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, theme, slug, enabledModules, children }: POSShellProps) {
+export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, theme, slug, enabledModules, staffRole, staffPermissions, children }: POSShellProps) {
   const { isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -81,7 +83,7 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
     }).catch(() => {});
   }, [authReady, slug]);
 
-  const hiddenViews = user ? computeHiddenViews(user, enabledModules) : [];
+  const hiddenViews = user ? computeHiddenViews(user, enabledModules, staffRole, staffPermissions) : [];
 
   if (!isLoaded || !authReady) {
     return (

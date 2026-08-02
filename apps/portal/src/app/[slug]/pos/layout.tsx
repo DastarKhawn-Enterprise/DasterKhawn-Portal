@@ -1,5 +1,5 @@
 import { auth, currentUser } from '@clerk/nextjs/server';
-import { getTenantBySlug, getTenantEnabledModules } from '@sat-sys/gateway-sdk';
+import { getTenantBySlug, getTenantEnabledModules, getStaffByTenant } from '@sat-sys/gateway-sdk';
 import { notFound, redirect } from 'next/navigation';
 import POSShell from './POSShell';
 
@@ -60,8 +60,22 @@ export default async function POSLayout({
   const tenantId = metadata.tenant_id;
   const role = metadata.role;
 
-  const isAssigned = tenantId && tenantId === tenant.id;
   const isSuperAdmin = role === 'super_admin';
+
+  let staffRole = '';
+  let staffPermissions: string[] = [];
+  if (!isSuperAdmin) {
+    const staffRows = await getStaffByTenant(tenant.id);
+    const me = staffRows.find((s) => s.clerk_user_id === userId);
+    if (me) {
+      staffRole = me.role;
+      staffPermissions = me.permissions || [];
+    }
+  }
+
+  const isAssigned = staffRole === 'owner'
+    || staffRole === 'super_admin'
+    || (tenantId !== undefined && tenantId === tenant.id);
 
   if (!isAssigned && !isSuperAdmin) {
     return <AccessDeniedScreen brandName={tenant.brand_name} />;
@@ -77,6 +91,8 @@ export default async function POSLayout({
       theme={tenant.theme_config}
       slug={params.slug}
       enabledModules={enabledModules}
+      staffRole={staffRole}
+      staffPermissions={staffPermissions}
     >
       {children}
     </POSShell>

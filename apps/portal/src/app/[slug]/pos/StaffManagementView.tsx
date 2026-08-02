@@ -92,12 +92,17 @@ export default function StaffManagementView({ slug }: Props) {
   const publish = usePublish();
   const { user, isLoaded } = useUser();
   const meta = user?.publicMetadata as Record<string, any> | undefined;
-  const perms = (meta?.permissions ?? []) as string[];
-  const role = (meta?.role ?? '') as string;
-  const canManage = hasPermission(perms, role, 'staff:manage');
-  const isOwnerOrSuper = role === 'owner' || role === 'super_admin';
+  const metaPerms = (meta?.permissions ?? []) as string[];
+  const metaRole = (meta?.role ?? '') as string;
 
   const [currentUser, setCurrentUser] = useState<StaffListResult['currentUser'] | null>(null);
+
+  const effRole = currentUser?.role || metaRole;
+  const effPerms = currentUser?.permissions && currentUser.permissions.length > 0
+    ? currentUser.permissions
+    : metaPerms;
+  const canManage = hasPermission(effPerms, effRole, 'staff:manage');
+  const isOwnerOrSuper = effRole === 'owner' || effRole === 'super_admin';
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [summaryCounts, setSummaryCounts] = useState({ total: 0, active: 0, onLeave: 0, inactive: 0 });
   const [loading, setLoading] = useState(true);
@@ -774,10 +779,10 @@ function StaffFormModal({
 }) {
   const [email, setEmail] = useState(staff?.email || '');
   const [name, setName] = useState(staff?.name || '');
-  const [role, setRole] = useState(staff?.role || 'staff');
+  const [role, setRole] = useState(staff?.role || 'cashier');
   const [phone, setPhone] = useState(staff?.phone || '');
   const [employmentStatus, setEmploymentStatus] = useState(staff?.metadata.employment_status || 'active');
-  const [perms, setPerms] = useState<string[]>([...(staff?.permissions || ROLE_DEFAULTS.staff || [])]);
+  const [perms, setPerms] = useState<string[]>([...(staff?.permissions || ROLE_DEFAULTS.cashier || [])]);
   const [password, setPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');

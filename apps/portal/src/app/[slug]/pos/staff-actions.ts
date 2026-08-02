@@ -93,6 +93,10 @@ export async function getStaffList(slug: string): Promise<StaffListResult> {
     } catch {}
 
     const rows = await getStaffByTenant(tenant.id);
+    const me = rows.find((r) => r.clerk_user_id === userId);
+    if (me) {
+      currentUser = { ...currentUser, role: me.role, permissions: me.permissions };
+    }
     const staff: StaffMember[] = [];
 
     const now = new Date();
