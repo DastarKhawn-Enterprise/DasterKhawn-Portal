@@ -2,7 +2,7 @@
 
 import { supa } from './supa-query';
 
-const KDS_SELECT = 'id, order_number, status, total, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, payment_status, tax_amount, service_charge_amount, discount_amount, discount_type, discount_value, notes, invoice_number, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
+const KDS_SELECT = 'id, order_number, status, total, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, payment_status, tax_amount, service_charge_amount, discount_amount, discount_type, discount_value, notes, invoice_number, vehicle_type, vehicle_plate_number, delivery_address, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
 
 export async function fetchKDSOrders(slug: string, statusFilter?: string, excludeStatus?: string[], dateRange?: { start: string; end: string }) {
   const opts: any = {

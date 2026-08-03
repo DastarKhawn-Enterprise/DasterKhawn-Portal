@@ -8,7 +8,7 @@ import { usePOS } from './pos-context';
 import { searchCustomersSupa, checkDuplicatePhone, normalizePhone, findOrCreateCustomerSupa } from './customer-utils';
 import { usePublish } from './use-event';
 import { generateUniqueOrderNumber } from './order-utils';
-import { validateCustomerName } from './customer-validation';
+import { validateCustomerName, validateCustomerPhone, validateDeliveryAddress } from './customer-validation';
 
 interface MenuItem { id: string; name: string; description?: string; price: number; category?: string; available?: boolean; }
 interface CartItem { id: string; name: string; price: number; quantity: number; uid: string; image?: string; notes?: string; }
@@ -114,6 +114,16 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
   const [customerName, setCustomerName] = useState('');
   const [customerNameError, setCustomerNameError] = useState('');
   const customerNameRef = useRef<HTMLInputElement>(null);
+
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerPhoneError, setCustomerPhoneError] = useState('');
+  const customerPhoneRef = useRef<HTMLInputElement>(null);
+
+  const [vehicleType, setVehicleType] = useState('');
+  const [vehiclePlateNumber, setVehiclePlateNumber] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryAddressError, setDeliveryAddressError] = useState('');
+  const deliveryAddressRef = useRef<HTMLInputElement>(null);
 
   const [discount, setDiscount] = useState<{ type: 'percentage' | 'fixed'; value: number } | null>(null);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
@@ -239,6 +249,13 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
   const discountAmount = useMemo(() => { if (!discount) return 0; return discount.type === 'percentage' ? (subtotal + serviceCharge + taxAmount) * (discount.value / 100) : discount.value; }, [discount, subtotal, serviceCharge, taxAmount]);
   const grandTotal = useMemo(() => Math.max(0, subtotal + serviceCharge + taxAmount - discountAmount), [subtotal, serviceCharge, taxAmount, discountAmount]);
 
+  const newOrderCustomerFieldsError = (() => {
+    if (validateCustomerName(customerName)) return true;
+    if (orderType !== 'dine_in' && validateCustomerPhone(customerPhone)) return true;
+    if (orderType === 'delivery' && validateDeliveryAddress(deliveryAddress)) return true;
+    return false;
+  })();
+
   const handlePlaceOrder = useCallback(async () => {
     if (cart.length === 0 || creatingOrderRef.current) return;
     const nameError = validateCustomerName(customerName);
@@ -247,13 +264,29 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
       requestAnimationFrame(() => customerNameRef.current?.focus());
       return;
     }
+    if (orderType !== 'dine_in') {
+      const phoneError = validateCustomerPhone(customerPhone);
+      if (phoneError) {
+        setCustomerPhoneError(phoneError);
+        requestAnimationFrame(() => customerPhoneRef.current?.focus());
+        return;
+      }
+    }
+    if (orderType === 'delivery') {
+      const addressError = validateDeliveryAddress(deliveryAddress);
+      if (addressError) {
+        setDeliveryAddressError(addressError);
+        requestAnimationFrame(() => deliveryAddressRef.current?.focus());
+        return;
+      }
+    }
     creatingOrderRef.current = true; setCheckingOut(true); setOrderError('');
     try {
       // Auto-create/resolve the customer BEFORE placing the order (no popup, no manual Customers page visit).
       let resolvedCustomerId: string | null = selectedCustomer?.id || null;
       let resolvedCustomerPhone: string | null = selectedCustomer?.phone || null;
       if (!resolvedCustomerId) {
-        const custResult = await findOrCreateCustomerSupa(slug, { name: customerName, phone: selectedCustomer?.phone || null });
+        const custResult = await findOrCreateCustomerSupa(slug, { name: customerName, phone: customerPhone || null });
         if (!custResult.ok) {
           setOrderError(custResult.error || 'Failed to save customer');
           setCheckingOut(false);
@@ -270,7 +303,14 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
       let pickupTime: string | null = null;
       if (orderType === 'takeaway' || orderType === 'delivery') { const d = new Date(); d.setMinutes(d.getMinutes() + 20); pickupTime = d.toISOString(); }
       const orderNumber = await generateUniqueOrderNumber(slug);
-      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', order_number: orderNumber, total: grandTotal, tax_amount: taxAmount, order_type: orderType, customer_id: resolvedCustomerId, customer_name: customerName.trim(), customer_phone: resolvedCustomerPhone, pickup_time: pickupTime };
+      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', order_number: orderNumber, total: grandTotal, tax_amount: taxAmount, order_type: orderType, customer_id: resolvedCustomerId, customer_name: customerName.trim(), customer_phone: customerPhone || resolvedCustomerPhone || null, pickup_time: pickupTime };
+      if (orderType === 'drive_thru') {
+        orderPayload.vehicle_type = vehicleType || null;
+        orderPayload.vehicle_plate_number = vehiclePlateNumber || null;
+      }
+      if (orderType === 'delivery') {
+        orderPayload.delivery_address = deliveryAddress.trim();
+      }
       if (orderType === 'dine_in' && selectedTableId) orderPayload.table_id = selectedTableId;
       const orderResult = await supa(slug, { table: 'orders', method: 'insert', select: 'id, order_number, created_at', single: true, body: orderPayload });
       if (!orderResult.ok || !orderResult.data) { setOrderError(orderResult.error || 'Failed to create order'); setCheckingOut(false); creatingOrderRef.current = false; return; }
@@ -283,11 +323,11 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
       // Send to Kitchen Display immediately — no payment needed
       publish('orders', 'INSERT', { id: newOrder.id, status: 'pending', order_type: orderType });
       // Clear cart for new order
-      setCart([]); setKeypadValue(''); setKeypadDisplay(''); setDiscount(null); setOrderNotes(''); setSpecialInstructions(''); setSelectedCustomer(null); setCustomerSearch(''); setCustomerResults([]); setSelectedTableId(null);
+      setCart([]); setKeypadValue(''); setKeypadDisplay(''); setDiscount(null); setOrderNotes(''); setSpecialInstructions(''); setSelectedCustomer(null); setCustomerSearch(''); setCustomerResults([]); setSelectedTableId(null); setCustomerName(''); setCustomerPhone(''); setVehicleType(''); setVehiclePlateNumber(''); setDeliveryAddress(''); setCustomerNameError(''); setCustomerPhoneError(''); setDeliveryAddressError('');
       calcRef.current = { buffer: 0, op: null, newNumber: false };
     } catch (e: any) { console.error('[PlaceOrder]', e); setOrderError(e.message || 'Order failed'); }
     setCheckingOut(false); creatingOrderRef.current = false;
-  }, [cart, orderType, grandTotal, taxAmount, serviceCharge, selectedCustomer, customerName, selectedTableId, slug]);
+  }, [cart, orderType, grandTotal, taxAmount, serviceCharge, selectedCustomer, customerName, customerPhone, vehicleType, vehiclePlateNumber, deliveryAddress, selectedTableId, slug]);
 
   const filteredItems = useMemo(() => {
     let items = menuItems;
@@ -483,6 +523,74 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
             {customerNameError && <p id="neworder-customer-name-error" className="text-[11px] text-red-600 mt-1">{customerNameError}</p>}
           </div>
 
+          {orderType !== 'dine_in' && (
+            <div className="px-4 py-2 border-b border-gray-100 shrink-0">
+              <label htmlFor="neworder-customer-phone" className="block text-xs font-medium text-gray-600 mb-1">Phone Number <span className="text-red-500">*</span></label>
+              <input
+                id="neworder-customer-phone"
+                ref={customerPhoneRef}
+                type="tel"
+                value={customerPhone}
+                onChange={(e) => { setCustomerPhone(e.target.value); if (customerPhoneError) setCustomerPhoneError(''); }}
+                placeholder="e.g. 03001234567"
+                aria-invalid={!!customerPhoneError}
+                aria-describedby={customerPhoneError ? 'neworder-customer-phone-error' : undefined}
+                className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (customerPhoneError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
+              />
+              {customerPhoneError && <p id="neworder-customer-phone-error" className="text-[11px] text-red-600 mt-1">{customerPhoneError}</p>}
+            </div>
+          )}
+
+          {orderType === 'delivery' && (
+            <div className="px-4 py-2 border-b border-gray-100 shrink-0">
+              <label htmlFor="neworder-delivery-address" className="block text-xs font-medium text-gray-600 mb-1">Delivery Address <span className="text-red-500">*</span></label>
+              <input
+                id="neworder-delivery-address"
+                ref={deliveryAddressRef}
+                type="text"
+                value={deliveryAddress}
+                onChange={(e) => { setDeliveryAddress(e.target.value); if (deliveryAddressError) setDeliveryAddressError(''); }}
+                placeholder="House #, Street, Area, City"
+                maxLength={200}
+                aria-invalid={!!deliveryAddressError}
+                aria-describedby={deliveryAddressError ? 'neworder-delivery-address-error' : undefined}
+                className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (deliveryAddressError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
+              />
+              {deliveryAddressError && <p id="neworder-delivery-address-error" className="text-[11px] text-red-600 mt-1">{deliveryAddressError}</p>}
+            </div>
+          )}
+
+          {orderType === 'drive_thru' && (
+            <div className="px-4 py-2 border-b border-gray-100 shrink-0 space-y-2">
+              <div>
+                <label htmlFor="neworder-vehicle-type" className="block text-xs font-medium text-gray-600 mb-1">Vehicle Type</label>
+                <select
+                  id="neworder-vehicle-type"
+                  value={vehicleType}
+                  onChange={(e) => setVehicleType(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg bg-white"
+                >
+                  <option value="">-- Select --</option>
+                  <option value="Car">Car</option>
+                  <option value="Motorcycle">Motorcycle</option>
+                  <option value="Van">Van</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="neworder-vehicle-plate" className="block text-xs font-medium text-gray-600 mb-1">Plate Number</label>
+                <input
+                  id="neworder-vehicle-plate"
+                  type="text"
+                  value={vehiclePlateNumber}
+                  onChange={(e) => setVehiclePlateNumber(e.target.value)}
+                  placeholder="e.g. ABC-1234"
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+            </div>
+          )}
+
           {orderType === 'dine_in' && (
             <div className="px-4 py-2 border-b border-gray-100 shrink-0">
               <select value={selectedTableId || ''} onChange={(e) => setSelectedTableId(e.target.value || null)} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg bg-white">
@@ -535,7 +643,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
 
           <div className="border-t border-gray-200 px-4 py-3 flex gap-2 shrink-0">
             <button onClick={handleClearCart} className="flex-1 py-2.5 rounded-xl text-xs font-semibold border border-gray-200 text-gray-500 hover:bg-gray-50">Clear</button>
-            <button onClick={handlePlaceOrder} disabled={cart.length === 0 || checkingOut || !!validateCustomerName(customerName)} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg" style={{ backgroundColor: cart.length > 0 && !validateCustomerName(customerName) ? '#C9972B' : '#9CA3AF' }}>{checkingOut ? 'Placing...' : 'Place Order'}</button>
+            <button onClick={handlePlaceOrder} disabled={cart.length === 0 || checkingOut || newOrderCustomerFieldsError} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg" style={{ backgroundColor: cart.length > 0 && !newOrderCustomerFieldsError ? '#C9972B' : '#9CA3AF' }}>{checkingOut ? 'Placing...' : 'Place Order'}</button>
           </div>
         </div>
 
@@ -564,6 +672,19 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
             />
             {customerNameError && <p className="text-[10px] text-red-600 mt-0.5">{customerNameError}</p>}
           </div>
+          {orderType !== 'dine_in' && (
+            <div className="px-4 py-1.5 border-b border-gray-100">
+              <input
+                type="tel"
+                value={customerPhone}
+                onChange={(e) => { setCustomerPhone(e.target.value); if (customerPhoneError) setCustomerPhoneError(''); }}
+                placeholder="Phone Number (required)"
+                aria-invalid={!!customerPhoneError}
+                className={'w-full px-2.5 py-1.5 text-sm border rounded-md ' + (customerPhoneError ? 'border-red-400 bg-red-50' : 'border-gray-200')}
+              />
+              {customerPhoneError && <p className="text-[10px] text-red-600 mt-0.5">{customerPhoneError}</p>}
+            </div>
+          )}
           <div className="flex items-center gap-2 px-4 py-2">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-gray-800">{currencySymbol}{grandTotal.toFixed(2)}</p>
@@ -571,7 +692,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
             </div>
             <button onClick={() => setShowCalculator(!showCalculator)} className={'px-2 py-1.5 text-[10px] font-semibold rounded-md border transition-colors ' + (showCalculator ? 'bg-gray-800 text-white border-gray-800' : 'border-gray-200 text-gray-500')}>{showCalculator ? 'Hide Calc' : 'Calc'}</button>
             <button onClick={() => { setShowCustomerModal(true); setNewCustomerError(''); }} className="px-2.5 py-1.5 text-[10px] font-semibold border border-gray-200 rounded-md text-gray-600">Customer</button>
-            <button onClick={handlePlaceOrder} disabled={cart.length === 0 || checkingOut || !!validateCustomerName(customerName)} className="px-5 py-1.5 rounded-md text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: cart.length > 0 && !validateCustomerName(customerName) ? '#C9972B' : '#9CA3AF' }}>{checkingOut ? 'Placing...' : 'Order'}</button>
+            <button onClick={handlePlaceOrder} disabled={cart.length === 0 || checkingOut || newOrderCustomerFieldsError} className="px-5 py-1.5 rounded-md text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: cart.length > 0 && !newOrderCustomerFieldsError ? '#C9972B' : '#9CA3AF' }}>{checkingOut ? 'Placing...' : 'Order'}</button>
           </div>
         </div>
 

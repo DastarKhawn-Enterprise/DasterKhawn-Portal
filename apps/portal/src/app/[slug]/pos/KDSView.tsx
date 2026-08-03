@@ -33,6 +33,9 @@ interface KDSOrder {
   customer_name?: string | null;
   customer_phone?: string | null;
   pickup_time?: string | null;
+  vehicle_type?: string | null;
+  vehicle_plate_number?: string | null;
+  delivery_address?: string | null;
   customer_id?: string | null;
   payment_status?: string | null;
   tax_amount?: number;
@@ -664,6 +667,9 @@ export default function KDSView({ slug, theme, brandName }: Props) {
               customer_name: row.customer_name ?? null,
               customer_phone: row.customer_phone ?? null,
               pickup_time: row.pickup_time ?? null,
+              vehicle_type: row.vehicle_type ?? null,
+              vehicle_plate_number: row.vehicle_plate_number ?? null,
+              delivery_address: row.delivery_address ?? null,
               customer_id: row.customer_id ?? null,
               payment_status: row.payment_status ?? null,
               tax_amount: row.tax_amount != null ? Number(row.tax_amount) : undefined,
@@ -1052,6 +1058,9 @@ export default function KDSView({ slug, theme, brandName }: Props) {
             customerName: receiptOrder.customer_name,
             customerPhone: receiptOrder.customer_phone,
             pickupTime: receiptOrder.pickup_time,
+            vehicleType: receiptOrder.vehicle_type,
+            vehiclePlateNumber: receiptOrder.vehicle_plate_number,
+            deliveryAddress: receiptOrder.delivery_address,
             tableNumber: null,
             items: (receiptOrder.order_items || []).map((oi) => ({
               name: oi.menu_items?.name || 'Unknown',

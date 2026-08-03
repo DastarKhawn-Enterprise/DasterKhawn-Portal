@@ -18,6 +18,9 @@ interface ReceiptData {
   customerName?: string | null;
   customerPhone?: string | null;
   pickupTime?: string | null;
+  vehicleType?: string | null;
+  vehiclePlateNumber?: string | null;
+  deliveryAddress?: string | null;
   tableNumber?: string | null;
   items: ReceiptItem[];
   taxAmount?: number;
@@ -138,6 +141,18 @@ function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData
             <span>
               {new Date(data.pickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
+          </div>
+        )}
+        {(data.vehicleType || data.vehiclePlateNumber) && (
+          <div className="flex justify-between">
+            <span>Vehicle</span>
+            <span>{[data.vehicleType, data.vehiclePlateNumber].filter(Boolean).join(' · ')}</span>
+          </div>
+        )}
+        {data.deliveryAddress && (
+          <div className="flex justify-between">
+            <span>Address</span>
+            <span>{data.deliveryAddress}</span>
           </div>
         )}
       </div>

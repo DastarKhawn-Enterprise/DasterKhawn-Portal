@@ -16,7 +16,7 @@ import { getCachedMenuItems, getCachedSettings } from '@/lib/offline-db';
 import { useEvent, usePublish } from './use-event';
 import { generateInvoiceNumber } from './invoice-utils';
 import { generateUniqueOrderNumber } from './order-utils';
-import { validateCustomerName } from './customer-validation';
+import { validateCustomerName, validateCustomerPhone, validateDeliveryAddress } from './customer-validation';
 import { sortOrdersNewestFirst } from './order-sort-utils';
 import { useBusinessDate } from './business-date-context';
 
@@ -44,6 +44,9 @@ interface Order {
   customer_phone?: string | null;
   pickup_time?: string | null;
   customer_id?: string | null;
+  vehicle_type?: string | null;
+  vehicle_plate_number?: string | null;
+  delivery_address?: string | null;
   payment_status?: string | null;
   amount_paid?: number;
   amount_due?: number;
@@ -98,7 +101,7 @@ const statusColor: Record<string, string> = {
   cancelled: 'bg-red-50 text-red-700 border border-red-200',
 };
 
-const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, service_charge_amount, discount_amount, discount_type, discount_value, notes, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, payment_status, amount_paid, amount_due, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
+const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, service_charge_amount, discount_amount, discount_type, discount_value, notes, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, vehicle_type, vehicle_plate_number, delivery_address, payment_status, amount_paid, amount_due, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
 
 const ORDER_TYPE_BADGE: Record<string, string> = {
   dine_in: 'bg-purple-50 text-purple-700 border border-purple-200',
@@ -170,10 +173,15 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
   // Customer fields (takeaway / delivery / drive_thru)
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
   const [pickupASAP, setPickupASAP] = useState(true);
   const [pickupScheduledTime, setPickupScheduledTime] = useState('');
   const [customerNameError, setCustomerNameError] = useState('');
+  const [customerPhoneError, setCustomerPhoneError] = useState('');
+  const [deliveryAddressError, setDeliveryAddressError] = useState('');
   const customerNameRef = useRef<HTMLInputElement>(null);
+  const customerPhoneRef = useRef<HTMLInputElement>(null);
+  const deliveryAddressRef = useRef<HTMLInputElement>(null);
 
   // Order type selector (all-orders view only)
   const [selectedOrderType, setSelectedOrderType] = useState<OrderTypeOption>('dine_in');
@@ -411,6 +419,9 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
             customer_phone: row.customer_phone ?? null,
             pickup_time: row.pickup_time ?? null,
             customer_id: row.customer_id ?? null,
+            vehicle_type: row.vehicle_type ?? null,
+            vehicle_plate_number: row.vehicle_plate_number ?? null,
+            delivery_address: row.delivery_address ?? null,
             payment_status: row.payment_status ?? null,
             amount_paid: row.amount_paid != null ? Number(row.amount_paid) : undefined,
             amount_due: row.amount_due != null ? Number(row.amount_due) : undefined,
@@ -455,14 +466,30 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
   const resetCustomerFields = useCallback(() => {
     setCustomerName('');
     setCustomerPhone('');
+    setDeliveryAddress('');
     setPickupASAP(true);
     setPickupScheduledTime('');
     setVehicleType('');
     setVehiclePlateNumber('');
     setCustomerNameError('');
+    setCustomerPhoneError('');
+    setDeliveryAddressError('');
   }, []);
 
   const currencySymbolVal = settings?.currencySymbol || 'Rs.';
+  const customerFieldsError = (() => {
+    const nameErr = validateCustomerName(customerName);
+    if (nameErr) return nameErr;
+    if (effectiveOrderType !== 'dine_in') {
+      const phoneErr = validateCustomerPhone(customerPhone);
+      if (phoneErr) return phoneErr;
+    }
+    if (effectiveOrderType === 'delivery') {
+      const addressErr = validateDeliveryAddress(deliveryAddress);
+      if (addressErr) return addressErr;
+    }
+    return null;
+  })();
   const subtotal = useMemo(() => cart.reduce((s, i) => s + i.price * i.quantity, 0), [cart]);
   const isDineIn = effectiveOrderType === 'dine_in';
   const isTakeaway = effectiveOrderType === 'takeaway';
@@ -554,6 +581,22 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
       requestAnimationFrame(() => customerNameRef.current?.focus());
       return;
     }
+    if (effectiveOrderType !== 'dine_in') {
+      const phoneError = validateCustomerPhone(customerPhone);
+      if (phoneError) {
+        setCustomerPhoneError(phoneError);
+        requestAnimationFrame(() => customerPhoneRef.current?.focus());
+        return;
+      }
+    }
+    if (effectiveOrderType === 'delivery') {
+      const addressError = validateDeliveryAddress(deliveryAddress);
+      if (addressError) {
+        setDeliveryAddressError(addressError);
+        requestAnimationFrame(() => deliveryAddressRef.current?.focus());
+        return;
+      }
+    }
     creatingOrderRef.current = true;
     setCheckingOut(true);
     setCheckoutError('');
@@ -599,6 +642,13 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
         if (customerPhone) orderPayload.customer_phone = customerPhone;
         else if (resolvedCustomerPhone) orderPayload.customer_phone = resolvedCustomerPhone;
         if (effectiveOrderType === 'takeaway') orderPayload.pickup_time = pickupTime;
+        if (effectiveOrderType === 'drive_thru') {
+          orderPayload.vehicle_type = vehicleType || null;
+          orderPayload.vehicle_plate_number = vehiclePlateNumber || null;
+        }
+        if (effectiveOrderType === 'delivery') {
+          orderPayload.delivery_address = deliveryAddress.trim();
+        }
       }
       if (effectiveOrderType === 'dine_in' && selectedTableId) {
         orderPayload.table_id = selectedTableId;
@@ -640,6 +690,9 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
         customer_name: customerName.trim(),
         customer_phone: shouldCaptureCustomer ? (customerPhone || resolvedCustomerPhone || null) : undefined,
         pickup_time: shouldCaptureCustomer && effectiveOrderType === 'takeaway' ? pickupTime : undefined,
+        vehicle_type: shouldCaptureCustomer && effectiveOrderType === 'drive_thru' ? (vehicleType || null) : undefined,
+        vehicle_plate_number: shouldCaptureCustomer && effectiveOrderType === 'drive_thru' ? (vehiclePlateNumber || null) : undefined,
+        delivery_address: shouldCaptureCustomer && effectiveOrderType === 'delivery' ? deliveryAddress.trim() : undefined,
         order_items: cart.map((item) => ({
           menu_item_id: item.id,
           quantity: item.quantity,
@@ -652,7 +705,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
     creatingOrderRef.current = false;
-  }, [cart, grandTotal, taxAmt, discountAmount, discount, orderNotes, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, slug, resetCustomerFields, cfg.newOrderMode, router, bd.isToday]);
+  }, [cart, grandTotal, taxAmt, discountAmount, discount, orderNotes, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, deliveryAddress, vehicleType, vehiclePlateNumber, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, slug, resetCustomerFields, cfg.newOrderMode, router, bd.isToday]);
 
   const handlePaymentSuccess = useCallback((_result: any) => {
     const order = paymentOrderRef.current;
@@ -939,6 +992,10 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                 <div className="text-xs text-gray-500">
                   {order.customer_name}
                   {order.customer_phone ? ` · ${order.customer_phone}` : ''}
+                  {order.vehicle_type || order.vehicle_plate_number
+                    ? ` · ${[order.vehicle_type, order.vehicle_plate_number].filter(Boolean).join(' · ')}`
+                    : ''}
+                  {order.delivery_address ? ` · ${order.delivery_address}` : ''}
                 </div>
               ) : (
                 <div className="text-xs text-gray-500">
@@ -1004,7 +1061,13 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                     {selectedOrder.pickup_time
                       ? ` · Pickup ${new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
                       : selectedOrder.order_type === 'takeaway' ? ' · ASAP' : ''}
+                    {selectedOrder.vehicle_type || selectedOrder.vehicle_plate_number
+                      ? ` · ${[selectedOrder.vehicle_type, selectedOrder.vehicle_plate_number].filter(Boolean).join(' · ')}`
+                      : ''}
                   </p>
+                  {selectedOrder.delivery_address && (
+                    <p className="text-sm text-gray-500">Deliver to: {selectedOrder.delivery_address}</p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${statusColor[selectedOrder.status] || ''}`}>
@@ -1155,7 +1218,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
               {checkoutError && <p className="text-[11px] text-red-600 mb-2">{checkoutError}</p>}
               <button
                 onClick={handleCheckout}
-                disabled={cart.length === 0 || checkingOut || !!validateCustomerName(customerName)}
+                disabled={cart.length === 0 || checkingOut || !!customerFieldsError}
                 className="w-full py-2.5 rounded-lg text-sm font-bold text-white disabled:opacity-50"
                 style={{ backgroundColor: theme.primaryColor }}
               >
@@ -1256,14 +1319,16 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                     {customerNameError && <p id="curorders-customer-name-error" className="text-[11px] text-red-600 mt-1">{customerNameError}</p>}
                   </div>
                   <div className="flex-1 max-w-44">
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Phone</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Phone <span className="text-red-500">*</span></label>
                     <input
+                      ref={customerPhoneRef}
                       type="tel"
                       value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      placeholder="(Optional)"
-                      className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                      onChange={(e) => { setCustomerPhone(e.target.value); if (customerPhoneError) setCustomerPhoneError(''); }}
+                      placeholder="e.g. 03001234567"
+                      className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (customerPhoneError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
                     />
+                    {customerPhoneError && <p className="text-[11px] text-red-600 mt-1">{customerPhoneError}</p>}
                   </div>
                   <div className="flex-shrink-0">
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Pickup</label>
@@ -1306,14 +1371,29 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                     {customerNameError && <p id="curorders-customer-name-error" className="text-[11px] text-red-600 mt-1">{customerNameError}</p>}
                   </div>
                   <div className="flex-1 max-w-44">
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Phone</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Phone <span className="text-red-500">*</span></label>
                     <input
+                      ref={customerPhoneRef}
                       type="tel"
                       value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      placeholder="(Optional)"
-                      className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                      onChange={(e) => { setCustomerPhone(e.target.value); if (customerPhoneError) setCustomerPhoneError(''); }}
+                      placeholder="e.g. 03001234567"
+                      className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (customerPhoneError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
                     />
+                    {customerPhoneError && <p className="text-[11px] text-red-600 mt-1">{customerPhoneError}</p>}
+                  </div>
+                  <div className="flex-1 max-w-44">
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Address <span className="text-red-500">*</span></label>
+                    <input
+                      ref={deliveryAddressRef}
+                      type="text"
+                      value={deliveryAddress}
+                      onChange={(e) => { setDeliveryAddress(e.target.value); if (deliveryAddressError) setDeliveryAddressError(''); }}
+                      placeholder="House #, Street, Area"
+                      maxLength={200}
+                      className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (deliveryAddressError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
+                    />
+                    {deliveryAddressError && <p className="text-[11px] text-red-600 mt-1">{deliveryAddressError}</p>}
                   </div>
                 </div>
               )}
@@ -1335,14 +1415,16 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                     {customerNameError && <p id="curorders-customer-name-error" className="text-[11px] text-red-600 mt-1">{customerNameError}</p>}
                   </div>
                   <div className="w-36">
-                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Phone</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Phone <span className="text-red-500">*</span></label>
                     <input
+                      ref={customerPhoneRef}
                       type="tel"
                       value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      placeholder="(Optional)"
-                      className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                      onChange={(e) => { setCustomerPhone(e.target.value); if (customerPhoneError) setCustomerPhoneError(''); }}
+                      placeholder="e.g. 03001234567"
+                      className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (customerPhoneError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
                     />
+                    {customerPhoneError && <p className="text-[11px] text-red-600 mt-1">{customerPhoneError}</p>}
                   </div>
                   <div className="w-32">
                     <label className="block text-xs font-medium text-gray-600 mb-0.5">Vehicle</label>
@@ -1488,7 +1570,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                 {checkoutError && <p className="text-[11px] text-red-600 mb-2">{checkoutError}</p>}
                 <button
                   onClick={handleCheckout}
-                  disabled={cart.length === 0 || checkingOut || !!validateCustomerName(customerName)}
+                  disabled={cart.length === 0 || checkingOut || !!customerFieldsError}
                   className="w-full py-2.5 rounded-lg text-sm font-bold text-white disabled:opacity-50"
                   style={{ backgroundColor: theme.primaryColor }}
                 >
@@ -1555,14 +1637,18 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                   {customerNameError && <p id="curorders-customer-name-error" className="text-[11px] text-red-600 mt-1">{customerNameError}</p>}
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number <span className="text-red-500">*</span></label>
                   <input
+                    ref={customerPhoneRef}
                     type="tel"
                     value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    placeholder="(Optional)"
-                    className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                    onChange={(e) => { setCustomerPhone(e.target.value); if (customerPhoneError) setCustomerPhoneError(''); }}
+                    placeholder="e.g. 03001234567"
+                    aria-invalid={!!customerPhoneError}
+                    aria-describedby={customerPhoneError ? 'curorders-customer-phone-error' : undefined}
+                    className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (customerPhoneError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
                   />
+                  {customerPhoneError && <p id="curorders-customer-phone-error" className="text-[11px] text-red-600 mt-1">{customerPhoneError}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Pickup Time</label>
@@ -1587,7 +1673,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                 </div>
               </div>
             )}
-            {/* Delivery: customer name + phone only */}
+            {/* Delivery: customer name + phone + delivery address */}
             {effectiveOrderType === 'delivery' && (
               <div className="px-4 py-3 border-b border-gray-200 space-y-2">
                 <div>
@@ -1606,14 +1692,33 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                   {customerNameError && <p id="curorders-customer-name-error" className="text-[11px] text-red-600 mt-1">{customerNameError}</p>}
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number <span className="text-red-500">*</span></label>
                   <input
+                    ref={customerPhoneRef}
                     type="tel"
                     value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    placeholder="(Optional)"
-                    className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                    onChange={(e) => { setCustomerPhone(e.target.value); if (customerPhoneError) setCustomerPhoneError(''); }}
+                    placeholder="e.g. 03001234567"
+                    aria-invalid={!!customerPhoneError}
+                    aria-describedby={customerPhoneError ? 'curorders-customer-phone-error' : undefined}
+                    className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (customerPhoneError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
                   />
+                  {customerPhoneError && <p id="curorders-customer-phone-error" className="text-[11px] text-red-600 mt-1">{customerPhoneError}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Delivery Address <span className="text-red-500">*</span></label>
+                  <input
+                    ref={deliveryAddressRef}
+                    type="text"
+                    value={deliveryAddress}
+                    onChange={(e) => { setDeliveryAddress(e.target.value); if (deliveryAddressError) setDeliveryAddressError(''); }}
+                    placeholder="House #, Street, Area, City"
+                    maxLength={200}
+                    aria-invalid={!!deliveryAddressError}
+                    aria-describedby={deliveryAddressError ? 'curorders-delivery-address-error' : undefined}
+                    className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (deliveryAddressError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
+                  />
+                  {deliveryAddressError && <p id="curorders-delivery-address-error" className="text-[11px] text-red-600 mt-1">{deliveryAddressError}</p>}
                 </div>
               </div>
             )}
@@ -1636,14 +1741,18 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                   {customerNameError && <p id="curorders-customer-name-error" className="text-[11px] text-red-600 mt-1">{customerNameError}</p>}
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number <span className="text-red-500">*</span></label>
                   <input
+                    ref={customerPhoneRef}
                     type="tel"
                     value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    placeholder="(Optional)"
-                    className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg"
+                    onChange={(e) => { setCustomerPhone(e.target.value); if (customerPhoneError) setCustomerPhoneError(''); }}
+                    placeholder="e.g. 03001234567"
+                    aria-invalid={!!customerPhoneError}
+                    aria-describedby={customerPhoneError ? 'curorders-customer-phone-error' : undefined}
+                    className={'w-full px-2.5 py-1.5 text-sm border rounded-lg ' + (customerPhoneError ? 'border-red-400 bg-red-50' : 'border-gray-300')}
                   />
+                  {customerPhoneError && <p id="curorders-customer-phone-error" className="text-[11px] text-red-600 mt-1">{customerPhoneError}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Vehicle Type</label>
@@ -1857,6 +1966,9 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
           customerName: receiptOrder.customer_name,
           customerPhone: receiptOrder.customer_phone,
           pickupTime: receiptOrder.pickup_time,
+          vehicleType: receiptOrder.vehicle_type,
+          vehiclePlateNumber: receiptOrder.vehicle_plate_number,
+          deliveryAddress: receiptOrder.delivery_address,
           tableNumber: null,
           items: receiptOrder.order_items.map((oi) => ({
             name: oi.menu_items?.name || 'Unknown',
