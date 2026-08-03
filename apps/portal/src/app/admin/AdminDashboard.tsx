@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { toggleTenantStatus, saveTenantTheme, saveTenantModules, getRevenueStats } from './actions';
 import type { ThemeConfig } from '@sat-sys/gateway-sdk';
 import CreateTenantModal from './CreateTenantModal';
+import ThemeEditorModal from './ThemeEditorModal';
 
 interface TenantRow {
   id: string;
@@ -271,8 +272,9 @@ export default function AdminDashboard({ tenants }: AdminDashboardProps) {
       )}
 
       {themeTarget && (
-        <ThemeModal
-          tenant={themeTarget}
+        <ThemeEditorModal
+          brandName={themeTarget.brand_name}
+          initialTheme={themeTarget.theme_config}
           onSave={async (theme) => {
             const r = await saveTenantTheme(themeTarget.id, theme);
             if (r.success) {
@@ -364,132 +366,6 @@ function SuspendModal({
         </div>
       </div>
     </ModalOverlay>
-  );
-}
-
-/* ─── Theme Editor Modal ─── */
-
-function ThemeModal({
-  tenant,
-  onSave,
-  onClose,
-}: {
-  tenant: TenantRow;
-  onSave: (theme: ThemeConfig) => Promise<void>;
-  onClose: () => void;
-}) {
-  const [theme, setTheme] = useState<ThemeConfig>({
-    primaryColor: tenant.theme_config?.primaryColor || '#ff6600',
-    secondaryColor: tenant.theme_config?.secondaryColor || '#1a1a1a',
-    logoUrl: tenant.theme_config?.logoUrl || '',
-    fontFamily: tenant.theme_config?.fontFamily || 'Inter',
-  });
-  const [saving, setSaving] = useState(false);
-
-  const update = (field: keyof ThemeConfig, value: string) => {
-    setTheme((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    await onSave(theme);
-    setSaving(false);
-  };
-
-  return (
-    <ModalOverlay onClose={onClose}>
-      <div className="bg-white rounded-lg p-6 max-w-lg mx-auto shadow-xl w-full">
-        <h2 className="text-xl font-bold mb-4">Theme — {tenant.brand_name}</h2>
-
-        <div className="space-y-4">
-          <ColorField label="Primary Color" value={theme.primaryColor} onChange={(v) => update('primaryColor', v)} />
-          <ColorField label="Secondary Color" value={theme.secondaryColor} onChange={(v) => update('secondaryColor', v)} />
-          <TextField label="Logo URL" value={theme.logoUrl} onChange={(v) => update('logoUrl', v)} placeholder="https://..." />
-          <TextField label="Font Family" value={theme.fontFamily} onChange={(v) => update('fontFamily', v)} placeholder="Inter" />
-        </div>
-
-        {/* Live preview */}
-        <div className="mt-6 border rounded-lg overflow-hidden">
-          <div className="px-4 py-2 text-white text-sm font-bold" style={{ backgroundColor: theme.primaryColor }}>
-            Preview Header
-          </div>
-          <div className="px-4 py-3 text-white text-sm" style={{ backgroundColor: theme.secondaryColor }}>
-            Preview Footer
-          </div>
-          <p className="px-4 py-2 text-sm" style={{ fontFamily: theme.fontFamily }}>
-            Sample text in {theme.fontFamily || 'system font'}
-          </p>
-        </div>
-
-        <div className="flex gap-3 justify-end mt-6">
-          <button onClick={onClose} className="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-50">
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-4 py-2 rounded text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : 'Save Theme'}
-          </button>
-        </div>
-      </div>
-    </ModalOverlay>
-  );
-}
-
-function ColorField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      <div className="flex gap-2 items-center">
-        <input
-          type="color"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-10 h-10 rounded border cursor-pointer"
-        />
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="flex-1 border rounded px-3 py-1.5 text-sm font-mono"
-        />
-      </div>
-    </div>
-  );
-}
-
-function TextField({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full border rounded px-3 py-1.5 text-sm"
-      />
-    </div>
   );
 }
 

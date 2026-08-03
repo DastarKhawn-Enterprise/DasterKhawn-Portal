@@ -150,20 +150,39 @@ No page uses the semantic utilities yet — that is the (future, intentional)
 migration step. Existing markup is unaffected because the defaults equal the
 old hard-coded values.
 
-## 7. Extending a tenant theme (future flow)
+## 7. Extending a tenant theme
 
 1. **Schema** — `tenants.theme_config` already accepts the full `ThemeConfig`
-   object, so new `tokens` / `branding` / `accentColor` properties are persisted
-   automatically by `updateTenantTheme(tenantId, theme)`.
-   > Note: the DB `theme_config` jsonb column stores nested groups (e.g.
-   > `tokens.orderStatus`) flat — `{"tokens": {"orderStatus": {…}}}` is stored as
-   > a single jsonb value and round-trips intact; there is no column-per-token.
-2. **Admin UI** — build a theme editor that produces a `ThemeConfig`, persist it
-   via the existing `updateTenantTheme` mutation.
+   object, so `tokens` / `branding` / `accentColor` properties are persisted
+   automatically by `updateTenantTheme(tenantId, theme)`. **No schema change and
+   no new DB table are required.**
+   > The `theme_config` jsonb column stores nested groups (e.g.
+   > `tokens.orderStatus`) as a single jsonb value and round-trips intact; there
+   > is no column-per-token. Existing tenants already persisted only the four
+   > legacy fields, and they resolve against defaults with zero migration.
+2. **Admin UI — Enterprise Theme Manager** (implemented). In
+   `apps/portal/src/app/admin`, the **Edit Theme** button on any tenant opens
+   `ThemeEditorModal.tsx`, a per-tenant theme manager:
+   - **10 editable sections**: 1) Brand Colors, 2) Interface Colors,
+     3) Text, 4) Semantic Colors, 5) Navigation, 6) Buttons, 7) Tables,
+     8) Status & Badges (incl. per-status order + inventory), 9) Charts,
+     10) Receipts. Every field is a color swatch + hex text input backed by the
+     corresponding `ThemeTokens` key.
+   - **Live preview** — the editor derives `resolved = resolveThemeConfig({…})`
+     as you type and renders a mini sidebar/navbar/cards/buttons/badges/table/
+     receipt mock using those resolved values, so changes are visible before
+     saving.
+   - **6 presets** — `theme-presets.ts` exports `THEME_PRESETS`
+     (Brand Orange / Midnight Blue / Emerald / Royal Purple / Rose / Slate).
+     Applying a preset writes a coherent `Partial<ThemeTokens>` override.
+   - **Reset to Default** — clears `tokens` (reverts to canonical baseline).
+   - **Save** — builds a `ThemeConfig` (`primaryColor`, `secondaryColor`,
+     `logoUrl`, `fontFamily`, `accentColor`, `tokens`, preserved `branding`)
+     and persists it via `saveTenantTheme` → `updateTenantTheme`.
 3. **Consumption** — `POSShell` reads the tenant's `theme_config`, passes it to
    `<ThemeProvider>`, and everything downstream re-themes via CSS variables with
-   no component changes.
-4. **Utilities** — components may then migrate to semantic utilities
+   no component changes. Saving in the admin applies on the tenant's next load.
+4. **Utilities** — components may still migrate to semantic utilities
    (`bg-background`, `text-primary`, `bg-sidebar`, …) for tenant-aware styling.
 
 ## 8. Verification
