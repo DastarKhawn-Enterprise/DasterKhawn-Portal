@@ -45,12 +45,17 @@ export function Drawer({
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (!open) return;
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -75,7 +80,7 @@ export function Drawer({
         first.focus();
       }
     },
-    [open, onClose],
+    [open],
   );
 
   useEffect(() => {
@@ -94,7 +99,7 @@ export function Drawer({
       if (lockBodyScroll) document.body.style.overflow = '';
       previouslyFocused.current?.focus?.();
     };
-  }, [open, handleKeyDown, initialFocusRef, lockBodyScroll]);
+  }, [open, handleKeyDown, lockBodyScroll]);
 
   if (!open) return null;
 

@@ -76,12 +76,17 @@ export function Modal({
   const previouslyFocused = useRef<HTMLElement | null>(null);
   const titleId = labelledBy;
 
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (!open) return;
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -106,7 +111,7 @@ export function Modal({
         first.focus();
       }
     },
-    [open, onClose],
+    [open],
   );
 
   useEffect(() => {
@@ -120,7 +125,7 @@ export function Modal({
       document.removeEventListener('keydown', handleKeyDown, true);
       previouslyFocused.current?.focus?.();
     };
-  }, [open, handleKeyDown, initialFocusRef]);
+  }, [open, handleKeyDown]);
 
   if (!open) return null;
 
