@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePOS } from './pos-context';
 import { useAuth } from '@clerk/nextjs';
 import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
-import { ActionButton as SharedActionButton, Badge, tableStatusVariant } from '@sat-sys/ui';
+import { ActionButton as SharedActionButton, Badge, Skeleton, tableStatusVariant } from '@sat-sys/ui';
 import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
 import ReceiptView from './ReceiptView';
 import { deductInventorySupa } from './inventory-utils';
@@ -260,7 +260,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
     setCart((prev) => prev.filter((ci) => ci.id !== itemId));
   }, []);
 
-  // Checkout â€” creates order with table_id, then updates table to occupied
+  // Checkout — creates order with table_id, then updates table to occupied
   const handleCheckout = useCallback(async () => {
     if (cart.length === 0 || !selectedTable) return;
     const nameError = validateCustomerName(customerName);
@@ -351,7 +351,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
     setCheckingOut(false);
   }, [cart, selectedTable, selectedCustomer, customerName, settings, slug]);
 
-  // Status update for occupied table â€” also reverts table on completed/cancelled
+  // Status update for occupied table — also reverts table on completed/cancelled
   const handleUpdateStatus = useCallback(async (orderId: string, newStatus: string) => {
     if (!selectedTable) return;
     setUpdating(orderId);
@@ -456,7 +456,15 @@ export default function DineInView({ slug, theme, brandName }: Props) {
   }, []);
 
   if (!isLoaded || !authReady) {
-    return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
+    return (
+      <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+            {[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} variant="card" />)}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const selectedIsAvailable = selectedTable?.status === 'available';
@@ -464,7 +472,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
 
   return (
     <><div className="flex-1 flex overflow-hidden min-w-0">
-      {/* â”€â”€ FLOOR PLAN â”€â”€ */}
+      {/* ── FLOOR PLAN ── */}
       <div className={`${mobilePanelOpen ? 'hidden md:flex' : 'flex'} flex-col flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6`}>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5 auto-rows-fr">
           {tables.map((table) => (
@@ -482,7 +490,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
                   {table.status}
                 </Badge>
               </span>
-              {/* Table shape â€” square box */}
+              {/* Table shape — square box */}
               <div className="mx-auto mb-1.5 flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-xl border-2 text-sm md:text-base font-bold" style={{ borderColor: table.status === 'available' ? '#86efac' : table.status === 'occupied' ? '#fca5a5' : '#fcd34d', backgroundColor: table.status === 'available' ? 'rgba(34,197,94,0.15)' : table.status === 'occupied' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)', color: table.status === 'available' ? '#166534' : table.status === 'occupied' ? '#991b1b' : '#92400e' }}>
                 {table.table_number}
               </div>
@@ -505,7 +513,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
         </div>
       </div>
 
-      {/* â”€â”€ SIDE PANEL â”€â”€ */}
+      {/* ── SIDE PANEL ── */}
       {selectedTable && (
         <div className={`${mobilePanelOpen ? 'flex' : 'hidden md:flex'} w-full md:w-[480px] flex-shrink-0 bg-white border-l border-gray-200 flex-col overflow-hidden`}>
           {/* Panel header */}
@@ -515,7 +523,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
                 onClick={handleClosePanel}
                 className="md:hidden text-sm text-gray-500 hover:text-gray-800"
               >
-                â† Back
+                ← Back
               </button>
               <div>
                 <h3 className="font-bold text-gray-800">
@@ -533,7 +541,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
               onClick={handleClosePanel}
               className="hidden md:block text-gray-400 hover:text-gray-600 text-lg leading-none"
             >
-              âœ•
+              ✕
             </button>
           </div>
 
@@ -658,11 +666,11 @@ export default function DineInView({ slug, theme, brandName }: Props) {
                                 <div className="text-xs text-gray-400">{settings?.currencySymbol}{ci.price.toFixed(2)} each</div>
                               </div>
                               <div className="flex items-center gap-1">
-                                <button onClick={() => handleEditUpdateQty(ci.id, ci.quantity - 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">âˆ’</button>
+                                <button onClick={() => handleEditUpdateQty(ci.id, ci.quantity - 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">−</button>
                                 <span className="w-6 text-center text-sm">{ci.quantity}</span>
                                 <button onClick={() => handleEditUpdateQty(ci.id, ci.quantity + 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">+</button>
                               </div>
-                              <button onClick={() => handleEditRemove(ci.id)} className="text-gray-400 hover:text-red-500 text-sm">âœ•</button>
+                              <button onClick={() => handleEditRemove(ci.id)} className="text-gray-400 hover:text-red-500 text-sm">✕</button>
                             </div>
                           ))}
                         </div>

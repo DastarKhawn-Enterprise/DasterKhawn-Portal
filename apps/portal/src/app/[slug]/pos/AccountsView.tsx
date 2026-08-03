@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
-import { Badge, Modal } from '@sat-sys/ui';
+import { Badge, EmptyState, Modal, Skeleton, SkeletonTable } from '@sat-sys/ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { processTransfer, processExpense, processAdjustment } from './payment-actions';
@@ -325,13 +325,13 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
   };
 
   if (!isLoaded) {
-    return <div className="flex-1 flex items-center justify-center bg-gray-50 p-4"><p className="text-gray-500">Loading...</p></div>;
+    return <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6"><div className="max-w-6xl mx-auto"><SkeletonTable rows={5} cols={4} /></div></div>;
   }
 
   if (!canView) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-50 p-4">
-        <div className="text-center"><h2 className="text-2xl font-bold text-gray-400 mb-2">Accounts</h2><p className="text-gray-300">You do not have permission to view accounts.</p></div>
+        <EmptyState variant="permission-denied" title="Accounts" description="You do not have permission to view accounts." />
       </div>
     );
   }
@@ -441,9 +441,11 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
 
             {/* Account List */}
             {loading ? (
-              <div className="flex items-center justify-center py-12"><p className="text-gray-400 text-sm">Loading accounts...</p></div>
+              <div className="p-8"><Skeleton variant="table" rows={4} cols={4} /></div>
             ) : filteredAccounts.length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-8 text-center"><p className="text-gray-400 text-sm">No accounts in this category.</p></div>
+              <div className="bg-white rounded-xl border border-gray-200 p-8">
+                <EmptyState variant="no-data" as="bare" title="No Accounts" description="No accounts in this category." />
+              </div>
             ) : (
               <>
                 {/* Desktop Table */}
@@ -556,9 +558,11 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
                   <span className="text-gray-400 font-normal text-xs">(Balance: {currencySymbol}{Number(selectedAccount.current_balance).toFixed(2)})</span>
                 </h2>
                 {txnLoading ? (
-                  <div className="flex items-center justify-center py-8"><p className="text-gray-400 text-sm">Loading transactions...</p></div>
+                  <Skeleton variant="table" rows={3} cols={4} />
                 ) : txns.length === 0 ? (
-                  <div className="bg-white rounded-xl border border-gray-200 p-6 text-center"><p className="text-gray-400 text-sm">No transactions yet.</p></div>
+                  <div className="bg-white rounded-xl border border-gray-200 p-6">
+                    <EmptyState variant="no-data" as="bare" title="No Transactions" description="No transactions yet." />
+                  </div>
                 ) : (
                   <>
                     {/* Desktop Txn Table */}
@@ -666,7 +670,7 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
               <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Recent Transactions</h3>
                 {recentTxns.length === 0 ? (
-                  <p className="text-sm text-gray-400">No transactions yet.</p>
+                  <div className="py-2"><EmptyState variant="no-data" as="bare" title="No Transactions" description="No transactions yet." /></div>
                 ) : (
                   <div className="space-y-2">
                     {recentTxns.map((t) => (
@@ -721,7 +725,7 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
             <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
               <h3 className="text-sm font-semibold text-gray-700 mb-3">Recent Transactions</h3>
               {recentTxns.length === 0 ? (
-                <p className="text-sm text-gray-400">No transactions yet.</p>
+                <div className="py-2"><EmptyState variant="no-data" as="bare" title="No Transactions" description="No transactions yet." /></div>
               ) : (
                 <div className="space-y-1.5">
                   {recentTxns.map((t) => (

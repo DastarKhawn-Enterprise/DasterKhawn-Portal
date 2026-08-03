@@ -8,7 +8,7 @@ import {
   resetPassword, toggleLogin, setStaffLeave, removeStaff, exportStaffCsv,
 } from './staff-actions';
 import type { StaffMember, StaffListResult, StaffMeta, CreateStaffData, UpdateStaffData } from './staff-types';
-import { Badge, Modal, type BadgeVariant } from '@sat-sys/ui';
+import { Badge, EmptyState, Modal, Skeleton, SkeletonTable, type BadgeVariant } from '@sat-sys/ui';
 import {
   getRoleLabel, getAllPermissions, ROLE_DEFAULTS, STAFF_ROLES, PERMISSION_PAGES,
 } from './staff-types';
@@ -293,8 +293,8 @@ export default function StaffManagementView({ slug }: Props) {
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   };
 
-  if (!isLoaded) return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>; // ...tr return
-  if (!canManage) return <div className="flex-1 flex items-center justify-center bg-gray-50"><div className="text-center p-8"><h2 className="text-2xl font-bold text-gray-400 mb-2">Staff Management</h2><p className="text-gray-300">You do not have permission to manage staff.</p></div></div>;
+  if (!isLoaded) return <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6"><div className="max-w-6xl mx-auto"><SkeletonTable rows={6} cols={6} /></div></div>;
+  if (!canManage) return <div className="flex-1 flex items-center justify-center bg-gray-50"><EmptyState variant="permission-denied" title="Staff Management" description="You do not have permission to manage staff." /></div>;
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50 overflow-y-auto scrollbar-hide">
@@ -368,7 +368,7 @@ export default function StaffManagementView({ slug }: Props) {
 
           {/* Desktop table */}
           {loading ? (
-            <div className="p-8 text-center text-gray-400">Loading staff...</div>
+            <div className="p-8"><Skeleton variant="table" rows={4} cols={6} /></div>
           ) : (
             <>
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden max-sm:hidden">
@@ -386,7 +386,7 @@ export default function StaffManagementView({ slug }: Props) {
                   </thead>
                   <tbody>
                     {pagedStaff.length === 0 ? (
-                      <tr><td colSpan={7} className="p-8 text-center text-gray-400">No staff found.</td></tr>
+                      <tr><td colSpan={7} className="p-8 text-center"><div className="max-w-md mx-auto"><EmptyState variant="no-staff" as="bare" /></div></td></tr>
                     ) : pagedStaff.map((s) => {
                       const empStatus = s.metadata.employment_status || 'active';
                       const loginEnabled = s.metadata.login_enabled !== false;
@@ -437,7 +437,7 @@ export default function StaffManagementView({ slug }: Props) {
               {/* Mobile cards */}
               <div className="lg:hidden space-y-3">
                 {pagedStaff.length === 0 ? (
-                  <div className="p-8 text-center text-gray-400">No staff found.</div>
+                  <div className="p-8 text-center"><div className="max-w-md mx-auto"><EmptyState variant="no-staff" as="bare" /></div></div>
                 ) : pagedStaff.map((s) => {
                   const empStatus = s.metadata.employment_status || 'active';
                   const loginEnabled = s.metadata.login_enabled !== false;

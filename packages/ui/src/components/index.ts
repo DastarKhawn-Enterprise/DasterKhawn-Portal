@@ -13,7 +13,7 @@ export type { ConfirmDialogProps } from './ConfirmDialog';
 export { default as Drawer } from './Drawer';
 export type { DrawerPosition, DrawerProps } from './Drawer';
 export { default as EmptyState } from './EmptyState';
-export type { EmptyStateProps } from './EmptyState';
+export type { EmptyStateProps, EmptyStateVariant } from './EmptyState';
 export { default as ErrorBanner } from './ErrorBanner';
 export type { ErrorBannerProps } from './ErrorBanner';
 export { default as Input } from './Input';

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
-import { Badge, Button, ConfirmDialog, Modal } from '@sat-sys/ui';
+import { Badge, Button, ConfirmDialog, EmptyState, Modal, Skeleton, SkeletonTable } from '@sat-sys/ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { useEvent, usePublish } from './use-event';
@@ -169,7 +169,13 @@ export default function InventoryView({ slug, theme }: Props) {
   const lowStockItems = items.filter((i) => Number(i.current_stock) <= Number(i.low_stock_threshold));
 
   if (!isLoaded) {
-    return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
+    return (
+      <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-6">
+        <div className="max-w-4xl mx-auto">
+          <SkeletonTable rows={6} cols={4} />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -200,10 +206,10 @@ export default function InventoryView({ slug, theme }: Props) {
         {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm mb-4">{error}</div>}
 
         {loading ? (
-          <p className="text-gray-400 text-sm">Loading inventory...</p>
+          <Skeleton variant="table" rows={4} cols={4} />
         ) : items.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-            <p className="text-gray-400 text-sm">{'No inventory items yet. Click "+ Add Item" to begin.'}</p>
+          <div className="bg-white rounded-xl border border-gray-200 p-8">
+            <EmptyState variant="no-inventory" as="bare" />
           </div>
         ) : (
           <>

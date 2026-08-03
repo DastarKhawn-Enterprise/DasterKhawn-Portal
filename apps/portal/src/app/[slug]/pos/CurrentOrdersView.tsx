@@ -5,7 +5,7 @@ import { usePOS } from './pos-context';
 import { useRouter } from 'next/navigation';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
-import { ActionButton as SharedActionButton, Badge, Button, Modal, orderStatusVariant, orderTypeVariant } from '@sat-sys/ui';
+import { ActionButton as SharedActionButton, Badge, Button, EmptyState, Modal, SkeletonTable, orderStatusVariant, orderTypeVariant } from '@sat-sys/ui';
 import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
 import ReceiptView from './ReceiptView';
 import PaymentModal from './PaymentModal';
@@ -124,7 +124,7 @@ function NumericKeypadInner({ value, onChange, onClear, onOperator, calcNewNumbe
             k === '+' || k === '-' ? 'bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-600 border border-blue-200' :
             'bg-gray-50 hover:bg-gray-200 active:bg-gray-300 text-gray-800 border border-gray-200'
           )}
-        >{k === 'backspace' ? 'âŒ«' : k === 'clear' ? 'C' : k === '+' ? '+' : k === '-' ? 'âˆ’' : k}</button>
+        >{k === 'backspace' ? '⌫' : k === 'clear' ? 'C' : k === '+' ? '+' : k === '-' ? '−' : k}</button>
       )))}
     </div>
   );
@@ -237,7 +237,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     setAuthReady(true);
   }, [isLoaded, isSignedIn]);
 
-  // Background sync â€” keeps IndexedDB up to date for offline use
+  // Background sync — keeps IndexedDB up to date for offline use
   useOfflineSync(slug, authReady);
 
   // Fetch menu (with offline fallback to IndexedDB)
@@ -376,7 +376,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     refreshTimerRef.current = setTimeout(() => fetchOrdersInitial(), 1200);
   }, [fetchOrdersInitial]);
 
-  // Realtime â€” apply changes immediately (new orders at the TOP), then reconcile with a debounced refetch
+  // Realtime — apply changes immediately (new orders at the TOP), then reconcile with a debounced refetch
   useEvent('orders', (payload) => {
     if (!bd.isToday) return;
     const { event, new: row, old } = payload as any;
@@ -903,7 +903,13 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
   }, [orders, orderSearch]);
 
   if (!isLoaded || !authReady) {
-    return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
+    return (
+      <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
+        <div className="max-w-6xl mx-auto">
+          <SkeletonTable rows={6} cols={5} />
+        </div>
+      </div>
+    );
   }
 
   // Mobile panel navigation
@@ -913,11 +919,11 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
   return (
     <><div className={`flex-1 ${cfg.newOrderMode ? 'flex flex-col overflow-hidden' : 'flex overflow-hidden min-w-0'}`}>
       {!cfg.newOrderMode && (<>
-      {/* â”€â”€ LEFT PANEL: Order list â”€â”€ */}
+      {/* ── LEFT PANEL: Order list ── */}
       <div className={`${pc('list', 'w-full md:w-72 flex-shrink-0 bg-white border-r border-gray-200 flex-col overflow-hidden')}`}>
         <div className="flex items-center justify-end gap-1 px-4 py-3 border-b border-gray-200">
           <div className="flex items-center gap-1">
-            <button onClick={fetchOrdersInitial} disabled={fetchingRef.current} className="text-xs px-2 py-1.5 rounded border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50">â†»</button>
+            <button onClick={fetchOrdersInitial} disabled={fetchingRef.current} className="text-xs px-2 py-1.5 rounded border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50">↻</button>
             <button
               onClick={() => { handleNewOrder(); router.push(`/${slug}/pos/orders/new`); }}
               className="text-xs px-3 py-1.5 rounded text-white font-semibold"
@@ -950,7 +956,9 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
             </div>
           )}
           {!fetchLoading && !fetchError && filteredOrders.length === 0 && (
-            <p className="text-gray-400 text-sm text-center pt-8">{orderSearch ? 'No matching orders' : (cfg.statusFilter ? `No ${cfg.title.toLowerCase()}` : 'No active orders')}</p>
+            <div className="text-center pt-8 px-4">
+              <EmptyState variant={orderSearch ? 'no-search-results' : 'no-orders'} as="bare" description={orderSearch ? 'No matching orders' : cfg.statusFilter ? `No ${cfg.title.toLowerCase()}` : 'No active orders'} />
+            </div>
           )}
           {filteredOrders.map((order) => (
             <div
@@ -977,11 +985,11 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
               {order.customer_name ? (
                 <div className="text-xs text-gray-500">
                   {order.customer_name}
-                  {order.customer_phone ? ` Â· ${order.customer_phone}` : ''}
+                  {order.customer_phone ? ` · ${order.customer_phone}` : ''}
                   {order.vehicle_type || order.vehicle_plate_number
-                    ? ` Â· ${[order.vehicle_type, order.vehicle_plate_number].filter(Boolean).join(' Â· ')}`
+                    ? ` · ${[order.vehicle_type, order.vehicle_plate_number].filter(Boolean).join(' · ')}`
                     : ''}
-                  {order.delivery_address ? ` Â· ${order.delivery_address}` : ''}
+                  {order.delivery_address ? ` · ${order.delivery_address}` : ''}
                 </div>
               ) : (
                 <div className="text-xs text-gray-500">
@@ -990,8 +998,8 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
               )}
               <div className="flex text-xs text-gray-400 items-center">
                 {order.pickup_time
-                  ? `Pickup ${new Date(order.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} Â· `
-                  : order.order_type === 'takeaway' ? 'ASAP Â· ' : ''}
+                  ? `Pickup ${new Date(order.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · `
+                  : order.order_type === 'takeaway' ? 'ASAP · ' : ''}
                 {order.order_items?.length || 0} item{(order.order_items?.length || 0) !== 1 ? 's' : ''}
                 <span className="ml-auto font-semibold text-gray-700">{settings?.currencySymbol}{Number(order.total).toFixed(2)}</span>
               </div>
@@ -1024,14 +1032,14 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
         </div>
       </div>
 
-      {/* â”€â”€ CENTER PANEL: Order detail / placeholder + cart at bottom â”€â”€ */}
+      {/* ── CENTER PANEL: Order detail / placeholder + cart at bottom ── */}
       <div className={`${pc('detail', 'flex-1 bg-gray-50 flex-col overflow-hidden')}`}>
         {/* Mobile back button */}
         <button
           onClick={() => setMobilePanel('list')}
           className="md:hidden flex items-center gap-1 px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 border-b border-gray-200"
         >
-          â† Orders
+          ← Orders
         </button>
         {/* Top: order detail when selected, otherwise placeholder */}
         <div className="flex-1 overflow-y-auto scrollbar-hide min-h-0">
@@ -1042,13 +1050,13 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                   <h2 className="text-xl font-bold">Order #{selectedOrder.order_number}</h2>
                   <p className="text-sm text-gray-500">
                     {new Date(selectedOrder.created_at).toLocaleString()}
-                    {selectedOrder.customer_name ? ` Â· ${selectedOrder.customer_name}` : ''}
-                    {selectedOrder.customer_phone ? ` Â· ${selectedOrder.customer_phone}` : ''}
+                    {selectedOrder.customer_name ? ` · ${selectedOrder.customer_name}` : ''}
+                    {selectedOrder.customer_phone ? ` · ${selectedOrder.customer_phone}` : ''}
                     {selectedOrder.pickup_time
-                      ? ` Â· Pickup ${new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                      : selectedOrder.order_type === 'takeaway' ? ' Â· ASAP' : ''}
+                      ? ` · Pickup ${new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : selectedOrder.order_type === 'takeaway' ? ' · ASAP' : ''}
                     {selectedOrder.vehicle_type || selectedOrder.vehicle_plate_number
-                      ? ` Â· ${[selectedOrder.vehicle_type, selectedOrder.vehicle_plate_number].filter(Boolean).join(' Â· ')}`
+                      ? ` · ${[selectedOrder.vehicle_type, selectedOrder.vehicle_plate_number].filter(Boolean).join(' · ')}`
                       : ''}
                   </p>
                   {selectedOrder.delivery_address && (
@@ -1083,11 +1091,11 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                           <div className="text-xs text-gray-400">{settings?.currencySymbol}{ci.price.toFixed(2)} each</div>
                         </div>
                         <div className="flex items-center gap-1">
-                          <button onClick={() => handleEditUpdateQty(ci.id, ci.quantity - 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">âˆ’</button>
+                          <button onClick={() => handleEditUpdateQty(ci.id, ci.quantity - 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">−</button>
                           <span className="w-6 text-center text-sm">{ci.quantity}</span>
                           <button onClick={() => handleEditUpdateQty(ci.id, ci.quantity + 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">+</button>
                         </div>
-                        <button onClick={() => handleEditRemove(ci.id)} className="text-gray-400 hover:text-red-500 text-sm">âœ•</button>
+                        <button onClick={() => handleEditRemove(ci.id)} className="text-gray-400 hover:text-red-500 text-sm">✕</button>
                       </div>
                     ))}
                   </div>
@@ -1192,11 +1200,11 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                     <div className="text-xs text-gray-400">{settings?.currencySymbol || 'Rs.'}{item.price.toFixed(2)} each</div>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">âˆ’</button>
+                    <button onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">−</button>
                     <span className="w-6 text-center text-sm">{item.quantity}</span>
                     <button onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">+</button>
                   </div>
-                  <button onClick={() => handleRemoveItem(item.id)} className="text-gray-400 hover:text-red-500 text-sm">âœ•</button>
+                  <button onClick={() => handleRemoveItem(item.id)} className="text-gray-400 hover:text-red-500 text-sm">✕</button>
                 </div>
               ))}
             </div>
@@ -1208,7 +1216,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                 className="w-full py-2.5 rounded-lg text-sm font-bold text-white disabled:opacity-50"
                 style={{ backgroundColor: theme.primaryColor }}
               >
-                {checkingOut ? 'Processing...' : `Place Order â€” ${settings?.currencySymbol || 'Rs.'}${cart.reduce((s, i) => s + i.price * i.quantity, 0).toFixed(2)}`}
+                {checkingOut ? 'Processing...' : `Place Order — ${settings?.currencySymbol || 'Rs.'}${cart.reduce((s, i) => s + i.price * i.quantity, 0).toFixed(2)}`}
               </button>
             </div>
           </div>
@@ -1216,7 +1224,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
       </div>
       </>)}{/* end left+center panels */}
 
-      {/* â”€â”€ RIGHT PANEL: New order builder â”€â”€ */}
+      {/* ── RIGHT PANEL: New order builder ── */}
       {!cfg.hideNewOrder && (
       <div className={`${cfg.newOrderMode ? 'flex-1 flex flex-col overflow-hidden' : pc('new-order', 'w-full md:w-[480px] flex-shrink-0 bg-white border-l border-gray-200 flex-col overflow-hidden')}`}>
         {/* Mobile back button */}
@@ -1224,14 +1232,14 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
           onClick={() => cfg.newOrderMode ? router.push(`/${slug}/pos/orders`) : setMobilePanel('list')}
           className="md:hidden flex items-center gap-1 px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 border-b border-gray-200"
         >
-          â† Back
+          ← Back
         </button>
         <div className="px-4 py-3 border-b border-gray-200">
           <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">{cfg.newOrderMode ? 'New Order' : `New ${cfg.title}`}</h3>
         </div>
         {cfg.newOrderMode ? (
           <div className="flex-1 flex flex-row overflow-hidden">
-            {/* â”€â”€ LEFT: Menu panel â”€â”€ */}
+            {/* ── LEFT: Menu panel ── */}
             <div className="flex-1 flex flex-col overflow-hidden bg-white">
               {/* Order type selector (all-orders view only) */}
               {!isScoped && (
@@ -1500,7 +1508,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                 )}
               </div>
             </div>
-            {/* â”€â”€ RIGHT: Cart panel â”€â”€ */}
+            {/* ── RIGHT: Cart panel ── */}
             <div className="w-[380px] flex-shrink-0 flex flex-col border-l border-gray-200 bg-white">
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
                 <span className="text-sm font-semibold text-gray-700">Cart ({cart.reduce((s, i) => s + i.quantity, 0)})</span>
@@ -1520,11 +1528,11 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                         <div className="text-xs text-gray-400">{currencySymbolVal}{item.price.toFixed(2)} each</div>
                       </div>
                       <div className="flex items-center gap-1">
-                        <button onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">âˆ’</button>
+                        <button onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">−</button>
                         <span className="w-6 text-center text-sm">{item.quantity}</span>
                         <button onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)} className="w-7 h-7 rounded text-sm font-bold hover:bg-gray-100 flex items-center justify-center">+</button>
                       </div>
-                      <button onClick={() => handleRemoveItem(item.id)} className="text-gray-400 hover:text-red-500 text-sm">âœ•</button>
+                      <button onClick={() => handleRemoveItem(item.id)} className="text-gray-400 hover:text-red-500 text-sm">✕</button>
                     </div>
                   ))
                 )}
@@ -1560,7 +1568,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                   className="w-full py-2.5 rounded-lg text-sm font-bold text-white disabled:opacity-50"
                   style={{ backgroundColor: theme.primaryColor }}
                 >
-                  {checkingOut ? 'Processing...' : `Place Order â€” ${currencySymbolVal}${grandTotal.toFixed(2)}`}
+                  {checkingOut ? 'Processing...' : `Place Order — ${currencySymbolVal}${grandTotal.toFixed(2)}`}
                 </button>
               </div>
             </div>

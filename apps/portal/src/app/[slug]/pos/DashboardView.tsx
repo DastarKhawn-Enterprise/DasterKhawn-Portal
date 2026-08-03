@@ -6,7 +6,7 @@ import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { useEvent, usePublish } from './use-event';
 import { supa, supaBatch } from './supa-query';
 import { useBusinessDate } from './business-date-context';
-import { Badge, orderStatusVariant } from '@sat-sys/ui';
+import { Badge, Skeleton, SkeletonTable, orderStatusVariant } from '@sat-sys/ui';
 
 interface Props {
   theme: ThemeConfig;
@@ -104,7 +104,16 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
   const publish = usePublish();
 
   if (!isLoaded || !authReady) {
-    return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
+    return (
+      <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            {[0, 1, 2, 3].map((i) => <Skeleton key={i} variant="card" />)}
+          </div>
+          <SkeletonTable rows={6} cols={5} />
+        </div>
+      </div>
+    );
   }
 
   const maxTypeRevenue = Math.max(...orderTypes.map(t => t.revenue), 1);

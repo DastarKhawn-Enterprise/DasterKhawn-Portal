@@ -36,11 +36,11 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: 'âŠž', path: '/dashboard' },
+  { id: 'dashboard', label: 'Dashboard', icon: '⊞', path: '/dashboard' },
   {
     id: 'current-orders',
     label: 'Orders',
-    icon: 'â˜°',
+    icon: '☰',
     path: '/orders',
     children: [
       { id: 'current-orders', label: 'Current Orders', path: '/orders' },
@@ -50,21 +50,21 @@ const NAV_ITEMS: NavItem[] = [
       { id: 'orders-draft', label: 'Draft', path: '/orders/draft' },
     ],
   },
-  { id: 'dine-in', label: 'Dine In', icon: 'ðŸ½', path: '/dine-in' },
-  { id: 'take-away', label: 'Take Away', icon: 'ðŸ›', path: '/take-away' },
-  { id: 'delivery', label: 'Delivery', icon: 'ðŸšš', path: '/delivery' },
-  { id: 'drive-thru', label: 'Drive Thru', icon: 'ðŸš—', path: '/drive-thru' },
-  { id: 'third-party', label: 'Third Party', icon: 'ðŸ¤', path: '/third-party' },
-  { id: 'reservations', label: 'Reservations', icon: 'ðŸ“‹', path: '/reservations' },
-  { id: 'menu', label: 'Menu', icon: 'ðŸ“–', path: '/menu' },
-  { id: 'inventory', label: 'Inventory', icon: 'ðŸ“¦', path: '/inventory' },
-  { id: 'item-ledger', label: 'Item Ledger', icon: 'ðŸ“‹', path: '/item-ledger' },
-  { id: 'customers', label: 'Customers', icon: 'ðŸ‘¥', path: '/customers' },
-  { id: 'reports', label: 'Reports', icon: 'ðŸ“Š', path: '/reports' },
-  { id: 'expenses', label: 'Expenses', icon: 'ðŸ’°', path: '/expenses' },
-  { id: 'accounts', label: 'Accounts', icon: 'ðŸ¦', path: '/accounts' },
-  { id: 'staff', label: 'Staff', icon: 'ðŸ‘¤', path: '/staff' },
-  { id: 'settings', label: 'Settings', icon: 'âš™', path: '/settings' },
+  { id: 'dine-in', label: 'Dine In', icon: '🍽', path: '/dine-in' },
+  { id: 'take-away', label: 'Take Away', icon: '🛍', path: '/take-away' },
+  { id: 'delivery', label: 'Delivery', icon: '🚚', path: '/delivery' },
+  { id: 'drive-thru', label: 'Drive Thru', icon: '🚗', path: '/drive-thru' },
+  { id: 'third-party', label: 'Third Party', icon: '🤝', path: '/third-party' },
+  { id: 'reservations', label: 'Reservations', icon: '📋', path: '/reservations' },
+  { id: 'menu', label: 'Menu', icon: '📖', path: '/menu' },
+  { id: 'inventory', label: 'Inventory', icon: '📦', path: '/inventory' },
+  { id: 'item-ledger', label: 'Item Ledger', icon: '📋', path: '/item-ledger' },
+  { id: 'customers', label: 'Customers', icon: '👥', path: '/customers' },
+  { id: 'reports', label: 'Reports', icon: '📊', path: '/reports' },
+  { id: 'expenses', label: 'Expenses', icon: '💰', path: '/expenses' },
+  { id: 'accounts', label: 'Accounts', icon: '🏦', path: '/accounts' },
+  { id: 'staff', label: 'Staff', icon: '👤', path: '/staff' },
+  { id: 'settings', label: 'Settings', icon: '⚙', path: '/settings' },
 ];
 
 const PATH_TO_VIEW: Record<string, ViewId> = {};
@@ -117,7 +117,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, accentColor, mobi
         onClick={onToggleCollapse}
         className="hidden md:flex items-center justify-center h-12 text-sidebar-foreground hover:text-white hover:bg-sidebar-hover"
       >
-        <span className="text-lg">{collapsed ? 'â–¶' : 'â—€'}</span>
+        <span className="text-lg">{collapsed ? '▶' : '◀'}</span>
       </button>
 
       <div className="flex-1 overflow-y-auto scrollbar-hide">
@@ -138,7 +138,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, accentColor, mobi
                   {!collapsed && (
                     <>
                       <span className="ml-3 flex-1 text-left">{item.label}</span>
-                      <span className="text-xs text-gray-500">{ordersOpen ? 'â–¾' : 'â–¸'}</span>
+                      <span className="text-xs text-gray-500">{ordersOpen ? '▾' : '▸'}</span>
                     </>
                   )}
                 </button>
@@ -205,7 +205,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, accentColor, mobi
           onClick={onMobileClose}
           className="flex items-center justify-center h-12 w-full text-sidebar-foreground hover:text-white hover:bg-sidebar-hover"
         >
-          <span className="text-lg">âœ•</span>
+          <span className="text-lg">✕</span>
         </button>
         {content}
       </nav>

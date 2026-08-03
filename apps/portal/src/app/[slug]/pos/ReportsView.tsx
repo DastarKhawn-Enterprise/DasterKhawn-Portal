@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
-import { Button, Modal, StatusPill } from '@sat-sys/ui';
+import { Button, EmptyState, Modal, Skeleton, SkeletonTable, StatusPill } from '@sat-sys/ui';
 import { hasPermission } from './permissions';
 import { useEvent } from './use-event';
 import { useBusinessDate } from './business-date-context';
@@ -141,8 +141,8 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
     window.print();
   }, []);
 
-  if (!isLoaded) return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
-  if (!canView) return <div className="flex-1 flex items-center justify-center bg-gray-50"><div className="text-center"><h2 className="text-2xl font-bold text-gray-400 mb-2">Reports</h2><p className="text-gray-300">You do not have permission to view reports.</p></div></div>;
+  if (!isLoaded) return <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6"><div className="max-w-7xl mx-auto"><Skeleton variant="card" /><div className="h-4" /><SkeletonTable rows={6} cols={5} /></div></div>;
+  if (!canView) return <div className="flex-1 flex items-center justify-center bg-gray-50"><EmptyState variant="permission-denied" title="Reports" description="You do not have permission to view reports." /></div>;
 
   return (
     <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 print:bg-white">
@@ -170,7 +170,7 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
           ))}
         </div>
 
-        {loading && <p className="text-gray-400 text-sm text-center py-8">Loading...</p>}
+        {loading && <div className="py-8"><Skeleton variant="card" rows={4} /></div>}
 
         {!loading && tab === 'overview' && overview && <OverviewTab data={overview} currencySymbol={currencySymbol} theme={theme} />}
         {!loading && tab === 'sales' && sales && <SalesTab data={sales} currencySymbol={currencySymbol} />}

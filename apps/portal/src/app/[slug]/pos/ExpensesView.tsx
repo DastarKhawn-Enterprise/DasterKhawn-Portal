@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
-import { Badge, Button, ConfirmDialog, Modal } from '@sat-sys/ui';
+import { Badge, Button, ConfirmDialog, EmptyState, Modal, Skeleton, SkeletonTable } from '@sat-sys/ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { processExpense } from './payment-actions';
@@ -159,13 +159,19 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
   const maxCategoryTotal = Math.max(...Object.values(categoryTotals), 1);
 
   if (!isLoaded) {
-    return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
+    return (
+      <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
+        <div className="max-w-5xl mx-auto">
+          <SkeletonTable rows={5} cols={4} />
+        </div>
+      </div>
+    );
   }
 
   if (!canEdit) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-50">
-        <div className="text-center"><h2 className="text-2xl font-bold text-gray-400 mb-2">Expenses</h2><p className="text-gray-300">You do not have permission to view expenses.</p></div>
+        <EmptyState variant="permission-denied" title="Expenses" description="You do not have permission to view expenses." />
       </div>
     );
   }
@@ -180,7 +186,7 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
         <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
           <div className="flex flex-wrap items-center gap-3">
             <span className="px-3 py-1.5 rounded text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200">
-              ðŸ“… {bd.isToday ? 'Today' : bd.display}
+              📅 {bd.isToday ? 'Today' : bd.display}
             </span>
             <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="px-3 py-1.5 text-xs border border-gray-300 rounded">
               <option value="">All Categories</option>
@@ -220,9 +226,11 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
         </div>
 
         {loading ? (
-          <p className="text-gray-400 text-sm">Loading expenses...</p>
+          <Skeleton variant="table" rows={4} cols={4} />
         ) : expenses.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center"><p className="text-gray-400 text-sm">No expenses in this period.</p></div>
+          <div className="bg-white rounded-xl border border-gray-200 p-8">
+            <EmptyState variant="no-data" as="bare" />
+          </div>
         ) : (
           <>
             <div className="md:hidden space-y-3">
@@ -259,7 +267,7 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
                     <tr key={exp.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-4 py-3 text-gray-600">{exp.expense_date}</td>
                       <td className="px-4 py-3"><Badge variant="info">{CATEGORY_LABELS[exp.category] || exp.category}</Badge></td>
-                      <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate">{exp.description || 'â€”'}</td>
+                      <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate">{exp.description || '—'}</td>
                       <td className="px-4 py-3 text-right font-semibold">{currencySymbol}{Number(exp.amount).toFixed(2)}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">

@@ -9,7 +9,7 @@ import { BusinessDateProvider } from './business-date-context';
 import BusinessDatePicker from './business-date-picker';
 import { RealtimeIndicator } from './realtime-indicator';
 import { supa } from './supa-query';
-import { ThemeProvider, resolveThemeConfig, themeToCssVariables } from '@sat-sys/ui';
+import { Skeleton, ThemeProvider, resolveThemeConfig, themeToCssVariables } from '@sat-sys/ui';
 import type { ThemeConfig } from '@sat-sys/ui';
 import type { ViewId } from './Sidebar';
 
@@ -94,7 +94,9 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
   if (!isLoaded || !authReady) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-gray-500">Loading...</p>
+        <div className="w-full max-w-md px-6">
+          <Skeleton variant="card" rows={4} />
+        </div>
       </main>
     );
   }

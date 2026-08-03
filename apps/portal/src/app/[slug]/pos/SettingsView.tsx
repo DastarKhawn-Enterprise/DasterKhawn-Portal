@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
-import { Button, Modal } from '@sat-sys/ui';
+import { Button, Modal, Skeleton } from '@sat-sys/ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { useEvent, usePublish } from './use-event';
@@ -607,7 +607,13 @@ export default function SettingsView({ slug, theme }: Props) {
   }, [businessHours, localHours.length]);
 
   if (!isLoaded || loading) {
-    return <div className="flex-1 flex items-center justify-center bg-gray-50 min-h-screen"><p className="text-gray-400 text-sm">Loading settings...</p></div>;
+    return (
+      <div className="flex-1 bg-gray-50 min-h-screen overflow-y-auto scrollbar-hide p-4 md:p-6">
+        <div className="max-w-4xl mx-auto">
+          <Skeleton variant="form" rows={6} />
+        </div>
+      </div>
+    );
   }
 
   return (

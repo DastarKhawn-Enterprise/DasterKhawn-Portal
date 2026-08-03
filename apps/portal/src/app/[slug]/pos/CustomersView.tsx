@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
-import { Badge, Button, Modal } from '@sat-sys/ui';
+import { Badge, Button, EmptyState, Modal, Skeleton, SkeletonTable } from '@sat-sys/ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { normalizePhone, checkDuplicatePhone } from './customer-utils';
@@ -304,7 +304,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
   const handleDelete = async (customer: Customer) => {
     setDeleteError('');
     if (customer.total_orders > 0) {
-      setDeleteError(`Cannot delete â€” has order history. Deactivate instead.`);
+      setDeleteError(`Cannot delete — has order history. Deactivate instead.`);
       return;
     }
     setDeleting(true);
@@ -382,15 +382,25 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
   };
 
   if (!isLoaded) {
-    return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
+    return (
+      <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
+        <div className="max-w-5xl mx-auto">
+          <SkeletonTable rows={6} cols={5} />
+        </div>
+      </div>
+    );
   }
   if (!canView) {
-    return <div className="flex-1 flex items-center justify-center bg-gray-50"><div className="text-center"><h2 className="text-2xl font-bold text-gray-400 mb-2">Customers</h2><p className="text-gray-300">You do not have permission to view customers.</p></div></div>;
+    return (
+      <div className="flex-1 flex items-center justify-center bg-gray-50">
+        <EmptyState variant="permission-denied" title="Customers" description="You do not have permission to view customers." />
+      </div>
+    );
   }
 
   const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <span className="text-gray-300 ml-1">â†•</span>;
-    return <span className="text-gray-500 ml-1">{sortAsc ? 'â†‘' : 'â†“'}</span>;
+    if (sortField !== field) return <span className="text-gray-300 ml-1">↕</span>;
+    return <span className="text-gray-500 ml-1">{sortAsc ? '↑' : '↓'}</span>;
   };
 
   const filterOptions: { key: FilterKey; label: string }[] = [
@@ -468,10 +478,14 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
               {/* Desktop Table */}
               <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-hidden">
                 {loading ? (
-                  <div className="p-8 text-center"><p className="text-gray-400 text-sm">Loading customers...</p></div>
+                  <div className="p-8"><Skeleton variant="table" rows={4} cols={5} /></div>
                 ) : customers.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <p className="text-gray-400 text-sm">{debouncedSearch || activeFilter ? 'No customers match your search or filters.' : 'No customers yet. Click "Add Customer" to create one.'}</p>
+                  <div className="p-8">
+                    <EmptyState
+                      variant={debouncedSearch || activeFilter ? 'no-search-results' : 'no-customers'}
+                      as="bare"
+                      description={debouncedSearch || activeFilter ? 'No customers match your search or filters.' : undefined}
+                    />
                   </div>
                 ) : (
                   <table className="w-full text-sm">
@@ -528,10 +542,14 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
               {/* Mobile Cards */}
               <div className="md:hidden space-y-3">
                 {loading ? (
-                  <p className="text-gray-400 text-sm text-center py-8">Loading customers...</p>
+                  <div className="py-8"><Skeleton variant="lines" rows={3} /></div>
                 ) : customers.length === 0 ? (
-                  <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-                    <p className="text-gray-400 text-sm">{debouncedSearch || activeFilter ? 'No customers match.' : 'No customers yet.'}</p>
+                  <div className="bg-white rounded-xl border border-gray-200 p-8">
+                    <EmptyState
+                      variant={debouncedSearch || activeFilter ? 'no-search-results' : 'no-customers'}
+                      as="bare"
+                      description={debouncedSearch || activeFilter ? 'No customers match your search or filters.' : undefined}
+                    />
                   </div>
                 ) : (
                   customers.map((c) => (
@@ -577,7 +595,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
                   <SummaryStat label="New Customers" value={String(summaryData?.newMonth ?? 0)} />
                 </div>
                 <button className="mt-3 w-full text-xs font-medium text-center py-2 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
-                  View Customer Report â†’
+                  View Customer Report →
                 </button>
               </div>
 
@@ -603,7 +621,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
                 )}
                 <button onClick={() => { setActiveFilter(null); setSortField('total_spent'); setSortAsc(false); setPage(1); }}
                   className="mt-3 w-full text-xs font-medium text-center py-2 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
-                  View All â†’
+                  View All →
                 </button>
               </div>
 
@@ -632,7 +650,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
           <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-xl p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-gray-800">Filters</h3>
-              <button onClick={() => setMobileFilterOpen(false)} className="text-gray-400 text-xl">âœ•</button>
+              <button onClick={() => setMobileFilterOpen(false)} className="text-gray-400 text-xl">✕</button>
             </div>
             <div className="space-y-2">
               {filterOptions.map(f => (
@@ -802,7 +820,7 @@ function SummaryCard({ label, value, icon, theme, currencySymbol, format, previo
       <p className="text-2xl font-bold text-gray-800">{displayVal}</p>
       {previous !== undefined && !noPrev && (
         <div className={`flex items-center gap-1 mt-1 text-xs ${diff === null ? 'text-gray-400' : diff && diff > 0 ? 'text-green-600' : diff && diff < 0 ? 'text-red-500' : 'text-gray-400'}`}>
-          {diff !== null && (diff > 0 ? 'â†‘' : diff < 0 ? 'â†“' : 'â†’')}
+          {diff !== null && (diff > 0 ? '↑' : diff < 0 ? '↓' : '→')}
           <span>{diff !== null ? `${Math.abs(diff).toFixed(1)}% vs last month` : 'No previous data'}</span>
         </div>
       )}
@@ -834,14 +852,14 @@ function PaginationControls({ page, totalPages, totalCount, pageSize, setPage }:
       <p className="text-xs text-gray-500">Showing {from} to {to} of {totalCount}</p>
       <div className="flex items-center gap-1">
         <button disabled={page <= 1} onClick={() => setPage(page - 1)}
-          className="px-2.5 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">â† Prev</button>
+          className="px-2.5 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">← Prev</button>
         {pages.map((p, i) => typeof p === 'string' ? <span key={`e${i}`} className="px-1.5 text-xs text-gray-400">...</span> :
           <button key={p} onClick={() => setPage(p)}
             className={`px-2.5 py-1.5 text-xs rounded font-medium ${p === page ? 'text-white' : 'border border-gray-300 text-gray-600 hover:bg-gray-100'}`}
             style={p === page ? { backgroundColor: 'var(--primary)' } : {}}>{p}</button>
         )}
         <button disabled={page >= totalPages} onClick={() => setPage(page + 1)}
-          className="px-2.5 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">Next â†’</button>
+          className="px-2.5 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">Next →</button>
       </div>
     </div>
   );
@@ -871,7 +889,7 @@ function CustomerDetailContent({ customer, orderHistory, historyLoading, history
                         <Badge variant={customer.status === 'active' ? 'success' : 'neutral'} size="sm" pill>{customer.status === 'active' ? 'Active' : 'Inactive'}</Badge>
           </div>
         </div>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">âœ•</button>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
       </div>
 
       <div className="space-y-2 text-sm text-gray-600 mb-4 bg-gray-50 rounded-xl p-4">
@@ -901,9 +919,9 @@ function CustomerDetailContent({ customer, orderHistory, historyLoading, history
 
       <h3 className="text-sm font-semibold text-gray-700 mb-3 mt-5">Order History</h3>
       {historyLoading ? (
-        <p className="text-xs text-gray-400 text-center py-6">Loading orders...</p>
+        <Skeleton variant="lines" rows={2} />
       ) : orderHistory.length === 0 ? (
-        <p className="text-xs text-gray-400 text-center py-6">No orders yet</p>
+        <div className="py-4"><EmptyState variant="no-orders" as="bare" /></div>
       ) : (
         <>
           <div className="space-y-2">
@@ -924,10 +942,10 @@ function CustomerDetailContent({ customer, orderHistory, historyLoading, history
           {totalHPages > 1 && (
             <div className="flex items-center justify-center gap-2 mt-4">
               <button disabled={historyPage <= 1} onClick={() => onHistoryPageChange(historyPage - 1)}
-                className="px-2.5 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30">â†</button>
+                className="px-2.5 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30">←</button>
               <span className="text-xs text-gray-500">{historyPage} / {totalHPages}</span>
               <button disabled={historyPage >= totalHPages} onClick={() => onHistoryPageChange(historyPage + 1)}
-                className="px-2.5 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30">â†’</button>
+                className="px-2.5 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30">→</button>
             </div>
           )}
         </>

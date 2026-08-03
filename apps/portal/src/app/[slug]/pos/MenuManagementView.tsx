@@ -5,7 +5,7 @@ import { useEvent, usePublish } from './use-event';
 import { usePOS } from './pos-context';
 import { useAuth } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
-import { Button, ConfirmDialog, Modal } from '@sat-sys/ui';
+import { Button, ConfirmDialog, EmptyState, Modal, Skeleton, SkeletonTable } from '@sat-sys/ui';
 import type { MenuItemPayload } from './menu-actions';
 import {
   getMenuItems,
@@ -191,7 +191,13 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
   }, [slug]);
 
   if (!isLoaded || !authReady) {
-    return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
+    return (
+      <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
+        <div className="max-w-6xl mx-auto">
+          <SkeletonTable rows={6} cols={5} />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -209,9 +215,9 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
       </div>
 
       {loading ? (
-        <p className="text-gray-400 text-center pt-12">Loading menu...</p>
+        <Skeleton variant="table" rows={6} cols={5} />
       ) : items.length === 0 ? (
-        <p className="text-gray-400 text-center pt-12">No menu items yet. {canEdit ? 'Click + Add Item to create one.' : ''}</p>
+        <EmptyState variant="no-data" description={canEdit ? 'Click + Add Item to create your first menu item.' : undefined} />
       ) : (
         categories.map((cat) => {
           const catItems = items.filter((i) => (i.category ?? 'Uncategorized') === cat);
@@ -263,7 +269,7 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
                             onClick={() => setDeleteTarget(item)}
                             className="px-2.5 py-1 text-xs font-medium rounded hover:bg-red-50 text-red-500"
                           >
-                            Ã—
+                            ×
                           </button>
                         </div>
                       )}
@@ -276,7 +282,7 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
         })
       )}
 
-      {/* â”€â”€â”€ Add/Edit Modal â”€â”€â”€ */}
+      {/* ─── Add/Edit Modal ─── */}
       <Modal
         open={showForm}
         onClose={() => setShowForm(false)}
@@ -387,7 +393,7 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
                   {ingredients.map((ing, idx) => (
                     <div key={idx} className="flex items-center gap-2 text-sm">
                       <span className="flex-1 text-gray-700">{ing.inventory_name}</span>
-                      <span className="text-gray-500">Ã—</span>
+                      <span className="text-gray-500">×</span>
                       <input
                         type="number"
                         step="any"
@@ -404,7 +410,7 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
                           onClick={() => setIngredients((prev) => prev.filter((_, i) => i !== idx))}
                           className="text-red-500 hover:text-red-700 text-xs px-1"
                         >
-                          Ã—
+                          ×
                         </button>
                       )}
                     </div>
@@ -437,7 +443,7 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
             {ingLoadError && <p className="text-red-600 text-xs mt-1">{ingLoadError}</p>}
       </Modal>
 
-      {/* â”€â”€â”€ Delete Confirmation â”€â”€â”€ */}
+      {/* ─── Delete Confirmation ─── */}
       <ConfirmDialog
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}

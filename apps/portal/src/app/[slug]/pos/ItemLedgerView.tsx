@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
-import { Button, Modal, StatusPill } from '@sat-sys/ui';
+import { Button, EmptyState, Modal, Skeleton, SkeletonTable, StatusPill } from '@sat-sys/ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { useEvent, usePublish } from './use-event';
@@ -240,7 +240,7 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
   };
 
   if (!isLoaded) {
-    return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
+    return <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6"><div className="max-w-5xl mx-auto"><SkeletonTable rows={6} cols={4} /></div></div>;
   }
 
   return (
@@ -294,12 +294,12 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
 
         {/* Transaction history — all items */}
         {ledgerLoading ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center mb-4">
-            <p className="text-gray-400 text-sm">Loading ledger...</p>
+          <div className="bg-white rounded-xl border border-gray-200 p-8 mb-4">
+            <Skeleton variant="table" rows={4} cols={4} />
           </div>
         ) : ledger.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center mb-4">
-            <p className="text-gray-400 text-sm">No transactions on {bd.dateKey}.</p>
+          <div className="bg-white rounded-xl border border-gray-200 p-8 mb-4">
+            <EmptyState variant="no-data" as="bare" title="No Transactions" description={`No transactions on ${bd.dateKey}.`} />
           </div>
         ) : (
           <>
@@ -386,12 +386,12 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
 
         {/* Item list with Add Purchase */}
         {loading ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-            <p className="text-gray-400 text-sm">Loading items...</p>
+          <div className="bg-white rounded-xl border border-gray-200 p-8">
+            <Skeleton variant="table" rows={3} cols={4} />
           </div>
         ) : items.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-            <p className="text-gray-400 text-sm">No inventory items found. Add items in the Inventory tab first.</p>
+          <div className="bg-white rounded-xl border border-gray-200 p-8">
+            <EmptyState variant="no-inventory" as="bare" description="Add items in the Inventory tab first." />
           </div>
         ) : (
           <>

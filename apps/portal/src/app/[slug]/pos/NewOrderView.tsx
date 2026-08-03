@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
-import { Button, Modal } from '@sat-sys/ui';
+import { Button, Modal, Skeleton } from '@sat-sys/ui';
 import { supa } from './supa-query';
 import { usePOS } from './pos-context';
 import { searchCustomersSupa, checkDuplicatePhone, normalizePhone, findOrCreateCustomerSupa } from './customer-utils';
@@ -43,7 +43,7 @@ function NumericKeypadInner({ value, onChange, onClear, onOperator, calcNewNumbe
             k === '+' || k === '-' ? 'bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-600 border border-blue-200' :
             'bg-gray-50 hover:bg-gray-200 active:bg-gray-300 text-gray-800 border border-gray-200'
           )}
-        >{k === 'backspace' ? 'âŒ«' : k === 'clear' ? 'C' : k === '+' ? '+' : k === '-' ? 'âˆ’' : k}</button>
+        >{k === 'backspace' ? '⌫' : k === 'clear' ? 'C' : k === '+' ? '+' : k === '-' ? '−' : k}</button>
       )))}
     </div>
   );
@@ -321,7 +321,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
       if (!itemsResult.ok) { setOrderError(itemsResult.error || 'Failed to save order items'); setCheckingOut(false); creatingOrderRef.current = false; return; }
       // Update table status
       if (orderType === 'dine_in' && selectedTableId) { supa(slug, { table: 'tables', method: 'update', eq: ['id', selectedTableId], body: { status: 'occupied', current_order_id: newOrder.id } }).catch(() => {}); setTables((prev) => prev.map((t) => (t.id === selectedTableId ? { ...t, status: 'occupied' } : t))); }
-      // Send to Kitchen Display immediately â€” no payment needed
+      // Send to Kitchen Display immediately — no payment needed
       publish('orders', 'INSERT', { id: newOrder.id, status: 'pending', order_type: orderType });
       // Clear cart for new order
       setCart([]); setKeypadValue(''); setKeypadDisplay(''); setDiscount(null); setOrderNotes(''); setSpecialInstructions(''); setSelectedCustomer(null); setCustomerSearch(''); setCustomerResults([]); setSelectedTableId(null); setCustomerName(''); setCustomerPhone(''); setVehicleType(''); setVehiclePlateNumber(''); setDeliveryAddress(''); setCustomerNameError(''); setCustomerPhoneError(''); setDeliveryAddressError('');
@@ -342,7 +342,13 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
   const orderCount = cart.reduce((s, i) => s + i.quantity, 0);
 
   if (!isLoaded || !authReady) {
-    return <div className="flex-1 flex items-center justify-center bg-gray-50"><div className="text-center"><div className="w-8 h-8 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin mx-auto mb-2" /><p className="text-gray-500 text-sm">Loading POS...</p></div></div>;
+    return (
+      <div className="flex-1 flex items-center justify-center bg-gray-50 p-6">
+        <div className="w-full max-w-md">
+          <Skeleton variant="card" rows={4} />
+        </div>
+      </div>
+    );
   }
 
   return (

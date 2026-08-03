@@ -5,7 +5,7 @@ import { useUser } from '@clerk/nextjs';
 import { useEvent, usePublish } from './use-event';
 import { usePOS } from './pos-context';
 import { MenuGrid } from '@sat-sys/pos-ui';
-import { Badge, Button, Modal, orderStatusVariant, orderTypeVariant } from '@sat-sys/ui';
+import { Badge, Button, EmptyState, Modal, orderStatusVariant, orderTypeVariant } from '@sat-sys/ui';
 import type { MenuItem, ThemeConfig } from '@sat-sys/pos-ui';
 import { fetchKDSOrders, updateKDSOrderStatus } from './orders-actions';
 import { supa } from './supa-query';
@@ -366,7 +366,7 @@ function ListView({
                   )}
                 </td>
                 <td className="py-3 px-4 text-gray-600">
-                  {order.customer_name || <span className="text-gray-300">â€”</span>}
+                  {order.customer_name || <span className="text-gray-300">—</span>}
                 </td>
                 <td className="py-3 px-4 text-gray-600">
                   {order.order_items?.length || 0} items
@@ -483,7 +483,7 @@ function DetailPanel({
             <div>
               <span className="text-gray-400 text-xs uppercase tracking-wide">Type</span>
               <p className="font-semibold text-gray-800">
-                {order.order_type ? ORDER_TYPE_LABELS[order.order_type] || order.order_type : 'â€”'}
+                {order.order_type ? ORDER_TYPE_LABELS[order.order_type] || order.order_type : '—'}
               </p>
             </div>
             <div>
@@ -633,7 +633,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
     fetchOrders();
   }, [fetchOrders]);
 
-  // Realtime â€” apply changes immediately (new orders at the TOP), then reconcile with a debounced refetch
+  // Realtime — apply changes immediately (new orders at the TOP), then reconcile with a debounced refetch
   useEvent('orders', (payload) => {
     if (!bd.isToday) return;
     const { event, new: row, old } = payload as any;
@@ -900,7 +900,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
           <div className="space-y-6">
             {Object.entries(groupedByStatus).length === 0 && !fetchLoading && (
               <div className="flex items-center justify-center min-h-[300px]">
-                <p className="text-gray-400 text-lg">No orders to display</p>
+                <EmptyState variant="no-orders" as="bare" />
               </div>
             )}
             {Object.entries(groupedByStatus).map(([status, statusOrders]) => (
@@ -936,7 +936,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
         {viewMode === 'list' && (
           filteredOrders.length === 0 && !fetchLoading ? (
             <div className="flex items-center justify-center min-h-[300px]">
-              <p className="text-gray-400 text-lg">No orders to display</p>
+              <EmptyState variant="no-orders" as="bare" />
             </div>
           ) : (
             <ListView

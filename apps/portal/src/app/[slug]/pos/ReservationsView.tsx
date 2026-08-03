@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
-import { Badge, Button, ConfirmDialog, Modal, reservationStatusVariant } from '@sat-sys/ui';
+import { Badge, Button, ConfirmDialog, EmptyState, Modal, Skeleton, SkeletonTable, reservationStatusVariant } from '@sat-sys/ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { useEvent, usePublish } from './use-event';
@@ -180,7 +180,13 @@ export default function ReservationsView({ slug, theme }: Props) {
   });
 
   if (!isLoaded) {
-    return <div className="flex-1 flex items-center justify-center bg-gray-50"><p className="text-gray-500">Loading...</p></div>;
+    return (
+      <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
+        <div className="max-w-6xl mx-auto">
+          <SkeletonTable rows={6} cols={5} />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -209,20 +215,22 @@ export default function ReservationsView({ slug, theme }: Props) {
         {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm mb-4">{error}</div>}
 
         {loading ? (
-          <p className="text-gray-400 text-sm">Loading reservations...</p>
+          <Skeleton variant="lines" rows={4} />
         ) : filteredReservations.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center"><p className="text-gray-400 text-sm">No reservations found.</p></div>
+          <div className="bg-white rounded-xl border border-gray-200 p-8">
+            <EmptyState variant="no-reservations" as="bare" />
+          </div>
         ) : (
           <>
             <div className="md:hidden space-y-3">
               {filteredReservations.map((r) => (
                 <div key={r.id} className={`bg-white rounded-lg shadow-sm border p-4 ${r.status !== 'confirmed' ? 'opacity-60' : ''}`}>
                   <div className="flex items-start justify-between mb-2">
-                    <div><div className="text-sm font-semibold text-gray-800">{r.guest_name}</div><div className="text-xs text-gray-500">{r.guest_phone || 'â€”'}</div></div>
+                    <div><div className="text-sm font-semibold text-gray-800">{r.guest_name}</div><div className="text-xs text-gray-500">{r.guest_phone || '—'}</div></div>
                     <Badge variant={reservationStatusVariant(r.status)} size="sm" pill>{STATUS_LABELS[r.status]}</Badge>
                   </div>
-                  <div className="text-xs text-gray-500 mb-2">{r.reservation_date} Â· {r.reservation_time.slice(0, 5)} Â· {r.party_size} {r.party_size === 1 ? 'guest' : 'guests'}</div>
-                  <div className="text-xs text-gray-500 mb-2">Table: {r.table_id ? (r.tables?.table_number || 'â€”') : <span className="italic">Unassigned</span>}</div>
+                  <div className="text-xs text-gray-500 mb-2">{r.reservation_date} · {r.reservation_time.slice(0, 5)} · {r.party_size} {r.party_size === 1 ? 'guest' : 'guests'}</div>
+                  <div className="text-xs text-gray-500 mb-2">Table: {r.table_id ? (r.tables?.table_number || '—') : <span className="italic">Unassigned</span>}</div>
                   {r.notes && <div className="text-xs text-gray-400 italic mb-2">{r.notes}</div>}
                   {canEdit && r.status === 'confirmed' && (
                     <div className="flex gap-1.5 mt-2">
@@ -259,11 +267,11 @@ export default function ReservationsView({ slug, theme }: Props) {
                   {filteredReservations.map((r) => (
                     <tr key={r.id} className={`border-b border-gray-100 hover:bg-gray-50 ${r.status !== 'confirmed' ? 'opacity-50' : ''}`}>
                       <td className="px-4 py-3 font-medium text-gray-800">{r.guest_name}</td>
-                      <td className="px-4 py-3 text-gray-600">{r.guest_phone || 'â€”'}</td>
+                      <td className="px-4 py-3 text-gray-600">{r.guest_phone || '—'}</td>
                       <td className="px-4 py-3 text-gray-600">{r.reservation_date}<br /><span className="text-xs">{r.reservation_time.slice(0, 5)}</span></td>
                       <td className="px-4 py-3 text-gray-700">{r.party_size}</td>
-                      <td className="px-4 py-3 text-gray-600">{r.table_id ? (r.tables?.table_number || 'â€”') : <span className="italic text-gray-400">Unassigned</span>}</td>
-                      <td className="px-4 py-3 text-gray-400 max-w-[120px] truncate">{r.notes || 'â€”'}</td>
+                      <td className="px-4 py-3 text-gray-600">{r.table_id ? (r.tables?.table_number || '—') : <span className="italic text-gray-400">Unassigned</span>}</td>
+                      <td className="px-4 py-3 text-gray-400 max-w-[120px] truncate">{r.notes || '—'}</td>
                       <td className="px-4 py-3"><Badge variant={reservationStatusVariant(r.status)} size="sm" pill>{STATUS_LABELS[r.status]}</Badge></td>
                       <td className="px-4 py-3 text-right">
                         {canEdit && r.status === 'confirmed' ? (
