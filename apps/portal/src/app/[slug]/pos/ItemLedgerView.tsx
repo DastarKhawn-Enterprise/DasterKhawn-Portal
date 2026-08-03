@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
+import { Button, Modal, StatusPill } from '@sat-sys/ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { useEvent, usePublish } from './use-event';
@@ -35,13 +36,6 @@ interface LedgerEntry {
   created_by: string | null;
   created_at: string;
 }
-
-const MOVEMENT_STYLES: Record<string, string> = {
-  purchase: 'bg-green-50 text-green-700 border border-green-200',
-  sale: 'bg-blue-50 text-blue-700 border border-blue-200',
-  adjustment: 'bg-amber-50 text-amber-700 border border-amber-200',
-  wastage: 'bg-red-50 text-red-700 border border-red-200',
-};
 
 const MOVEMENT_LABELS: Record<string, string> = {
   purchase: 'Purchase',
@@ -337,9 +331,7 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
                           {new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${MOVEMENT_STYLES[entry.movement_type] || ''}`}>
-                            {MOVEMENT_LABELS[entry.movement_type] || entry.movement_type}
-                          </span>
+                          <StatusPill status={entry.movement_type} label={MOVEMENT_LABELS[entry.movement_type] || entry.movement_type} size="sm" />
                         </td>
                         <td className={`px-4 py-3 text-right font-mono font-semibold ${qty > 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {qty > 0 ? '+' : ''}{qty}
@@ -369,9 +361,7 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <div className="text-sm font-medium text-gray-800">{item?.name || 'Unknown'}</div>
-                        <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold ${MOVEMENT_STYLES[entry.movement_type] || ''}`}>
-                          {MOVEMENT_LABELS[entry.movement_type] || entry.movement_type}
-                        </span>
+                        <StatusPill status={entry.movement_type} label={MOVEMENT_LABELS[entry.movement_type] || entry.movement_type} size="sm" className="mt-1" />
                         <div className="text-xs text-gray-400 mt-1">
                           {new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
@@ -465,66 +455,64 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
         )}
       </div>
 
-      {/* Add Purchase Modal */}
-      {showPurchaseForm && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setShowPurchaseForm(false)}>
-          <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-md md:mx-4 p-6 rounded-t-xl md:max-h-[90vh] md:overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-800">Add Purchase</h2>
-              <button onClick={() => setShowPurchaseForm(false)} className="md:hidden text-gray-400 text-xl">✕</button>
+      <Modal
+        open={showPurchaseForm}
+        onClose={() => setShowPurchaseForm(false)}
+        title="Add Purchase"
+        size="md"
+        footer={
+          <div className="flex justify-end gap-2 w-full">
+            <Button variant="outline" onClick={() => setShowPurchaseForm(false)}>Cancel</Button>
+            <Button variant="primary" style={{ backgroundColor: theme.primaryColor }} onClick={handlePurchase} loading={saving}>
+              Add Purchase
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Item</label>
+            <select value={purchaseItemId} onChange={(e) => setPurchaseItemId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+              <option value="">-- Select --</option>
+              {items.map((item) => (
+                <option key={item.id} value={item.id}>{item.name} ({Number(item.current_stock)} {item.unit})</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Quantity</label>
+              <input type="number" step="any" min="0" value={purchaseQty} onChange={(e) => setPurchaseQty(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
             </div>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Item</label>
-                <select value={purchaseItemId} onChange={(e) => setPurchaseItemId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm">
-                  <option value="">-- Select --</option>
-                  {items.map((item) => (
-                    <option key={item.id} value={item.id}>{item.name} ({Number(item.current_stock)} {item.unit})</option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Quantity</label>
-                  <input type="number" step="any" min="0" value={purchaseQty} onChange={(e) => setPurchaseQty(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Cost per Unit ({currencySymbol})</label>
-                  <input type="number" step="0.01" min="0" value={purchaseUnitCost} onChange={(e) => setPurchaseUnitCost(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
-                </div>
-              </div>
-              {totalCost > 0 && (
-                <div className="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded border border-gray-200">
-                  Total Cost: <span className="font-semibold" style={{ color: theme.primaryColor }}>{currencySymbol}{totalCost.toFixed(2)}</span>
-                </div>
-              )}
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Vendor (optional)</label>
-                <input type="text" value={purchaseVendor} onChange={(e) => setPurchaseVendor(e.target.value)} placeholder="e.g. ABC Suppliers" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Date</label>
-                <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Notes (optional)</label>
-                <input type="text" value={purchaseNotes} onChange={(e) => setPurchaseNotes(e.target.value)} placeholder="e.g. Monthly flour order" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
-              </div>
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input type="checkbox" checked={purchaseLogExpense} onChange={(e) => setPurchaseLogExpense(e.target.checked)} />
-                Also log as an expense
-              </label>
-              {error && <p className="text-red-600 text-sm">{error}</p>}
-            </div>
-            <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setShowPurchaseForm(false)} className="px-4 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button onClick={handlePurchase} disabled={saving} className="px-4 py-2 text-sm rounded text-white font-medium disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>
-                {saving ? 'Saving...' : 'Add Purchase'}
-              </button>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Cost per Unit ({currencySymbol})</label>
+              <input type="number" step="0.01" min="0" value={purchaseUnitCost} onChange={(e) => setPurchaseUnitCost(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
             </div>
           </div>
+          {totalCost > 0 && (
+            <div className="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded border border-gray-200">
+              Total Cost: <span className="font-semibold" style={{ color: theme.primaryColor }}>{currencySymbol}{totalCost.toFixed(2)}</span>
+            </div>
+          )}
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Vendor (optional)</label>
+            <input type="text" value={purchaseVendor} onChange={(e) => setPurchaseVendor(e.target.value)} placeholder="e.g. ABC Suppliers" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Date</label>
+            <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Notes (optional)</label>
+            <input type="text" value={purchaseNotes} onChange={(e) => setPurchaseNotes(e.target.value)} placeholder="e.g. Monthly flour order" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
+          </div>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={purchaseLogExpense} onChange={(e) => setPurchaseLogExpense(e.target.checked)} />
+            Also log as an expense
+          </label>
+          {error && <p className="text-red-600 text-sm">{error}</p>}
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

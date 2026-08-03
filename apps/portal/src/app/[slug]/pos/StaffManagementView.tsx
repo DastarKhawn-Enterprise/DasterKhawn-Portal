@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePOS } from './pos-context';
@@ -8,6 +8,7 @@ import {
   resetPassword, toggleLogin, setStaffLeave, removeStaff, exportStaffCsv,
 } from './staff-actions';
 import type { StaffMember, StaffListResult, StaffMeta, CreateStaffData, UpdateStaffData } from './staff-types';
+import { Badge, Modal, type BadgeVariant } from '@sat-sys/ui';
 import {
   getRoleLabel, getAllPermissions, ROLE_DEFAULTS, STAFF_ROLES, PERMISSION_PAGES,
 } from './staff-types';
@@ -22,40 +23,36 @@ function initials(name: string): string {
   return name.split(' ').filter(Boolean).map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '?';
 }
 
-const ROLE_COLORS: Record<string, string> = {
-  owner: 'bg-purple-100 text-purple-700 border-purple-200',
-  manager: 'bg-blue-100 text-blue-700 border-blue-200',
-  cashier: 'bg-green-100 text-green-700 border-green-200',
-  chef: 'bg-orange-100 text-orange-700 border-orange-200',
-  kitchen_helper: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-  waiter: 'bg-cyan-100 text-cyan-700 border-cyan-200',
-  storekeeper: 'bg-indigo-100 text-indigo-700 border-indigo-200',
-  accountant: 'bg-rose-100 text-rose-700 border-rose-200',
-  cleaner: 'bg-gray-100 text-gray-600 border-gray-200',
-  custom: 'bg-teal-100 text-teal-700 border-teal-200',
+const ROLE_VARIANT: Record<string, BadgeVariant> = {
+  owner: 'purple',
+  manager: 'info',
+  cashier: 'success',
+  chef: 'orange',
+  kitchen_helper: 'warning',
+  waiter: 'teal',
+  storekeeper: 'indigo',
+  accountant: 'danger',
+  cleaner: 'neutral',
+  custom: 'teal',
 };
 
 function RoleBadge({ role }: { role: string }) {
   return (
-    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium border ${ROLE_COLORS[role] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+    <Badge variant={ROLE_VARIANT[role] ?? 'neutral'}>
       {getRoleLabel(role)}
-    </span>
+    </Badge>
   );
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  active: 'bg-green-100 text-green-700',
-  on_leave: 'bg-yellow-100 text-yellow-700',
-  inactive: 'bg-gray-100 text-gray-500',
-  login_disabled: 'bg-red-100 text-red-600',
-};
-
 function StatusBadge({ status }: { status: string }) {
   const label = status === 'login_disabled' ? 'Login Disabled' : status === 'on_leave' ? 'On Leave' : status.charAt(0).toUpperCase() + status.slice(1);
+  const variant: BadgeVariant =
+    status === 'active' ? 'success'
+      : status === 'on_leave' ? 'warning'
+      : status === 'login_disabled' ? 'danger'
+      : 'neutral';
   return (
-    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${STATUS_STYLES[status] || 'bg-gray-100 text-gray-500'}`}>
-      {label}
-    </span>
+    <Badge variant={variant}>{label}</Badge>
   );
 }
 
@@ -69,7 +66,7 @@ function AccessBadges({ permissions }: { permissions: string[] }) {
   const allKeys = ['orders:create', 'orders:view', 'menu:view', 'reports:view', 'staff:manage', 'settings:edit', 'accounts:view', 'customers:view'];
   const hasAll = allKeys.every((k) => permissions.includes(k));
   if (hasAll) {
-    return <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">All Access</span>;
+    return <Badge variant="info">All Access</Badge>;
   }
   const shown: string[] = [];
   const order = ['orders:create', 'orders:view', 'menu:view', 'accounts:view', 'reports:view', 'staff:manage', 'settings:edit', 'customers:view'];
@@ -80,10 +77,10 @@ function AccessBadges({ permissions }: { permissions: string[] }) {
   return (
     <div className="flex flex-wrap gap-1">
       {shown.slice(0, 3).map((l) => (
-        <span key={l} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">{l}</span>
+        <Badge key={l} variant="secondary" size="sm">{l}</Badge>
       ))}
-      {shown.length > 3 && <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">+{shown.length - 3} more</span>}
-      {extra > 0 && <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">+{extra}</span>}
+      {shown.length > 3 && <Badge variant="secondary" size="sm">+{shown.length - 3} more</Badge>}
+      {extra > 0 && <Badge variant="secondary" size="sm">+{extra}</Badge>}
     </div>
   );
 }
@@ -308,7 +305,7 @@ export default function StaffManagementView({ slug }: Props) {
             <div className="flex items-center gap-2">
               <button onClick={handleExport} className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Export CSV</button>
               {isOwnerOrSuper && (
-                <button onClick={() => setShowAddModal(true)} className="px-4 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">+ Add Staff</button>
+                <button onClick={() => setShowAddModal(true)} className="px-4 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-hover">+ Add Staff</button>
               )}
             </div>
           </div>
@@ -337,27 +334,27 @@ export default function StaffManagementView({ slug }: Props) {
               <input
                 type="text" placeholder="Search name, phone, email, role..."
                 value={search} onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-input-focus"
               />
             </div>
             <div className="flex gap-2">
-              <select value={filterRole} onChange={(e) => { setFilterRole(e.target.value); setPage(1); }} className="px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <select value={filterRole} onChange={(e) => { setFilterRole(e.target.value); setPage(1); }} className="px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-input-focus">
                 <option value="">All Roles</option>
                 {STAFF_ROLES.map((r) => <option key={r} value={r}>{getRoleLabel(r)}</option>)}
               </select>
-              <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }} className="px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-sm:hidden">
+              <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }} className="px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-input-focus max-sm:hidden">
                 <option value="">All Status</option>
                 <option value="active">Active</option>
                 <option value="on_leave">On Leave</option>
                 <option value="inactive">Inactive</option>
                 <option value="login_disabled">Login Disabled</option>
               </select>
-              <select value={filterLogin} onChange={(e) => { setFilterLogin(e.target.value); setPage(1); }} className="px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-sm:hidden">
+              <select value={filterLogin} onChange={(e) => { setFilterLogin(e.target.value); setPage(1); }} className="px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-input-focus max-sm:hidden">
                 <option value="">All Login</option>
                 <option value="enabled">Login Enabled</option>
                 <option value="disabled">Login Disabled</option>
               </select>
-              <select value={sortKey} onChange={(e) => setSortKey(e.target.value)} className="px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <select value={sortKey} onChange={(e) => setSortKey(e.target.value)} className="px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-input-focus">
                 <option value="name">Sort: Name</option>
                 <option value="newest">Sort: Newest</option>
                 <option value="role">Sort: Role</option>
@@ -418,7 +415,7 @@ export default function StaffManagementView({ slug }: Props) {
                             {confirmRemove === s.clerkUserId ? (
                               <div className="flex items-center justify-end gap-1">
                                 <span className="text-xs text-red-600">Remove?</span>
-                                <button onClick={() => handleRemove(s.clerkUserId)} disabled={removingId === s.clerkUserId} className="px-2 py-1 text-xs font-medium text-white bg-red-600 rounded hover:bg-red-700 disabled:opacity-50">{removingId === s.clerkUserId ? '...' : 'Yes'}</button>
+                                <button onClick={() => handleRemove(s.clerkUserId)} disabled={removingId === s.clerkUserId} className="px-2 py-1 text-xs font-medium text-white bg-danger rounded hover:opacity-90 disabled:opacity-50">{removingId === s.clerkUserId ? '...' : 'Yes'}</button>
                                 <button onClick={() => setConfirmRemove(null)} className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-200 rounded hover:bg-gray-300">No</button>
                               </div>
                             ) : (
@@ -484,7 +481,7 @@ export default function StaffManagementView({ slug }: Props) {
                       else if (page >= totalPages - 2) p = totalPages - 4 + i;
                       else p = page - 2 + i;
                       return (
-                        <button key={p} onClick={() => setPage(p)} className={`px-2 py-1 text-xs border rounded ${page === p ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-50'}`}>{p}</button>
+                        <button key={p} onClick={() => setPage(p)} className={`px-2 py-1 text-xs border rounded ${page === p ? 'bg-primary text-primary-foreground border-primary' : 'border-gray-300 hover:bg-gray-50'}`}>{p}</button>
                       );
                     })}
                     <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages} className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">Next</button>
@@ -574,22 +571,19 @@ export default function StaffManagementView({ slug }: Props) {
 
       {/* Temp password modal */}
       {tempPassword && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setTempPassword(null)} />
-          <div className="relative bg-white rounded-xl p-6 max-w-sm w-full shadow-xl">
-            <h3 className="text-lg font-bold text-green-700 mb-2">Account Created</h3>
-            <p className="text-sm text-gray-600 mb-4">Share these credentials with the staff member. The password will not be shown again.</p>
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
-              <p className="text-sm text-gray-700"><span className="font-medium">Email:</span> {tempPassword.email}</p>
-              <p className="text-sm text-gray-700 mt-1"><span className="font-medium">Password:</span> <span className="font-mono text-green-800">{tempPassword.password}</span></p>
-            </div>
-            <button
-              onClick={() => { navigator.clipboard.writeText(`Email: ${tempPassword.email}\nPassword: ${tempPassword.password}`); }}
-              className="w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 mb-2"
-            >Copy Credentials</button>
-            <button onClick={() => setTempPassword(null)} className="w-full px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Done</button>
+        <Modal open placement="centered" size="sm" onClose={() => setTempPassword(null)}>
+          <h3 className="text-lg font-bold text-green-700 mb-2">Account Created</h3>
+          <p className="text-sm text-gray-600 mb-4">Share these credentials with the staff member. The password will not be shown again.</p>
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+            <p className="text-sm text-gray-700"><span className="font-medium">Email:</span> {tempPassword.email}</p>
+            <p className="text-sm text-gray-700 mt-1"><span className="font-medium">Password:</span> <span className="font-mono text-green-800">{tempPassword.password}</span></p>
           </div>
-        </div>
+          <button
+            onClick={() => { navigator.clipboard.writeText(`Email: ${tempPassword.email}\nPassword: ${tempPassword.password}`); }}
+            className="w-full px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-hover mb-2"
+          >Copy Credentials</button>
+          <button onClick={() => setTempPassword(null)} className="w-full px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Done</button>
+        </Modal>
       )}
 
       {/* Add Staff Modal */}
@@ -745,7 +739,7 @@ function AccessPanel({
                   checked={isChecked}
                   disabled={!editingPerms || !pp.perm}
                   onChange={() => pp.perm && togglePerm(pp.perm)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                  className="rounded border-gray-300 text-primary focus:ring-input-focus disabled:opacity-50"
                 />
                 <span className="text-sm text-gray-700 flex-1">{pp.label}</span>
                 {!editingPerms && (
@@ -760,7 +754,7 @@ function AccessPanel({
           <button
             onClick={handleSave}
             disabled={saving}
-            className="sticky bottom-0 mt-3 w-full px-4 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="sticky bottom-0 mt-3 w-full px-4 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? 'Saving...' : 'Save Access'}
           </button>
@@ -825,46 +819,40 @@ function StaffFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-5 py-3 flex items-center justify-between rounded-t-xl">
-          <h3 className="text-lg font-bold text-gray-800">{title}</h3>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg"><svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg></button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+    <Modal open placement="centered" size="lg" title={title} onClose={onClose}>
+      <form onSubmit={handleSubmit} className="space-y-4">
           {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
           {success && <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">Saved successfully</div>}
 
           {!isEdit && (
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1 block">Email/Login ID</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="staff@example.com" required />
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-input-focus" placeholder="staff@example.com" required />
             </div>
           )}
 
           {!isEdit && (
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1 block">Password</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Set staff login password (leave blank to auto-generate)" />
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-input-focus" placeholder="Set staff login password (leave blank to auto-generate)" />
             </div>
           )}
 
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1 block">Full Name</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="John Doe" required />
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-input-focus" placeholder="John Doe" required />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1 block">Role</label>
-              <select value={role} onChange={(e) => { setRole(e.target.value); if (!isEdit) applyDefaults(e.target.value); }} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <select value={role} onChange={(e) => { setRole(e.target.value); if (!isEdit) applyDefaults(e.target.value); }} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-input-focus">
                 {STAFF_ROLES.filter((r) => r !== 'custom').map((r) => <option key={r} value={r}>{getRoleLabel(r)}</option>)}
               </select>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-700 mb-1 block">Status</label>
-              <select value={employmentStatus} onChange={(e) => setEmploymentStatus(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <select value={employmentStatus} onChange={(e) => setEmploymentStatus(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-input-focus">
                 <option value="active">Active</option>
                 <option value="on_leave">On Leave</option>
                 <option value="inactive">Inactive</option>
@@ -874,7 +862,7 @@ function StaffFormModal({
 
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1 block">Phone</label>
-            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="0300-1234567" />
+            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-input-focus" placeholder="0300-1234567" />
           </div>
 
           {/* Permissions */}
@@ -889,7 +877,7 @@ function StaffFormModal({
                   const pDef = getAllPermissions().find((p) => p.key === key);
                   return (
                     <label key={key} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 cursor-pointer">
-                      <input type="checkbox" checked={perms.includes(key)} onChange={() => togglePerm(key)} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                      <input type="checkbox" checked={perms.includes(key)} onChange={() => togglePerm(key)} className="rounded border-gray-300 text-primary focus:ring-input-focus" />
                       <span className="text-sm text-gray-700">{pDef?.label || key}</span>
                     </label>
                   );
@@ -900,13 +888,12 @@ function StaffFormModal({
 
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="flex-1 px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+            <button type="submit" disabled={saving} className="flex-1 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed">
               {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Account'}
             </button>
           </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -942,36 +929,33 @@ function LeaveModal({
     setSaving(false);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl max-w-md w-full p-5 shadow-xl">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">{isOnLeave ? 'Edit Leave' : 'Set Leave'} — {staff.name}</h3>
-        {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm mb-3">{error}</div>}
+return (
+    <Modal open placement="centered" size="md" title={isOnLeave ? 'Edit Leave' : 'Set Leave'} onClose={onClose}>
+      {staff.name && <p className="text-sm text-gray-500 mb-3">{staff.name}</p>}
+      {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm mb-3">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1 block">Start Date</label>
-            <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+            <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-input-focus" required />
           </div>
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1 block">End Date</label>
-            <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+            <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-input-focus" required />
           </div>
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1 block">Reason</label>
-            <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Optional reason for leave" />
+            <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-input-focus" placeholder="Optional reason for leave" />
           </div>
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="flex-1 px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
             {isOnLeave && (
               <button type="button" onClick={handleRemoveLeave} disabled={saving} className="px-4 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50">Remove Leave</button>
             )}
-            <button type="submit" disabled={saving} className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+            <button type="submit" disabled={saving} className="flex-1 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-hover disabled:opacity-50">
               {saving ? 'Saving...' : isOnLeave ? 'Update Leave' : 'Set Leave'}
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -24,7 +24,7 @@ export function DonutChart({
   if (total === 0) {
     return (
       <svg viewBox={`0 0 ${size} ${size}`} className="w-full h-auto max-w-[160px] mx-auto">
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e5e7eb" strokeWidth={sw} />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--chart-grid)" strokeWidth={sw} />
         <text x={cx} y={cy - 4} textAnchor="middle" className="fill-gray-400" fontSize={size * 0.09}>0</text>
         <text x={cx} y={cy + 10} textAnchor="middle" className="fill-gray-400" fontSize={size * 0.06}>No data</text>
       </svg>
@@ -33,7 +33,7 @@ export function DonutChart({
 
   return (
     <svg viewBox={`0 0 ${size} ${size}`} className="w-full h-auto max-w-[160px] mx-auto">
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f3f4f6" strokeWidth={sw} />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--border-light)" strokeWidth={sw} />
       {slices.map((s, i) => (
         <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={s.color} strokeWidth={sw}
           strokeDasharray={`${Math.max(s.dash, 0.5)} ${circumference}`}
@@ -45,14 +45,14 @@ export function DonutChart({
       <text x={cx} y={cy - (centerSub ? 4 : 0)} textAnchor="middle" fontSize={size * 0.11} fontWeight="bold" fill="#374151">
         {centerText ?? (currencySymbol ? `${currencySymbol}${total.toFixed(0)}` : String(total))}
       </text>
-      {centerSub && <text x={cx} y={cy + 10} textAnchor="middle" fontSize={size * 0.065} fill="#9ca3af">{centerSub}</text>}
+      {centerSub && <text x={cx} y={cy + 10} textAnchor="middle" fontSize={size * 0.065} fill="var(--text-muted)">{centerSub}</text>}
     </svg>
   );
 }
 
 // ─── Bar Chart ───
 export function BarChart({
-  data, maxValue, format, height = 200, barColor = '#3b82f6',
+  data, maxValue, format, height = 200, barColor = 'var(--chart-1)',
 }: {
   data: { label: string; value: number }[];
   maxValue?: number; format?: (n: number) => string; height?: number; barColor?: string;
@@ -81,7 +81,7 @@ export function BarChart({
 
 // ─── Line / Area Chart ───
 export function LineChart({
-  data, aspectRatio = 3, color = '#3b82f6', format, showDots = true,
+  data, aspectRatio = 3, color = 'var(--chart-1)', format, showDots = true,
 }: {
   data: { label: string; value: number }[];
   aspectRatio?: number; color?: string; format?: (n: number) => string; showDots?: boolean;
@@ -109,8 +109,8 @@ export function LineChart({
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet">
         {yTicks.map((v) => (
           <g key={v}>
-            <line x1={pad.l} y1={yScale(v)} x2={width - pad.r} y2={yScale(v)} stroke="#e5e7eb" strokeWidth="1" />
-            <text x={pad.l - 6} y={yScale(v) + 3} textAnchor="end" fontSize="10" fill="#9ca3af">
+            <line x1={pad.l} y1={yScale(v)} x2={width - pad.r} y2={yScale(v)} stroke="var(--chart-grid)" strokeWidth="1" />
+            <text x={pad.l - 6} y={yScale(v) + 3} textAnchor="end" fontSize="10" fill="var(--text-muted)">
               {format ? format(v) : String(v)}
             </text>
           </g>
@@ -126,7 +126,7 @@ export function LineChart({
           const idx = data.indexOf(d);
           const x = pad.l + idx * stepX;
           return (
-            <text key={i} x={x} y={height - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">{d.label}</text>
+            <text key={i} x={x} y={height - 4} textAnchor="middle" fontSize="9" fill="var(--text-muted)">{d.label}</text>
           );
         })}
       </svg>
@@ -156,12 +156,12 @@ export function Heatmap({
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto max-w-full" style={{ maxWidth: w }}>
       {/* Column headers */}
       {cols.map((c, i) => (
-        <text key={`ch-${i}`} x={labelW + i * colW + colW / 2} y={labelH - 4} textAnchor="middle" fontSize="9" fill="#6b7280">{c}</text>
+        <text key={`ch-${i}`} x={labelW + i * colW + colW / 2} y={labelH - 4} textAnchor="middle" fontSize="9" fill="var(--text-muted)">{c}</text>
       ))}
       {/* Row labels + cells */}
       {rows.map((r, ri) => (
         <g key={`r-${ri}`}>
-          <text x={labelW - 4} y={labelH + ri * rowH + rowH / 2 + 3} textAnchor="end" fontSize="9" fill="#6b7280">{r}</text>
+          <text x={labelW - 4} y={labelH + ri * rowH + rowH / 2 + 3} textAnchor="end" fontSize="9" fill="var(--text-muted)">{r}</text>
           {cols.map((c, ci) => {
             const v = lookup.get(`${r}|${c}`) || 0;
             return (

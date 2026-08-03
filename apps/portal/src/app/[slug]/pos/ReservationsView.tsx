@@ -1,9 +1,10 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
+import { Badge, Button, ConfirmDialog, Modal, reservationStatusVariant } from '@sat-sys/ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { useEvent, usePublish } from './use-event';
@@ -36,13 +37,6 @@ interface TableRecord {
 
 const STATUS_LABELS: Record<string, string> = {
   confirmed: 'Confirmed', seated: 'Seated', cancelled: 'Cancelled', no_show: 'No Show',
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  confirmed: 'bg-blue-50 text-blue-700 border border-blue-200',
-  seated: 'bg-green-50 text-green-700 border border-green-200',
-  cancelled: 'bg-red-50 text-red-700 border border-red-200',
-  no_show: 'bg-gray-50 text-gray-500 border border-gray-200',
 };
 
 type FilterMode = 'upcoming' | 'past' | 'all';
@@ -224,11 +218,11 @@ export default function ReservationsView({ slug, theme }: Props) {
               {filteredReservations.map((r) => (
                 <div key={r.id} className={`bg-white rounded-lg shadow-sm border p-4 ${r.status !== 'confirmed' ? 'opacity-60' : ''}`}>
                   <div className="flex items-start justify-between mb-2">
-                    <div><div className="text-sm font-semibold text-gray-800">{r.guest_name}</div><div className="text-xs text-gray-500">{r.guest_phone || '—'}</div></div>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${STATUS_COLORS[r.status] || ''}`}>{STATUS_LABELS[r.status]}</span>
+                    <div><div className="text-sm font-semibold text-gray-800">{r.guest_name}</div><div className="text-xs text-gray-500">{r.guest_phone || 'â€”'}</div></div>
+                    <Badge variant={reservationStatusVariant(r.status)} size="sm" pill>{STATUS_LABELS[r.status]}</Badge>
                   </div>
-                  <div className="text-xs text-gray-500 mb-2">{r.reservation_date} · {r.reservation_time.slice(0, 5)} · {r.party_size} {r.party_size === 1 ? 'guest' : 'guests'}</div>
-                  <div className="text-xs text-gray-500 mb-2">Table: {r.table_id ? (r.tables?.table_number || '—') : <span className="italic">Unassigned</span>}</div>
+                  <div className="text-xs text-gray-500 mb-2">{r.reservation_date} Â· {r.reservation_time.slice(0, 5)} Â· {r.party_size} {r.party_size === 1 ? 'guest' : 'guests'}</div>
+                  <div className="text-xs text-gray-500 mb-2">Table: {r.table_id ? (r.tables?.table_number || 'â€”') : <span className="italic">Unassigned</span>}</div>
                   {r.notes && <div className="text-xs text-gray-400 italic mb-2">{r.notes}</div>}
                   {canEdit && r.status === 'confirmed' && (
                     <div className="flex gap-1.5 mt-2">
@@ -265,12 +259,12 @@ export default function ReservationsView({ slug, theme }: Props) {
                   {filteredReservations.map((r) => (
                     <tr key={r.id} className={`border-b border-gray-100 hover:bg-gray-50 ${r.status !== 'confirmed' ? 'opacity-50' : ''}`}>
                       <td className="px-4 py-3 font-medium text-gray-800">{r.guest_name}</td>
-                      <td className="px-4 py-3 text-gray-600">{r.guest_phone || '—'}</td>
+                      <td className="px-4 py-3 text-gray-600">{r.guest_phone || 'â€”'}</td>
                       <td className="px-4 py-3 text-gray-600">{r.reservation_date}<br /><span className="text-xs">{r.reservation_time.slice(0, 5)}</span></td>
                       <td className="px-4 py-3 text-gray-700">{r.party_size}</td>
-                      <td className="px-4 py-3 text-gray-600">{r.table_id ? (r.tables?.table_number || '—') : <span className="italic text-gray-400">Unassigned</span>}</td>
-                      <td className="px-4 py-3 text-gray-400 max-w-[120px] truncate">{r.notes || '—'}</td>
-                      <td className="px-4 py-3"><span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold border ${STATUS_COLORS[r.status] || ''}`}>{STATUS_LABELS[r.status]}</span></td>
+                      <td className="px-4 py-3 text-gray-600">{r.table_id ? (r.tables?.table_number || 'â€”') : <span className="italic text-gray-400">Unassigned</span>}</td>
+                      <td className="px-4 py-3 text-gray-400 max-w-[120px] truncate">{r.notes || 'â€”'}</td>
+                      <td className="px-4 py-3"><Badge variant={reservationStatusVariant(r.status)} size="sm" pill>{STATUS_LABELS[r.status]}</Badge></td>
                       <td className="px-4 py-3 text-right">
                         {canEdit && r.status === 'confirmed' ? (
                           <div className="flex items-center justify-end gap-1">
@@ -295,56 +289,51 @@ export default function ReservationsView({ slug, theme }: Props) {
         )}
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setShowForm(false)}>
-          <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-md md:mx-4 p-6 rounded-t-xl md:max-h-[90vh] md:overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-800">{editingRes ? 'Edit Reservation' : 'Add Reservation'}</h2>
-              <button onClick={() => setShowForm(false)} className="md:hidden text-gray-400 text-xl">✕</button>
-            </div>
-            <div className="space-y-3">
-              <div><label className="block text-sm text-gray-600 mb-1">Guest Name *</label><input type="text" value={formGuestName} onChange={(e) => setFormGuestName(e.target.value)} placeholder="Guest name" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
-              <div><label className="block text-sm text-gray-600 mb-1">Phone</label><input type="text" value={formGuestPhone} onChange={(e) => setFormGuestPhone(e.target.value)} placeholder="Phone number" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
-              <div className="grid grid-cols-3 gap-2">
-                <div><label className="block text-sm text-gray-600 mb-1">Party Size</label><input type="number" min="1" value={formPartySize} onChange={(e) => setFormPartySize(Math.max(1, parseInt(e.target.value) || 1))} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
-                <div><label className="block text-sm text-gray-600 mb-1">Date *</label><input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
-                <div><label className="block text-sm text-gray-600 mb-1">Time *</label><input type="time" value={formTime} onChange={(e) => setFormTime(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
-              </div>
-              <div><label className="block text-sm text-gray-600 mb-1">Table (optional)</label>
-                <select value={formTableId} onChange={(e) => setFormTableId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm">
-                  <option value="">— No table assigned —</option>
-                  {tables.filter((t) => t.status === 'available' || t.id === formTableId).map((t) => (
-                    <option key={t.id} value={t.id}>Table {t.table_number} (capacity: {t.capacity})</option>
-                  ))}
-                </select>
-              </div>
-              <div><label className="block text-sm text-gray-600 mb-1">Notes (optional)</label><input type="text" value={formNotes} onChange={(e) => setFormNotes(e.target.value)} placeholder="Special requests, allergies, etc." className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
-              {error && <p className="text-red-600 text-sm">{error}</p>}
-            </div>
-            <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-sm rounded text-white font-medium disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>{saving ? 'Saving...' : (editingRes ? 'Update' : 'Add')}</button>
-            </div>
+<Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        title={editingRes ? 'Edit Reservation' : 'Add Reservation'}
+        size="md"
+        footer={
+          <div className="flex justify-end gap-2 w-full">
+            <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
+            <Button variant="primary" style={{ backgroundColor: theme.primaryColor }} onClick={handleSave} loading={saving}>
+              {editingRes ? 'Update' : 'Add'}
+            </Button>
           </div>
+        }
+      >
+        <div className="space-y-3">
+          <div><label className="block text-sm text-gray-600 mb-1">Guest Name *</label><input type="text" value={formGuestName} onChange={(e) => setFormGuestName(e.target.value)} placeholder="Guest name" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+          <div><label className="block text-sm text-gray-600 mb-1">Phone</label><input type="text" value={formGuestPhone} onChange={(e) => setFormGuestPhone(e.target.value)} placeholder="Phone number" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+          <div className="grid grid-cols-3 gap-2">
+            <div><label className="block text-sm text-gray-600 mb-1">Party Size</label><input type="number" min="1" value={formPartySize} onChange={(e) => setFormPartySize(Math.max(1, parseInt(e.target.value) || 1))} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+            <div><label className="block text-sm text-gray-600 mb-1">Date *</label><input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+            <div><label className="block text-sm text-gray-600 mb-1">Time *</label><input type="time" value={formTime} onChange={(e) => setFormTime(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+          </div>
+          <div><label className="block text-sm text-gray-600 mb-1">Table (optional)</label>
+            <select value={formTableId} onChange={(e) => setFormTableId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+              <option value="">— No table assigned —</option>
+              {tables.filter((t) => t.status === 'available' || t.id === formTableId).map((t) => (
+                <option key={t.id} value={t.id}>Table {t.table_number} (capacity: {t.capacity})</option>
+              ))}
+            </select>
+          </div>
+          <div><label className="block text-sm text-gray-600 mb-1">Notes (optional)</label><input type="text" value={formNotes} onChange={(e) => setFormNotes(e.target.value)} placeholder="Special requests, allergies, etc." className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+          {error && <p className="text-red-600 text-sm">{error}</p>}
         </div>
-      )}
+      </Modal>
 
-      {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setDeleteId(null)}>
-          <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-sm md:mx-4 p-6 rounded-t-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-gray-800">Delete Reservation?</h2>
-              <button onClick={() => setDeleteId(null)} className="md:hidden text-gray-400 text-xl">✕</button>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">This action cannot be undone.</p>
-            {error && <p className="text-red-600 text-sm mb-2">{error}</p>}
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setDeleteId(null)} className="px-4 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button onClick={handleDelete} disabled={deleting} className="px-4 py-2 text-sm rounded bg-red-600 text-white font-medium disabled:opacity-50">{deleting ? 'Deleting...' : 'Delete'}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={handleDelete}
+        title="Delete Reservation?"
+        message={<>This action cannot be undone.{error && <span className="block text-red-600 mt-2">{error}</span>}</>}
+        confirmLabel="Delete"
+        loading={deleting}
+        size="sm"
+      />
     </div>
   );
 }

@@ -2,6 +2,145 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────
+   Semantic design tokens — baseline (light) theme.
+   Values mirror the existing hard-coded design language exactly,
+   so the default appearance is unchanged. A tenant theme overrides
+   these at runtime via the ThemeProvider (CSS custom properties
+   emitted on :root). See THEME_ENGINE.md for the full token map.
+   ───────────────────────────────────────────────────────────── */
+:root {
+  --background: #f9fafb;
+  --background-secondary: #f3f4f6;
+  --surface: #ffffff;
+  --surface-secondary: #f9fafb;
+  --surface-hover: #f3f4f6;
+
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #6b7280;
+  --text-inverse: #ffffff;
+
+  --primary: #ff6600;
+  --primary-hover: #e55c00;
+  --primary-active: #cc5200;
+  --primary-foreground: #ffffff;
+
+  --secondary: #1a1a1a;
+  --secondary-hover: #333333;
+  --secondary-foreground: #ffffff;
+
+  --accent: #ff6600;
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --info: #2563eb;
+
+  --border: #e5e7eb;
+  --border-light: #f3f4f6;
+  --divider: #e5e7eb;
+
+  --card-background: #ffffff;
+  --card-border: #e5e7eb;
+  --card-header: #f9fafb;
+
+  --sidebar-background: #1A1A1A;
+  --sidebar-foreground: #B8B6B0;
+  --sidebar-hover: #252525;
+  --sidebar-active: #ff6600;
+  --sidebar-border: #252525;
+
+  --navbar-background: #ffffff;
+  --navbar-foreground: #1a1a1a;
+  --navbar-border: #e5e7eb;
+
+  --button-primary: #ff6600;
+  --button-secondary: #ffffff;
+  --button-danger: #dc2626;
+  --button-outline: #ffffff;
+  --button-ghost: transparent;
+
+  --input-background: #ffffff;
+  --input-border: #d1d5db;
+  --input-text: #111827;
+  --input-placeholder: #9ca3af;
+  --input-focus: #3b82f6;
+
+  --table-header: #f3f4f6;
+  --table-header-text: #4b5563;
+  --table-row: #ffffff;
+  --table-hover: #f9fafb;
+  --table-selected: #eff6ff;
+  --table-border: #e5e7eb;
+
+  --badge-success: #16a34a;
+  --badge-warning: #d97706;
+  --badge-danger: #dc2626;
+  --badge-info: #2563eb;
+  --badge-default: #6b7280;
+
+  --chart-1: #3b82f6;
+  --chart-2: #f59e0b;
+  --chart-3: #8b5cf6;
+  --chart-4: #10b981;
+  --chart-5: #ef4444;
+  --chart-grid: #e5e7eb;
+
+  --receipt-background: #ffffff;
+  --receipt-border: #e5e7eb;
+  --receipt-text: #111827;
+
+  --order-status-draft: #6b7280;
+  --order-status-pending: #2563eb;
+  --order-status-preparing: #d97706;
+  --order-status-ready: #16a34a;
+  --order-status-completed: #6b7280;
+  --order-status-cancelled: #dc2626;
+  --order-status-paid: #16a34a;
+  --order-status-refunded: #dc2626;
+
+  --inventory-healthy: #16a34a;
+  --inventory-low-stock: #f59e0b;
+  --inventory-critical: #ef4444;
+
+  /* Typography */
+  --font-heading: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Spacing scale (Tailwind defaults, centralized) */
+  --space-0: 0;
+  --space-1: 0.25rem;
+  --space-1-5: 0.375rem;
+  --space-2: 0.5rem;
+  --space-2-5: 0.625rem;
+  --space-3: 0.75rem;
+  --space-3-5: 0.875rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+
+  /* Shadows (Tailwind defaults, centralized) */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+  /* Radius (Tailwind defaults, centralized) */
+  --radius-sm: 0.125rem;
+  --radius: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-full: 9999px;
+
+  /* Transitions (Tailwind defaults, centralized) */
+  --transition-colors: color 150ms cubic-bezier(0.4, 0, 0.2, 1), background-color 150ms cubic-bezier(0.4, 0, 0.2, 1), border-color 150ms cubic-bezier(0.4, 0, 0.2, 1), text-decoration-color 150ms cubic-bezier(0.4, 0, 0.2, 1), fill 150ms cubic-bezier(0.4, 0, 0.2, 1), stroke 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-all: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -13,4 +152,63 @@
 @keyframes slideIn {
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Global interaction standards (design system layer)
+   ───────────────────────────────────────────────────────────── */
+
+/* Consistent keyboard focus ring across every interactive element.
+   Uses the theme's input-focus token so it rethems automatically. */
+:focus-visible {
+  outline: 2px solid var(--input-focus);
+  outline-offset: 2px;
+}
+
+/* Form fields always show a visible focus ring (any focus mode).
+   Views with explicit `focus:ring-*` utilities keep their own (Tailwind's
+   `.focus\:outline-none` has higher specificity and wins over this rule). */
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid var(--input-focus);
+  outline-offset: 0;
+}
+
+/* Buttons without focus-visible rules still get a ring on keyboard nav. */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--input-focus);
+  outline-offset: 2px;
+}
+
+/* Global scrollbar styling for overflow containers */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Reduced-motion safety */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

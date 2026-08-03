@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
+import { Badge, Button, ConfirmDialog, Modal } from '@sat-sys/ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { useEvent, usePublish } from './use-event';
@@ -216,9 +217,9 @@ export default function InventoryView({ slug, theme }: Props) {
                     <div className="flex items-start justify-between mb-2">
                       <div className="font-semibold text-gray-800">{item.name}</div>
                       {isLow ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Low</span>
+                        <Badge variant="danger">Low</Badge>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">OK</span>
+                        <Badge variant="success">OK</Badge>
                       )}
                     </div>
                     <div className="grid grid-cols-2 gap-y-1 gap-x-4 text-sm text-gray-600 mb-3">
@@ -262,9 +263,9 @@ export default function InventoryView({ slug, theme }: Props) {
                         <td className="px-4 py-3 text-right text-gray-500">{threshold}</td>
                         <td className="px-4 py-3 text-right">
                           {isLow ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Low</span>
+                            <Badge variant="danger">Low</Badge>
                           ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">OK</span>
+                            <Badge variant="success">OK</Badge>
                           )}
                         </td>
                         {canEdit && (
@@ -286,85 +287,78 @@ export default function InventoryView({ slug, theme }: Props) {
         )}
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setShowForm(false)}>
-          <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-md md:mx-4 p-6 md:max-h-[90vh] md:overflow-y-auto rounded-t-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-800">{editingId ? 'Edit Item' : 'Add Item'}</h2>
-              <button onClick={() => setShowForm(false)} className="md:hidden text-gray-400 text-xl">✕</button>
-            </div>
-            <div className="space-y-3">
-              <div><label className="block text-sm text-gray-600 mb-1">Name</label><input type="text" value={formName} onChange={(e) => setFormName(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
-              <div><label className="block text-sm text-gray-600 mb-1">Unit</label>
-                <select value={formUnit} onChange={(e) => setFormUnit(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm">
-                  {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-                </select>
-              </div>
-              <div><label className="block text-sm text-gray-600 mb-1">Current Stock</label><input type="number" step="any" value={formStock} onChange={(e) => setFormStock(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
-              <div><label className="block text-sm text-gray-600 mb-1">Low Stock Threshold</label><input type="number" step="any" value={formThreshold} onChange={(e) => setFormThreshold(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
-              {error && <p className="text-red-600 text-sm">{error}</p>}
-            </div>
-            <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-sm rounded text-white font-medium disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>
-                {saving ? 'Saving...' : (editingId ? 'Update' : 'Add')}
-              </button>
-            </div>
+      <Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        title={editingId ? 'Edit Item' : 'Add Item'}
+        size="md"
+        footer={
+          <div className="flex justify-end gap-2 w-full">
+            <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
+            <Button variant="primary" style={{ backgroundColor: theme.primaryColor }} onClick={handleSave} loading={saving}>
+              {editingId ? 'Update' : 'Add'}
+            </Button>
           </div>
+        }
+      >
+        <div className="space-y-3">
+          <div><label className="block text-sm text-gray-600 mb-1">Name</label><input type="text" value={formName} onChange={(e) => setFormName(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+          <div><label className="block text-sm text-gray-600 mb-1">Unit</label>
+            <select value={formUnit} onChange={(e) => setFormUnit(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+              {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+          <div><label className="block text-sm text-gray-600 mb-1">Current Stock</label><input type="number" step="any" value={formStock} onChange={(e) => setFormStock(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+          <div><label className="block text-sm text-gray-600 mb-1">Low Stock Threshold</label><input type="number" step="any" value={formThreshold} onChange={(e) => setFormThreshold(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+          {error && <p className="text-red-600 text-sm">{error}</p>}
         </div>
-      )}
+      </Modal>
 
-      {adjustItem && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setAdjustItem(null)}>
-          <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-sm md:mx-4 p-6 md:max-h-[90vh] md:overflow-y-auto rounded-t-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-lg font-semibold text-gray-800">Adjust Stock</h2>
-              <button onClick={() => setAdjustItem(null)} className="md:hidden text-gray-400 text-xl">✕</button>
-            </div>
-            <p className="text-sm text-gray-500 mb-4">{adjustItem.name} (current: {Number(adjustItem.current_stock)} {adjustItem.unit})</p>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Movement Type</label>
-                <div className="flex gap-3">
-                  <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                    <input type="radio" name="adjType" checked={adjustType === 'adjustment'} onChange={() => setAdjustType('adjustment')} />
-                    Adjustment
-                  </label>
-                  <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                    <input type="radio" name="adjType" checked={adjustType === 'wastage'} onChange={() => setAdjustType('wastage')} />
-                    Wastage
-                  </label>
-                </div>
-              </div>
-              <div><label className="block text-sm text-gray-600 mb-1">Amount (+ add / − remove)</label><input type="number" step="any" value={adjustDelta} onChange={(e) => setAdjustDelta(e.target.value)} placeholder="e.g. 10 or -5" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
-              <div><label className="block text-sm text-gray-600 mb-1">Note (optional)</label><input type="text" value={adjustNote} onChange={(e) => setAdjustNote(e.target.value)} placeholder="e.g. restock, wastage" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
-              {error && <p className="text-red-600 text-sm">{error}</p>}
-            </div>
-            <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setAdjustItem(null)} className="px-4 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button onClick={handleAdjust} disabled={adjusting} className="px-4 py-2 text-sm rounded text-white font-medium disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>{adjusting ? 'Adjusting...' : 'Apply'}</button>
+      <Modal
+        open={!!adjustItem}
+        onClose={() => setAdjustItem(null)}
+        title="Adjust Stock"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2 w-full">
+            <Button variant="outline" onClick={() => setAdjustItem(null)}>Cancel</Button>
+            <Button variant="primary" style={{ backgroundColor: theme.primaryColor }} onClick={handleAdjust} loading={adjusting}>
+              Apply
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-sm text-gray-500 mb-4">{adjustItem?.name} (current: {Number(adjustItem?.current_stock ?? 0)} {adjustItem?.unit})</p>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Movement Type</label>
+            <div className="flex gap-3">
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input type="radio" name="adjType" checked={adjustType === 'adjustment'} onChange={() => setAdjustType('adjustment')} />
+                Adjustment
+              </label>
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input type="radio" name="adjType" checked={adjustType === 'wastage'} onChange={() => setAdjustType('wastage')} />
+                Wastage
+              </label>
             </div>
           </div>
+          <div><label className="block text-sm text-gray-600 mb-1">Amount (+ add / − remove)</label><input type="number" step="any" value={adjustDelta} onChange={(e) => setAdjustDelta(e.target.value)} placeholder="e.g. 10 or -5" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+          <div><label className="block text-sm text-gray-600 mb-1">Note (optional)</label><input type="text" value={adjustNote} onChange={(e) => setAdjustNote(e.target.value)} placeholder="e.g. restock, wastage" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+          {error && <p className="text-red-600 text-sm">{error}</p>}
         </div>
-      )}
+      </Modal>
 
-      {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setDeleteId(null)}>
-          <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-sm md:mx-4 p-6 rounded-t-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-gray-800">Delete Item?</h2>
-              <button onClick={() => setDeleteId(null)} className="md:hidden text-gray-400 text-xl">✕</button>
-            </div>
-            <p className="text-sm text-gray-600 mb-1">This action cannot be undone.</p>
-            <p className="text-sm text-gray-500 mb-4">Any menu items linked to this ingredient will have their references removed.</p>
-            {error && <p className="text-red-600 text-sm mb-2">{error}</p>}
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setDeleteId(null)} className="px-4 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button onClick={handleDelete} disabled={deleting} className="px-4 py-2 text-sm rounded bg-red-600 text-white font-medium disabled:opacity-50">{deleting ? 'Deleting...' : 'Delete'}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={handleDelete}
+        title="Delete Item?"
+        message={<>This action cannot be undone.<br />Any menu items linked to this ingredient will have their references removed.{error && <span className="block text-red-600 mt-2">{error}</span>}</>}
+        confirmLabel="Delete"
+        loading={deleting}
+        size="sm"
+      />
     </div>
   );
 }

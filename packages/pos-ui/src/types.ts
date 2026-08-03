@@ -1,3 +1,5 @@
+export type { ThemeConfig } from '@sat-sys/ui';
+
 export interface MenuItem {
   id: string;
   name: string;
@@ -12,11 +14,4 @@ export interface CartItem {
   name: string;
   price: number;
   quantity: number;
-}
-
-export interface ThemeConfig {
-  primaryColor: string;
-  secondaryColor: string;
-  logoUrl: string;
-  fontFamily: string;
 }

@@ -1,8 +1,9 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
+import { Badge, Button, Modal } from '@sat-sys/ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { normalizePhone, checkDuplicatePhone } from './customer-utils';
@@ -303,7 +304,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
   const handleDelete = async (customer: Customer) => {
     setDeleteError('');
     if (customer.total_orders > 0) {
-      setDeleteError(`Cannot delete — has order history. Deactivate instead.`);
+      setDeleteError(`Cannot delete â€” has order history. Deactivate instead.`);
       return;
     }
     setDeleting(true);
@@ -388,8 +389,8 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
   }
 
   const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <span className="text-gray-300 ml-1">↕</span>;
-    return <span className="text-gray-500 ml-1">{sortAsc ? '↑' : '↓'}</span>;
+    if (sortField !== field) return <span className="text-gray-300 ml-1">â†•</span>;
+    return <span className="text-gray-500 ml-1">{sortAsc ? 'â†‘' : 'â†“'}</span>;
   };
 
   const filterOptions: { key: FilterKey; label: string }[] = [
@@ -506,9 +507,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
                           <td className="px-4 py-3 text-right text-gray-700 font-medium">{currencySymbol}{Number(c.total_spent).toFixed(2)}</td>
                           <td className="px-4 py-3 text-right text-gray-500 text-xs">{c.last_order_date ? formatDate(c.last_order_date) : '-'}</td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${c.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                              {c.status === 'active' ? 'Active' : 'Inactive'}
-                            </span>
+                            <Badge variant={c.status === 'active' ? 'success' : 'neutral'} pill>{c.status === 'active' ? 'Active' : 'Inactive'}</Badge>
                           </td>
                           {(canEdit || canManage) && <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-1">
@@ -546,9 +545,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
                             <div className="text-xs text-gray-400">{c.phone || 'No phone'}</div>
                           </div>
                         </div>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${c.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                          {c.status === 'active' ? 'Active' : 'Inactive'}
-                        </span>
+                        <Badge variant={c.status === 'active' ? 'success' : 'neutral'} size="sm" pill>{c.status === 'active' ? 'Active' : 'Inactive'}</Badge>
                       </div>
                       <div className="flex gap-4 text-sm text-gray-600 mt-2">
                         <div><span className="text-gray-400">Orders:</span> <span className="font-medium">{c.total_orders}</span></div>
@@ -580,7 +577,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
                   <SummaryStat label="New Customers" value={String(summaryData?.newMonth ?? 0)} />
                 </div>
                 <button className="mt-3 w-full text-xs font-medium text-center py-2 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
-                  View Customer Report →
+                  View Customer Report â†’
                 </button>
               </div>
 
@@ -606,7 +603,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
                 )}
                 <button onClick={() => { setActiveFilter(null); setSortField('total_spent'); setSortAsc(false); setPage(1); }}
                   className="mt-3 w-full text-xs font-medium text-center py-2 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
-                  View All →
+                  View All â†’
                 </button>
               </div>
 
@@ -635,7 +632,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
           <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-xl p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-gray-800">Filters</h3>
-              <button onClick={() => setMobileFilterOpen(false)} className="text-gray-400 text-xl">✕</button>
+              <button onClick={() => setMobileFilterOpen(false)} className="text-gray-400 text-xl">âœ•</button>
             </div>
             <div className="space-y-2">
               {filterOptions.map(f => (
@@ -710,77 +707,76 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
       )}
 
       {/* Add/Edit Modal */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowForm(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-5">
-                <h2 className="text-lg font-semibold text-gray-800">{editingCustomer ? 'Edit Customer' : 'Add Customer'}</h2>
-                <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
-              </div>
-              {duplicateWarning && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4">
-                  <p className="text-sm text-amber-800 font-medium">Possible duplicate found</p>
-                  <p className="text-xs text-amber-600 mt-1">{'\u201c'}{duplicateWarning.name}{'\u201d'} already has this phone number. Save anyway?</p>
-                  <div className="flex gap-2 mt-2">
-                    <button onClick={() => setDuplicateWarning(null)} className="text-xs font-medium px-3 py-1.5 rounded bg-amber-100 text-amber-800 hover:bg-amber-200">Save Anyway</button>
-                    <button onClick={() => setShowForm(false)} className="text-xs font-medium px-3 py-1.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200">Cancel</button>
-                  </div>
-                </div>
-              )}
-              <div className="space-y-4">
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                  <input type="text" value={formName} onChange={(e) => setFormName(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" autoFocus /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
-                  <input type="tel" value={formPhone} onChange={(e) => setFormPhone(e.target.value)} placeholder="03XX-XXXXXXX" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input type="email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                  <select value={formStatus} onChange={(e) => setFormStatus(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                    <option value="active">Active</option><option value="inactive">Inactive</option>
-                  </select></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                  <textarea value={formNotes} onChange={(e) => setFormNotes(e.target.value)} rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" /></div>
-                {formError && <p className="text-red-600 text-sm">{formError}</p>}
-              </div>
-              <div className="flex justify-end gap-3 mt-6">
-                <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
-                <button onClick={handleSave} disabled={saving}
-                  className="px-4 py-2 text-sm rounded-lg text-white font-medium disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>
-                  {saving ? 'Saving...' : (editingCustomer ? 'Update Customer' : 'Add Customer')}
-                </button>
-              </div>
+      <Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        placement="centered"
+        size="lg"
+        title={editingCustomer ? 'Edit Customer' : 'Add Customer'}
+        footer={
+          <div className="flex justify-end gap-2 w-full">
+            <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
+            <Button variant="primary" style={{ backgroundColor: theme.primaryColor }} onClick={handleSave} loading={saving}>
+              {saving ? 'Saving...' : (editingCustomer ? 'Update Customer' : 'Add Customer')}
+            </Button>
+          </div>
+        }
+      >
+        {duplicateWarning && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4">
+            <p className="text-sm text-amber-800 font-medium">Possible duplicate found</p>
+            <p className="text-xs text-amber-600 mt-1">{'\u201c'}{duplicateWarning.name}{'\u201d'} already has this phone number. Save anyway?</p>
+            <div className="flex gap-2 mt-2">
+              <button onClick={() => setDuplicateWarning(null)} className="text-xs font-medium px-3 py-1.5 rounded bg-amber-100 text-amber-800 hover:bg-amber-200">Save Anyway</button>
+              <button onClick={() => setShowForm(false)} className="text-xs font-medium px-3 py-1.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200">Cancel</button>
             </div>
           </div>
+        )}
+        <div className="space-y-4">
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+            <input type="text" value={formName} onChange={(e) => setFormName(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" autoFocus /></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
+            <input type="tel" value={formPhone} onChange={(e) => setFormPhone(e.target.value)} placeholder="03XX-XXXXXXX" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" /></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input type="email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" /></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <select value={formStatus} onChange={(e) => setFormStatus(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <option value="active">Active</option><option value="inactive">Inactive</option>
+            </select></div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+            <textarea value={formNotes} onChange={(e) => setFormNotes(e.target.value)} rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" /></div>
+          {formError && <p className="text-red-600 text-sm">{formError}</p>}
         </div>
-      )}
+      </Modal>
 
       {/* Delete Confirmation */}
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { if (!deleting) setDeleteTarget(null); }}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-gray-800 mb-2">Delete Customer</h2>
-            <p className="text-sm text-gray-600 mb-1">Are you sure you want to delete <strong>{deleteTarget.name}</strong>?</p>
-            {deleteTarget.total_orders === 0 && <p className="text-xs text-gray-400 mb-3">This customer has no order history and can be safely deleted.</p>}
-            {deleteError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 mt-3">{deleteError}</p>}
-            {!deleteError && <div className="flex justify-end gap-2 mt-5">
-              <button onClick={() => { setDeleteTarget(null); setDeleteError(''); }} disabled={deleting}
-                className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
-              {deleteTarget.total_orders === 0 ? (
-                <button onClick={() => handleDelete(deleteTarget)} disabled={deleting}
-                  className="px-4 py-2 text-sm rounded-lg text-white font-medium disabled:opacity-50" style={{ backgroundColor: '#dc2626' }}>
-                  {deleting ? 'Deleting...' : 'Delete'}
-                </button>
-              ) : (
-                <button onClick={() => { handleDeactivate(deleteTarget); setDeleteTarget(null); }}
-                  className="px-4 py-2 text-sm rounded-lg text-white font-medium" style={{ backgroundColor: theme.primaryColor }}>
-                  Deactivate Instead
-                </button>
-              )}
-            </div>}
+      <Modal
+        open={!!deleteTarget}
+        onClose={() => { if (!deleting) { setDeleteTarget(null); setDeleteError(''); } }}
+        title="Delete Customer"
+        placement="centered"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2 w-full">
+            <Button type="button" variant="outline" onClick={() => { setDeleteTarget(null); setDeleteError(''); }} disabled={deleting}>Cancel</Button>
+            {deleteTarget && deleteTarget.total_orders === 0 ? (
+              <Button type="button" variant="danger" onClick={() => handleDelete(deleteTarget)} loading={deleting}>Delete</Button>
+            ) : (
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => { if (deleteTarget) { handleDeactivate(deleteTarget); setDeleteTarget(null); } }}
+              >
+                Deactivate Instead
+              </Button>
+            )}
           </div>
-        </div>
-      )}
+        }
+      >
+        <p className="text-sm text-gray-600 mb-1">Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?</p>
+        {deleteTarget?.total_orders === 0 && <p className="text-xs text-gray-400">This customer has no order history and can be safely deleted.</p>}
+        {deleteError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 mt-3">{deleteError}</p>}
+      </Modal>
     </div>
   );
 }
@@ -806,7 +802,7 @@ function SummaryCard({ label, value, icon, theme, currencySymbol, format, previo
       <p className="text-2xl font-bold text-gray-800">{displayVal}</p>
       {previous !== undefined && !noPrev && (
         <div className={`flex items-center gap-1 mt-1 text-xs ${diff === null ? 'text-gray-400' : diff && diff > 0 ? 'text-green-600' : diff && diff < 0 ? 'text-red-500' : 'text-gray-400'}`}>
-          {diff !== null && (diff > 0 ? '↑' : diff < 0 ? '↓' : '→')}
+          {diff !== null && (diff > 0 ? 'â†‘' : diff < 0 ? 'â†“' : 'â†’')}
           <span>{diff !== null ? `${Math.abs(diff).toFixed(1)}% vs last month` : 'No previous data'}</span>
         </div>
       )}
@@ -838,14 +834,14 @@ function PaginationControls({ page, totalPages, totalCount, pageSize, setPage }:
       <p className="text-xs text-gray-500">Showing {from} to {to} of {totalCount}</p>
       <div className="flex items-center gap-1">
         <button disabled={page <= 1} onClick={() => setPage(page - 1)}
-          className="px-2.5 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">← Prev</button>
+          className="px-2.5 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">â† Prev</button>
         {pages.map((p, i) => typeof p === 'string' ? <span key={`e${i}`} className="px-1.5 text-xs text-gray-400">...</span> :
           <button key={p} onClick={() => setPage(p)}
             className={`px-2.5 py-1.5 text-xs rounded font-medium ${p === page ? 'text-white' : 'border border-gray-300 text-gray-600 hover:bg-gray-100'}`}
-            style={p === page ? { backgroundColor: '#6366f1' } : {}}>{p}</button>
+            style={p === page ? { backgroundColor: 'var(--primary)' } : {}}>{p}</button>
         )}
         <button disabled={page >= totalPages} onClick={() => setPage(page + 1)}
-          className="px-2.5 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">Next →</button>
+          className="px-2.5 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">Next â†’</button>
       </div>
     </div>
   );
@@ -872,12 +868,10 @@ function CustomerDetailContent({ customer, orderHistory, historyLoading, history
             style={{ backgroundColor: avatarColor(customer.name) }}>{initials(customer.name)}</div>
           <div>
             <h2 className="text-lg font-semibold text-gray-800">{customer.name}</h2>
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${customer.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-              {customer.status === 'active' ? 'Active' : 'Inactive'}
-            </span>
+                        <Badge variant={customer.status === 'active' ? 'success' : 'neutral'} size="sm" pill>{customer.status === 'active' ? 'Active' : 'Inactive'}</Badge>
           </div>
         </div>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">âœ•</button>
       </div>
 
       <div className="space-y-2 text-sm text-gray-600 mb-4 bg-gray-50 rounded-xl p-4">
@@ -930,10 +924,10 @@ function CustomerDetailContent({ customer, orderHistory, historyLoading, history
           {totalHPages > 1 && (
             <div className="flex items-center justify-center gap-2 mt-4">
               <button disabled={historyPage <= 1} onClick={() => onHistoryPageChange(historyPage - 1)}
-                className="px-2.5 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30">←</button>
+                className="px-2.5 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30">â†</button>
               <span className="text-xs text-gray-500">{historyPage} / {totalHPages}</span>
               <button disabled={historyPage >= totalHPages} onClick={() => onHistoryPageChange(historyPage + 1)}
-                className="px-2.5 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30">→</button>
+                className="px-2.5 py-1.5 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30">â†’</button>
             </div>
           )}
         </>

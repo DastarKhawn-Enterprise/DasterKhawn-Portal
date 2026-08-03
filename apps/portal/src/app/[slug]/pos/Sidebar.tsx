@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import Link from 'next/link';
@@ -36,11 +36,11 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '⊞', path: '/dashboard' },
+  { id: 'dashboard', label: 'Dashboard', icon: 'âŠž', path: '/dashboard' },
   {
     id: 'current-orders',
     label: 'Orders',
-    icon: '☰',
+    icon: 'â˜°',
     path: '/orders',
     children: [
       { id: 'current-orders', label: 'Current Orders', path: '/orders' },
@@ -50,21 +50,21 @@ const NAV_ITEMS: NavItem[] = [
       { id: 'orders-draft', label: 'Draft', path: '/orders/draft' },
     ],
   },
-  { id: 'dine-in', label: 'Dine In', icon: '🍽', path: '/dine-in' },
-  { id: 'take-away', label: 'Take Away', icon: '🛍', path: '/take-away' },
-  { id: 'delivery', label: 'Delivery', icon: '🚚', path: '/delivery' },
-  { id: 'drive-thru', label: 'Drive Thru', icon: '🚗', path: '/drive-thru' },
-  { id: 'third-party', label: 'Third Party', icon: '🤝', path: '/third-party' },
-  { id: 'reservations', label: 'Reservations', icon: '📋', path: '/reservations' },
-  { id: 'menu', label: 'Menu', icon: '📖', path: '/menu' },
-  { id: 'inventory', label: 'Inventory', icon: '📦', path: '/inventory' },
-  { id: 'item-ledger', label: 'Item Ledger', icon: '📋', path: '/item-ledger' },
-  { id: 'customers', label: 'Customers', icon: '👥', path: '/customers' },
-  { id: 'reports', label: 'Reports', icon: '📊', path: '/reports' },
-  { id: 'expenses', label: 'Expenses', icon: '💰', path: '/expenses' },
-  { id: 'accounts', label: 'Accounts', icon: '🏦', path: '/accounts' },
-  { id: 'staff', label: 'Staff', icon: '👤', path: '/staff' },
-  { id: 'settings', label: 'Settings', icon: '⚙', path: '/settings' },
+  { id: 'dine-in', label: 'Dine In', icon: 'ðŸ½', path: '/dine-in' },
+  { id: 'take-away', label: 'Take Away', icon: 'ðŸ›', path: '/take-away' },
+  { id: 'delivery', label: 'Delivery', icon: 'ðŸšš', path: '/delivery' },
+  { id: 'drive-thru', label: 'Drive Thru', icon: 'ðŸš—', path: '/drive-thru' },
+  { id: 'third-party', label: 'Third Party', icon: 'ðŸ¤', path: '/third-party' },
+  { id: 'reservations', label: 'Reservations', icon: 'ðŸ“‹', path: '/reservations' },
+  { id: 'menu', label: 'Menu', icon: 'ðŸ“–', path: '/menu' },
+  { id: 'inventory', label: 'Inventory', icon: 'ðŸ“¦', path: '/inventory' },
+  { id: 'item-ledger', label: 'Item Ledger', icon: 'ðŸ“‹', path: '/item-ledger' },
+  { id: 'customers', label: 'Customers', icon: 'ðŸ‘¥', path: '/customers' },
+  { id: 'reports', label: 'Reports', icon: 'ðŸ“Š', path: '/reports' },
+  { id: 'expenses', label: 'Expenses', icon: 'ðŸ’°', path: '/expenses' },
+  { id: 'accounts', label: 'Accounts', icon: 'ðŸ¦', path: '/accounts' },
+  { id: 'staff', label: 'Staff', icon: 'ðŸ‘¤', path: '/staff' },
+  { id: 'settings', label: 'Settings', icon: 'âš™', path: '/settings' },
 ];
 
 const PATH_TO_VIEW: Record<string, ViewId> = {};
@@ -115,9 +115,9 @@ export default function Sidebar({ collapsed, onToggleCollapse, accentColor, mobi
     <>
       <button
         onClick={onToggleCollapse}
-        className="hidden md:flex items-center justify-center h-12 text-[#B8B6B0] hover:text-white hover:bg-[#252525]"
+        className="hidden md:flex items-center justify-center h-12 text-sidebar-foreground hover:text-white hover:bg-sidebar-hover"
       >
-        <span className="text-lg">{collapsed ? '▶' : '◀'}</span>
+        <span className="text-lg">{collapsed ? 'â–¶' : 'â—€'}</span>
       </button>
 
       <div className="flex-1 overflow-y-auto scrollbar-hide">
@@ -130,7 +130,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, accentColor, mobi
                   className={`flex items-center w-full px-4 py-2.5 text-sm transition-colors ${
                     isActive(item.id)
                       ? 'font-semibold'
-                      : 'text-[#B8B6B0] hover:bg-[#252525] hover:text-white'
+                      : 'text-sidebar-foreground hover:bg-sidebar-hover hover:text-white'
                   }`}
                   style={isActive(item.id) ? { backgroundColor: accentColor + '26', color: accentColor } : {}}
                 >
@@ -138,7 +138,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, accentColor, mobi
                   {!collapsed && (
                     <>
                       <span className="ml-3 flex-1 text-left">{item.label}</span>
-                      <span className="text-xs text-gray-500">{ordersOpen ? '▾' : '▸'}</span>
+                      <span className="text-xs text-gray-500">{ordersOpen ? 'â–¾' : 'â–¸'}</span>
                     </>
                   )}
                 </button>
@@ -150,7 +150,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, accentColor, mobi
                     className={`flex items-center w-full pl-12 pr-4 py-2 text-sm transition-colors ${
                       isActive(child.id)
                         ? 'font-semibold'
-                        : 'text-[#B8B6B0] hover:bg-[#252525] hover:text-white'
+                        : 'text-sidebar-foreground hover:bg-sidebar-hover hover:text-white'
                     }`}
                     style={isActive(child.id) ? { backgroundColor: accentColor + '26', color: accentColor } : {}}
                   >
@@ -169,7 +169,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, accentColor, mobi
               className={`flex items-center w-full px-4 py-2.5 text-sm transition-colors ${
                 isActive(item.id)
                   ? 'font-semibold'
-                  : 'text-[#B8B6B0] hover:bg-[#252525] hover:text-white'
+                  : 'text-sidebar-foreground hover:bg-sidebar-hover hover:text-white'
               }`}
               style={isActive(item.id) ? { backgroundColor: accentColor + '26', color: accentColor } : {}}
             >
@@ -189,7 +189,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, accentColor, mobi
       )}
 
       <nav
-        className={`hidden md:flex flex-col bg-[#1A1A1A] text-white transition-all duration-200 ${
+        className={`hidden md:flex flex-col bg-sidebar text-white transition-all duration-200 ${
           collapsed ? 'w-16' : 'w-56'
         }`}
       >
@@ -197,15 +197,15 @@ export default function Sidebar({ collapsed, onToggleCollapse, accentColor, mobi
       </nav>
 
       <nav
-        className={`md:hidden fixed top-0 left-0 z-50 h-full bg-[#1A1A1A] text-white transition-all duration-300 ${
+        className={`md:hidden fixed top-0 left-0 z-50 h-full bg-sidebar text-white transition-all duration-300 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         } w-64`}
       >
         <button
           onClick={onMobileClose}
-          className="flex items-center justify-center h-12 w-full text-[#B8B6B0] hover:text-white hover:bg-[#252525]"
+          className="flex items-center justify-center h-12 w-full text-sidebar-foreground hover:text-white hover:bg-sidebar-hover"
         >
-          <span className="text-lg">✕</span>
+          <span className="text-lg">âœ•</span>
         </button>
         {content}
       </nav>

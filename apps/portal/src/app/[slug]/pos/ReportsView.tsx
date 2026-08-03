@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
+import { Button, Modal, StatusPill } from '@sat-sys/ui';
 import { hasPermission } from './permissions';
 import { useEvent } from './use-event';
 import { useBusinessDate } from './business-date-context';
@@ -190,14 +191,7 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
       </div>
 
       {/* Filter drawer */}
-      {showFilters && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setShowFilters(false)} />
-          <div className="relative w-full md:max-w-md bg-white md:rounded-xl rounded-t-2xl p-4 max-h-[80vh] overflow-y-auto shadow-xl safe-bottom">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-gray-800">Report Filters</h3>
-              <button onClick={() => setShowFilters(false)} className="text-sm text-blue-600 font-medium">Done</button>
-            </div>
+      <Modal open={showFilters} placement="bottom-sheet" size="md" title="Report Filters" onClose={() => setShowFilters(false)} footer={<div className="flex justify-end gap-2 w-full"><Button onClick={() => setShowFilters(false)}>Done</Button></div>}>
             <div className="space-y-3">
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Include Cancelled Orders</label>
@@ -219,9 +213,7 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
               </div>
               <button onClick={() => { setFilters({ includeCancelled: false, includeRefunded: false }); }} className="text-sm text-red-600 font-medium hover:underline">Reset Filters</button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }
@@ -351,7 +343,7 @@ function OverviewTab({ data, currencySymbol, theme }: { data: OverviewData; curr
             <div className="space-y-1">
               {topItems.slice(0, 5).map((item, i) => (
                 <div key={item.name} className="flex items-center gap-2 text-xs">
-                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-white font-bold text-[10px]" style={{ backgroundColor: i < 3 ? '#3b82f6' : '#9ca3af' }}>{i + 1}</span>
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-white font-bold text-[10px]" style={{ backgroundColor: i < 3 ? 'var(--info)' : 'var(--input-placeholder)' }}>{i + 1}</span>
                   <span className="flex-1 truncate text-gray-700">{item.name}</span>
                   <span className="text-gray-500">{item.qty} sold</span>
                   <span className="font-medium text-gray-800 w-20 text-right">{currencySymbol}{item.revenue.toFixed(0)}</span>
@@ -409,7 +401,7 @@ function SalesTab({ data, currencySymbol }: { data: SalesData; currencySymbol: s
           <BarChart data={data.byDay.length > 0 ? data.byDay : [{ label: 'No data', value: 0 }]} height={160} format={(v) => fmt(v, currencySymbol)} />
         </Card>
         <Card title="Sales by Hour">
-          <BarChart data={data.byHour.length > 0 ? data.byHour : [{ label: 'No data', value: 0 }]} height={160} format={(v) => fmt(v, currencySymbol)} barColor="#f59e0b" />
+          <BarChart data={data.byHour.length > 0 ? data.byHour : [{ label: 'No data', value: 0 }]} height={160} format={(v) => fmt(v, currencySymbol)} barColor="var(--chart-2)" />
         </Card>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -470,7 +462,7 @@ function OrdersTab({ data, currencySymbol }: { data: OrdersData; currencySymbol:
                   <td className="py-1.5 text-gray-500">{o.date}</td>
                   <td className="py-1.5">{o.customer}</td>
                   <td className="py-1.5 capitalize">{o.orderType.replace('_', ' ')}</td>
-                  <td className="py-1.5"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${o.status === 'completed' ? 'bg-green-100 text-green-700' : o.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>{o.status}</span></td>
+                  <td className="py-1.5"><StatusPill status={o.status} size="sm" /></td>
                   <td className="py-1.5 text-gray-500">{o.paymentMethod}</td>
                   <td className="py-1.5 text-right font-medium">{currencySymbol}{o.total.toFixed(2)}</td>
                 </tr>

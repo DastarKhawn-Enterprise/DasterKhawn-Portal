@@ -1,9 +1,10 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
+import { Badge, Button, ConfirmDialog, Modal } from '@sat-sys/ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { processExpense } from './payment-actions';
@@ -179,7 +180,7 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
         <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
           <div className="flex flex-wrap items-center gap-3">
             <span className="px-3 py-1.5 rounded text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200">
-              📅 {bd.isToday ? 'Today' : bd.display}
+              ðŸ“… {bd.isToday ? 'Today' : bd.display}
             </span>
             <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="px-3 py-1.5 text-xs border border-gray-300 rounded">
               <option value="">All Categories</option>
@@ -229,7 +230,7 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
                 <div key={exp.id} className="bg-white rounded-xl border border-gray-200 p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 mb-1">{CATEGORY_LABELS[exp.category] || exp.category}</span>
+                      <Badge variant="info" className="mb-1">{CATEGORY_LABELS[exp.category] || exp.category}</Badge>
                       <div className="text-sm text-gray-500">{exp.expense_date}</div>
                     </div>
                     <div className="text-lg font-bold" style={{ color: theme.primaryColor }}>{currencySymbol}{Number(exp.amount).toFixed(2)}</div>
@@ -257,8 +258,8 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
                   {expenses.map((exp) => (
                     <tr key={exp.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-4 py-3 text-gray-600">{exp.expense_date}</td>
-                      <td className="px-4 py-3"><span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">{CATEGORY_LABELS[exp.category] || exp.category}</span></td>
-                      <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate">{exp.description || '—'}</td>
+                      <td className="px-4 py-3"><Badge variant="info">{CATEGORY_LABELS[exp.category] || exp.category}</Badge></td>
+                      <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate">{exp.description || 'â€”'}</td>
                       <td className="px-4 py-3 text-right font-semibold">{currencySymbol}{Number(exp.amount).toFixed(2)}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -275,57 +276,50 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
         )}
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setShowForm(false)}>
-          <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-md md:mx-4 p-6 rounded-t-xl md:max-h-[90vh] md:overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-800">{editingExpense ? 'Edit Expense' : 'Add Expense'}</h2>
-              <button onClick={() => setShowForm(false)} className="md:hidden text-gray-400 text-xl">✕</button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Pay From Account</label>
-                <select value={formAccountId} onChange={(e) => setFormAccountId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm">
-                  <option value="">— Select account —</option>
-                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
-              </div>
-              <div><label className="block text-sm text-gray-600 mb-1">Category</label>
-                <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm">
-                  {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
-                </select>
-              </div>
-              <div><label className="block text-sm text-gray-600 mb-1">Amount ({currencySymbol})</label><input type="number" step="0.01" min="0" value={formAmount} onChange={(e) => setFormAmount(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
-              <div><label className="block text-sm text-gray-600 mb-1">Date</label><input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
-              <div><label className="block text-sm text-gray-600 mb-1">Description (optional)</label><input type="text" value={formDescription} onChange={(e) => setFormDescription(e.target.value)} placeholder="e.g. July electricity bill" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
-              {error && <p className="text-red-600 text-sm">{error}</p>}
-            </div>
-            <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-sm rounded text-white font-medium disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>
-                {saving ? 'Saving...' : (editingExpense ? 'Update' : 'Add')}
-              </button>
-            </div>
+<Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        title={editingExpense ? 'Edit Expense' : 'Add Expense'}
+        size="md"
+        footer={
+          <div className="flex justify-end gap-2 w-full">
+            <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
+            <Button variant="primary" style={{ backgroundColor: theme.primaryColor }} onClick={handleSave} loading={saving}>
+              {editingExpense ? 'Update' : 'Add'}
+            </Button>
           </div>
+        }
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Pay From Account</label>
+            <select value={formAccountId} onChange={(e) => setFormAccountId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+              <option value="">— Select account —</option>
+              {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </div>
+          <div><label className="block text-sm text-gray-600 mb-1">Category</label>
+            <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+              {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
+            </select>
+          </div>
+          <div><label className="block text-sm text-gray-600 mb-1">Amount ({currencySymbol})</label><input type="number" step="0.01" min="0" value={formAmount} onChange={(e) => setFormAmount(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+          <div><label className="block text-sm text-gray-600 mb-1">Date</label><input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+          <div><label className="block text-sm text-gray-600 mb-1">Description (optional)</label><input type="text" value={formDescription} onChange={(e) => setFormDescription(e.target.value)} placeholder="e.g. July electricity bill" className="w-full px-3 py-2 border border-gray-300 rounded text-sm" /></div>
+          {error && <p className="text-red-600 text-sm">{error}</p>}
         </div>
-      )}
+      </Modal>
 
-      {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setDeleteId(null)}>
-          <div className="bg-white md:rounded-lg shadow-xl w-full md:max-w-sm md:mx-4 p-6 rounded-t-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-gray-800">Delete Expense?</h2>
-              <button onClick={() => setDeleteId(null)} className="md:hidden text-gray-400 text-xl">✕</button>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">This action cannot be undone.</p>
-            {error && <p className="text-red-600 text-sm mb-2">{error}</p>}
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setDeleteId(null)} className="px-4 py-2 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button onClick={handleDelete} disabled={deleting} className="px-4 py-2 text-sm rounded bg-red-600 text-white font-medium disabled:opacity-50">{deleting ? 'Deleting...' : 'Delete'}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={handleDelete}
+        title="Delete Expense?"
+        message={<>This action cannot be undone.{error && <span className="block text-red-600 mt-2">{error}</span>}</>}
+        confirmLabel="Delete"
+        loading={deleting}
+        size="sm"
+      />
     </div>
   );
 }

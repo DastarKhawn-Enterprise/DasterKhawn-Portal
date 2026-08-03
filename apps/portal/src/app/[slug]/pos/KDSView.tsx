@@ -1,10 +1,11 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { useEvent, usePublish } from './use-event';
 import { usePOS } from './pos-context';
 import { MenuGrid } from '@sat-sys/pos-ui';
+import { Badge, Button, Modal, orderStatusVariant, orderTypeVariant } from '@sat-sys/ui';
 import type { MenuItem, ThemeConfig } from '@sat-sys/pos-ui';
 import { fetchKDSOrders, updateKDSOrderStatus } from './orders-actions';
 import { supa } from './supa-query';
@@ -74,14 +75,6 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: 'Cancelled',
 };
 
-const ORDER_TYPE_BADGES: Record<string, string> = {
-  dine_in: 'bg-purple-100 text-purple-800',
-  takeaway: 'bg-blue-100 text-blue-800',
-  delivery: 'bg-orange-100 text-orange-800',
-  drive_thru: 'bg-teal-100 text-teal-800',
-  third_party: 'bg-gray-100 text-gray-800',
-};
-
 const ORDER_TYPE_LABELS: Record<string, string> = {
   dine_in: 'Dine In',
   takeaway: 'Take Away',
@@ -135,17 +128,10 @@ function Timer({ createdAt }: { createdAt: string }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    pending: 'bg-blue-100 text-blue-800',
-    in_kitchen: 'bg-amber-100 text-amber-800',
-    ready: 'bg-green-100 text-green-800',
-    completed: 'bg-gray-100 text-gray-500',
-    cancelled: 'bg-red-100 text-red-800',
-  };
   return (
-    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${styles[status] || 'bg-gray-100 text-gray-600'}`}>
+    <Badge variant={orderStatusVariant(status)} size="sm" pill>
       {STATUS_LABELS[status] || status}
-    </span>
+    </Badge>
   );
 }
 
@@ -187,9 +173,9 @@ function OrderCard({
           </div>
           <div className="flex flex-col items-end gap-1 shrink-0">
             {order.order_type && (
-              <span className={`text-[9px] px-2 py-0.5 rounded font-semibold ${ORDER_TYPE_BADGES[order.order_type] || 'bg-gray-100 text-gray-600'}`}>
+              <Badge variant={orderTypeVariant(order.order_type)} size="sm">
                 {ORDER_TYPE_LABELS[order.order_type] || order.order_type}
-              </span>
+              </Badge>
             )}
             <StatusBadge status={order.status} />
           </div>
@@ -226,7 +212,7 @@ function OrderCard({
             onClick={onAccept}
             disabled={updating}
             className="flex-1 px-3 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-[1.02] active:scale-[0.98]"
-            style={{ backgroundColor: '#2563eb' }}
+            style={{ backgroundColor: 'var(--info)' }}
           >
             {updating ? '...' : 'Accept'}
           </button>
@@ -236,7 +222,7 @@ function OrderCard({
             onClick={onReady}
             disabled={updating}
             className="flex-1 px-3 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-[1.02] active:scale-[0.98]"
-            style={{ backgroundColor: '#d97706' }}
+            style={{ backgroundColor: 'var(--warning)' }}
           >
             {updating ? '...' : 'Ready'}
           </button>
@@ -246,7 +232,7 @@ function OrderCard({
             onClick={onComplete}
             disabled={updating}
             className="flex-1 px-3 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-[1.02] active:scale-[0.98]"
-            style={{ backgroundColor: '#16a34a' }}
+            style={{ backgroundColor: 'var(--success)' }}
           >
             {updating ? '...' : 'Complete'}
           </button>
@@ -374,13 +360,13 @@ function ListView({
                 </td>
                 <td className="py-3 px-4">
                   {order.order_type && (
-                    <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${ORDER_TYPE_BADGES[order.order_type] || 'bg-gray-100 text-gray-600'}`}>
+                    <Badge variant={orderTypeVariant(order.order_type)} size="sm">
                       {ORDER_TYPE_LABELS[order.order_type] || order.order_type}
-                    </span>
+                    </Badge>
                   )}
                 </td>
                 <td className="py-3 px-4 text-gray-600">
-                  {order.customer_name || <span className="text-gray-300">—</span>}
+                  {order.customer_name || <span className="text-gray-300">â€”</span>}
                 </td>
                 <td className="py-3 px-4 text-gray-600">
                   {order.order_items?.length || 0} items
@@ -497,7 +483,7 @@ function DetailPanel({
             <div>
               <span className="text-gray-400 text-xs uppercase tracking-wide">Type</span>
               <p className="font-semibold text-gray-800">
-                {order.order_type ? ORDER_TYPE_LABELS[order.order_type] || order.order_type : '—'}
+                {order.order_type ? ORDER_TYPE_LABELS[order.order_type] || order.order_type : 'â€”'}
               </p>
             </div>
             <div>
@@ -647,7 +633,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
     fetchOrders();
   }, [fetchOrders]);
 
-  // Realtime — apply changes immediately (new orders at the TOP), then reconcile with a debounced refetch
+  // Realtime â€” apply changes immediately (new orders at the TOP), then reconcile with a debounced refetch
   useEvent('orders', (payload) => {
     if (!bd.isToday) return;
     const { event, new: row, old } = payload as any;
@@ -978,43 +964,36 @@ export default function KDSView({ slug, theme, brandName }: Props) {
       <BottomBar orders={orders} lastUpdated={lastUpdated} />
 
       {/* Quick Add Modal */}
-      {quickAddOrderId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { if (!quickAddUpdating) { setQuickAddOrderId(null); setQuickAddItems([]); } }}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-bold text-gray-800">Add Items to Order</h2>
-              <button onClick={() => { setQuickAddOrderId(null); setQuickAddItems([]); }} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              {menuItems.length > 0 ? (
-                <MenuGrid menuItems={menuItems} onAddToCart={handleQuickAdd} theme={theme} currencySymbol="Rs." searchQuery={menuSearch} onSearchChange={setMenuSearch} />
-              ) : (
-                <div className="flex items-center justify-center py-12"><p className="text-gray-400">Loading menu...</p></div>
-              )}
-            </div>
-            {quickAddItems.length > 0 && (
-              <div className="px-5 py-2 border-t border-gray-100 bg-gray-50 max-h-32 overflow-y-auto">
-                <div className="text-xs font-semibold text-gray-600 mb-1">To Add ({quickAddItems.reduce((s, i) => s + i.quantity, 0)})</div>
-                {quickAddItems.map((qa) => (
-                  <div key={qa.id} className="flex items-center justify-between text-xs py-0.5">
-                    <span className="truncate">{qa.quantity}&times; {qa.name}</span>
-                    <button onClick={() => setQuickAddItems((prev) => prev.filter((i) => i.id !== qa.id))} className="text-red-400 hover:text-red-600 ml-2">&times;</button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-between gap-3">
-              <span className="text-xs text-gray-400">{quickAddUpdating ? 'Saving...' : quickAddItems.length > 0 ? `${quickAddItems.reduce((s, i) => s + i.quantity, 0)} item(s) to add` : 'Click + on any item to add'}</span>
-              <div className="flex gap-2">
-                <button onClick={() => { setQuickAddOrderId(null); setQuickAddItems([]); }} disabled={quickAddUpdating} className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
-                <button onClick={handleQuickAddDone} disabled={quickAddItems.length === 0 || quickAddUpdating} className="px-4 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>
-                  {quickAddUpdating ? 'Saving...' : `Done (${quickAddItems.reduce((s, i) => s + i.quantity, 0)})`}
-                </button>
-              </div>
-            </div>
+      <Modal open={!!quickAddOrderId} placement="centered" size="lg" title="Add Items to Order" onClose={() => { if (!quickAddUpdating) { setQuickAddOrderId(null); setQuickAddItems([]); } }} footer={
+        <div className="w-full flex items-center justify-between gap-3">
+          <span className="text-xs text-gray-400">{quickAddUpdating ? 'Saving...' : quickAddItems.length > 0 ? `${quickAddItems.reduce((s, i) => s + i.quantity, 0)} item(s) to add` : 'Click + on any item to add'}</span>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => { setQuickAddOrderId(null); setQuickAddItems([]); }} disabled={quickAddUpdating}>Cancel</Button>
+            <Button style={{ backgroundColor: theme.primaryColor }} onClick={handleQuickAddDone} disabled={quickAddItems.length === 0 || quickAddUpdating} loading={quickAddUpdating}>
+              {quickAddUpdating ? 'Saving...' : `Done (${quickAddItems.reduce((s, i) => s + i.quantity, 0)})`}
+            </Button>
           </div>
         </div>
-      )}
+      }>
+          <div className="max-h-[50vh] overflow-y-auto">
+            {menuItems.length > 0 ? (
+              <MenuGrid menuItems={menuItems} onAddToCart={handleQuickAdd} theme={theme} currencySymbol="Rs." searchQuery={menuSearch} onSearchChange={setMenuSearch} />
+            ) : (
+              <div className="flex items-center justify-center py-12"><p className="text-gray-400">Loading menu...</p></div>
+            )}
+          </div>
+          {quickAddItems.length > 0 && (
+            <div className="px-2 py-1 mt-2 border-t border-gray-100 bg-gray-50 max-h-32 overflow-y-auto">
+              <div className="text-xs font-semibold text-gray-600 mb-1">To Add ({quickAddItems.reduce((s, i) => s + i.quantity, 0)})</div>
+              {quickAddItems.map((qa) => (
+                <div key={qa.id} className="flex items-center justify-between text-xs py-0.5">
+                  <span className="truncate">{qa.quantity}&times; {qa.name}</span>
+                  <button onClick={() => setQuickAddItems((prev) => prev.filter((i) => i.id !== qa.id))} className="text-red-400 hover:text-red-600 ml-2">&times;</button>
+                </div>
+              ))}
+            </div>
+          )}
+      </Modal>
 
       {/* Payment Modal */}
       {paymentOrder && !receiptOrder && (

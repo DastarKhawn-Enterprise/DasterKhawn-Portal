@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
+import { Badge, Modal } from '@sat-sys/ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { processTransfer, processExpense, processAdjustment } from './payment-actions';
@@ -55,8 +56,8 @@ const TAB_LABELS: Record<AccountTab, string> = {
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  cash: '#10b981', bank: '#3b82f6', mobile_wallet: '#f59e0b',
-  card: '#8b5cf6', credit: '#ef4444', other: '#6b7280',
+  cash: 'var(--chart-4)', bank: 'var(--chart-1)', mobile_wallet: 'var(--chart-2)',
+  card: 'var(--chart-3)', credit: 'var(--chart-5)', other: 'var(--badge-default)',
 };
 
 const TX_TYPE_LABELS: Record<string, string> = {
@@ -93,7 +94,7 @@ function DonutChart({ data, total, currencySymbol }: { data: { label: string; va
   if (total === 0) {
     return (
       <svg viewBox="0 0 120 120" className="w-full h-auto max-w-[160px] mx-auto">
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e5e7eb" strokeWidth={sw} />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--chart-grid)" strokeWidth={sw} />
         <text x={cx} y={cy - 4} textAnchor="middle" className="fill-gray-400 text-[10px]" fontSize="10">0</text>
         <text x={cx} y={cy + 10} textAnchor="middle" className="fill-gray-400 text-[7px]" fontSize="7">Total</text>
       </svg>
@@ -102,7 +103,7 @@ function DonutChart({ data, total, currencySymbol }: { data: { label: string; va
 
   return (
     <svg viewBox="0 0 120 120" className="w-full h-auto max-w-[160px] mx-auto">
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f3f4f6" strokeWidth={sw} />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--border-light)" strokeWidth={sw} />
       {slices.map((s, i) => (
         <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={s.color} strokeWidth={sw}
           strokeDasharray={`${Math.max(s.dash, 0.5)} ${circumference}`}
@@ -112,26 +113,12 @@ function DonutChart({ data, total, currencySymbol }: { data: { label: string; va
         />
       ))}
       <text x={cx} y={cy - 4} textAnchor="middle" fontSize="13" fontWeight="bold" fill="#374151">{currencySymbol}{total.toFixed(0)}</text>
-      <text x={cx} y={cy + 10} textAnchor="middle" fontSize="8" fill="#9ca3af">Total</text>
+      <text x={cx} y={cy + 10} textAnchor="middle" fontSize="8" fill="var(--text-muted)">Total</text>
     </svg>
   );
 }
 
-function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40" />
-      <div className="relative w-full md:max-w-md md:mx-4 bg-white md:rounded-lg rounded-t-xl max-h-[90vh] flex flex-col shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between shrink-0">
-          <h2 className="text-lg font-semibold text-gray-800">{title}</h2>
-          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-        </div>
-        <div className="overflow-y-auto p-4 text-[16px]">{children}</div>
-      </div>
-    </div>
-  );
-}
+
 
 export default function AccountsView({ slug, theme, currencySymbol }: Props) {
   const publish = usePublish();
@@ -242,7 +229,7 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
     const groups = new Map<string, { label: string; value: number; color: string }>();
     for (const acc of accounts) {
       const key = acc.account_type;
-      const prev = groups.get(key) || { label: acc.account_type.replace('_', ' '), value: 0, color: TYPE_COLORS[key] || '#6b7280' };
+      const prev = groups.get(key) || { label: acc.account_type.replace('_', ' '), value: 0, color: TYPE_COLORS[key] || 'var(--badge-default)' };
       prev.value += Number(acc.current_balance);
       groups.set(key, prev);
     }
@@ -495,9 +482,9 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
                               {currencySymbol}{Number(acc.current_balance).toFixed(2)}
                             </td>
                             <td className="px-4 py-3 text-center">
-                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${acc.is_active ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
+                              <Badge variant={acc.is_active ? 'success' : 'neutral'} size="sm" pill>
                                 {acc.is_active ? 'Active' : 'Inactive'}
-                              </span>
+                              </Badge>
                             </td>
                             <td className="px-4 py-3 text-center">
                               {canTransfer && acc.account_type !== 'credit' && (
@@ -527,9 +514,9 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
                               <div className="font-medium text-sm text-gray-800 truncate">{acc.name}</div>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className="text-[10px] text-gray-500 capitalize bg-gray-100 px-1.5 py-0.5 rounded">{acc.account_type.replace('_', ' ')}</span>
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${acc.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                <Badge variant={acc.is_active ? 'success' : 'neutral'} size="sm" pill>
                                   {acc.is_active ? 'Active' : 'Inactive'}
-                                </span>
+                                </Badge>
                               </div>
                             </div>
                           </div>
@@ -595,14 +582,14 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
                                 {new Date(t.created_at).toLocaleDateString()} {new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </td>
                               <td className="px-4 py-3">
-                                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-50 text-gray-600 border border-gray-200">
+                                <Badge variant="secondary" size="sm">
                                   {TX_TYPE_LABELS[t.transaction_type] || t.transaction_type}
-                                </span>
+                                </Badge>
                               </td>
                               <td className="px-4 py-3">
-                                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${t.direction === 'credit' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                                <Badge variant={t.direction === 'credit' ? 'success' : 'danger'} size="sm" pill>
                                   {t.direction === 'credit' ? 'Credit' : 'Debit'}
-                                </span>
+                                </Badge>
                               </td>
                               <td className={`px-4 py-3 text-right font-mono font-semibold ${t.direction === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
                                 {t.direction === 'credit' ? '+' : '-'}{currencySymbol}{Number(t.amount).toFixed(2)}
@@ -622,10 +609,10 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 mb-1">
-                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{TX_TYPE_LABELS[t.transaction_type] || t.transaction_type}</span>
-                                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${t.direction === 'credit' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                                <Badge variant="secondary" size="sm">{TX_TYPE_LABELS[t.transaction_type] || t.transaction_type}</Badge>
+                                <Badge variant={t.direction === 'credit' ? 'success' : 'danger'} size="sm" pill>
                                   {t.direction === 'credit' ? 'Credit' : 'Debit'}
-                                </span>
+                                </Badge>
                               </div>
                               <p className="text-xs text-gray-500 truncate">{t.description || '—'}</p>
                               <p className="text-[10px] text-gray-400 mt-0.5">{new Date(t.created_at).toLocaleDateString()} {new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>

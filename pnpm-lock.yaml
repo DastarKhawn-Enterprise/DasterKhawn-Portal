@@ -45,6 +45,9 @@ importers:
       '@sat-sys/supabase-client':
         specifier: workspace:*
         version: link:../../packages/supabase-client
+      '@sat-sys/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@types/pg':
         specifier: ^8.20.0
         version: 8.20.0
@@ -94,6 +97,9 @@ importers:
 
   packages/gateway-sdk:
     dependencies:
+      '@sat-sys/ui':
+        specifier: workspace:*
+        version: link:../ui
       '@supabase/supabase-js':
         specifier: ^2.110.2
         version: 2.110.2
@@ -107,6 +113,9 @@ importers:
 
   packages/pos-ui:
     dependencies:
+      '@sat-sys/ui':
+        specifier: workspace:*
+        version: link:../ui
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -132,6 +141,13 @@ importers:
         version: 5.9.3
 
   packages/ui:
+    dependencies:
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
     devDependencies:
       typescript:
         specifier: ^5.4.0

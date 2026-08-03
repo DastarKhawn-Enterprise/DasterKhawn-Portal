@@ -1,5 +1,8 @@
 import 'server-only';
 import { createClient } from '@supabase/supabase-js';
+import type { ThemeConfig } from '@sat-sys/ui';
+
+export type { ThemeConfig } from '@sat-sys/ui';
 
 function getGatewayClient() {
   const url = process.env.GATEWAY_SUPABASE_URL;
@@ -8,13 +11,6 @@ function getGatewayClient() {
     throw new Error('GATEWAY_SUPABASE_URL and GATEWAY_SUPABASE_SERVICE_KEY must be set');
   }
   return createClient(url, serviceKey);
-}
-
-export interface ThemeConfig {
-  primaryColor: string;
-  secondaryColor: string;
-  logoUrl: string;
-  fontFamily: string;
 }
 
 export const PERMISSIONS = {

@@ -7,8 +7,8 @@ interface Props {
 }
 
 const FALLBACK_COLORS: Record<string, string> = {
-  cash: '#10b981', bank: '#3b82f6', mobile_wallet: '#f59e0b', easypaisa: '#f59e0b',
-  card: '#8b5cf6', credit: '#ef4444', other: '#6b7280',
+  cash: 'var(--chart-4)', bank: 'var(--chart-1)', mobile_wallet: 'var(--chart-2)', easypaisa: 'var(--chart-2)',
+  card: 'var(--chart-3)', credit: 'var(--chart-5)', other: 'var(--badge-default)',
 };
 
 function normalize(val: string): string {
@@ -16,7 +16,7 @@ function normalize(val: string): string {
 }
 
 function FallbackSvg({ type, className, size }: { type: string; className: string; size: number }) {
-  const color = FALLBACK_COLORS[type] || '#6b7280';
+  const color = FALLBACK_COLORS[type] || 'var(--badge-default)';
   if (type === 'bank') return (
     <svg className={className} viewBox="0 0 24 24" width={size} height={size} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 21h18"/><path d="M3 10h18"/><path d="M5 6l7-3 7 3"/><path d="M4 10v11"/><path d="M20 10v11"/><path d="M8 14v3"/><path d="M12 14v3"/><path d="M16 14v3"/>

@@ -6,6 +6,7 @@ import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { useEvent, usePublish } from './use-event';
 import { supa, supaBatch } from './supa-query';
 import { useBusinessDate } from './business-date-context';
+import { Badge, orderStatusVariant } from '@sat-sys/ui';
 
 interface Props {
   theme: ThemeConfig;
@@ -21,14 +22,6 @@ interface RecentOrder { id: string; order_number: number; customer_name: string 
 
 const ORDER_TYPE_LABELS: Record<string, string> = {
   dine_in: 'Dine In', takeaway: 'Take Away', delivery: 'Delivery', drive_thru: 'Drive Thru',
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-blue-50 text-blue-700 border border-blue-200',
-  in_kitchen: 'bg-amber-50 text-amber-700 border border-amber-200',
-  ready: 'bg-green-50 text-green-700 border border-green-200',
-  completed: 'bg-gray-50 text-gray-500 border border-gray-200',
-  cancelled: 'bg-red-50 text-red-700 border border-red-200',
 };
 
 export default function DashboardView({ theme, slug, currencySymbol }: Props) {
@@ -218,7 +211,7 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
                       <span className="text-xs text-gray-500">{ORDER_TYPE_LABELS[order.order_type] || order.order_type}</span>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold border ${STATUS_COLORS[order.status] || ''}`}>{order.status}</span>
+                      <Badge variant={orderStatusVariant(order.status)} size="sm" pill>{order.status}</Badge>
                       <span className="text-xs font-medium text-gray-700 w-14 text-right">{currencySymbol}{Number(order.total).toFixed(2)}</span>
                     </div>
                   </div>

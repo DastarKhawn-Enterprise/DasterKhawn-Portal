@@ -1,10 +1,11 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useEvent, usePublish } from './use-event';
 import { usePOS } from './pos-context';
 import { useAuth } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
+import { Button, ConfirmDialog, Modal } from '@sat-sys/ui';
 import type { MenuItemPayload } from './menu-actions';
 import {
   getMenuItems,
@@ -262,7 +263,7 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
                             onClick={() => setDeleteTarget(item)}
                             className="px-2.5 py-1 text-xs font-medium rounded hover:bg-red-50 text-red-500"
                           >
-                            ×
+                            Ã—
                           </button>
                         </div>
                       )}
@@ -275,12 +276,23 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
         })
       )}
 
-      {/* ─── Add/Edit Modal ─── */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowForm(false)}>
-          <div className="bg-white rounded-xl border border-gray-200 w-full max-w-lg mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-gray-800 mb-4">{editId ? 'Edit Item' : 'Add Menu Item'}</h3>
-            <div className="space-y-3">
+      {/* â”€â”€â”€ Add/Edit Modal â”€â”€â”€ */}
+      <Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        placement="centered"
+        size="lg"
+        title={editId ? 'Edit Item' : 'Add Menu Item'}
+        footer={
+          <div className="flex justify-end gap-2 w-full">
+            <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
+            <Button variant="primary" style={{ backgroundColor: theme.primaryColor }} onClick={handleSave} disabled={!form.name.trim()} loading={saving}>
+              {saving ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
                 <input
@@ -375,7 +387,7 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
                   {ingredients.map((ing, idx) => (
                     <div key={idx} className="flex items-center gap-2 text-sm">
                       <span className="flex-1 text-gray-700">{ing.inventory_name}</span>
-                      <span className="text-gray-500">×</span>
+                      <span className="text-gray-500">Ã—</span>
                       <input
                         type="number"
                         step="any"
@@ -392,7 +404,7 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
                           onClick={() => setIngredients((prev) => prev.filter((_, i) => i !== idx))}
                           className="text-red-500 hover:text-red-700 text-xs px-1"
                         >
-                          ×
+                          Ã—
                         </button>
                       )}
                     </div>
@@ -423,53 +435,20 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
             </div>
 
             {ingLoadError && <p className="text-red-600 text-xs mt-1">{ingLoadError}</p>}
+      </Modal>
 
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                onClick={() => setShowForm(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={!form.name.trim() || saving}
-                className="px-4 py-2 text-sm font-semibold text-white rounded-lg disabled:opacity-50"
-                style={{ backgroundColor: theme.primaryColor }}
-              >
-                {saving ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── Delete Confirmation ─── */}
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteTarget(null)}>
-          <div className="bg-white rounded-xl border border-gray-200 w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-gray-800 mb-2">Delete &ldquo;{deleteTarget.name}&rdquo;?</h3>
-            <p className="text-sm text-gray-500 mb-6">
-              This cannot be undone. Items that have been ordered before may break historical records.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={deleting === deleteTarget.id}
-                className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50"
-              >
-                {deleting === deleteTarget.id ? '...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* â”€â”€â”€ Delete Confirmation â”€â”€â”€ */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title={<>Delete &ldquo;{deleteTarget?.name}&rdquo;?</>}
+        message="This cannot be undone. Items that have been ordered before may break historical records."
+        confirmLabel={deleting === deleteTarget?.id ? '...' : 'Delete'}
+        loading={deleting === deleteTarget?.id}
+        placement="centered"
+        size="sm"
+      />
     </div>
   );
 }

@@ -1,8 +1,9 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
+import { Button, Modal } from '@sat-sys/ui';
 import { supa } from './supa-query';
 import { usePOS } from './pos-context';
 import { searchCustomersSupa, checkDuplicatePhone, normalizePhone, findOrCreateCustomerSupa } from './customer-utils';
@@ -42,7 +43,7 @@ function NumericKeypadInner({ value, onChange, onClear, onOperator, calcNewNumbe
             k === '+' || k === '-' ? 'bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-600 border border-blue-200' :
             'bg-gray-50 hover:bg-gray-200 active:bg-gray-300 text-gray-800 border border-gray-200'
           )}
-        >{k === 'backspace' ? '⌫' : k === 'clear' ? 'C' : k === '+' ? '+' : k === '-' ? '−' : k}</button>
+        >{k === 'backspace' ? 'âŒ«' : k === 'clear' ? 'C' : k === '+' ? '+' : k === '-' ? 'âˆ’' : k}</button>
       )))}
     </div>
   );
@@ -62,7 +63,7 @@ function MenuCard({ item, onAdd, isPopular }: { item: MenuItem; onAdd: (item: Me
       </div>
       <div className="p-2.5 flex-1 flex flex-col justify-between gap-1">
         <div className="text-sm font-semibold text-gray-800 leading-snug break-words">{item.name}</div>
-        <div className="flex items-center justify-between mt-auto"><span className="text-sm font-bold" style={{ color: '#C9972B' }}>Rs. {Number(item.price).toFixed(0)}</span></div>
+        <div className="flex items-center justify-between mt-auto"><span className="text-sm font-bold text-primary">Rs. {Number(item.price).toFixed(0)}</span></div>
       </div>
     </button>
   );
@@ -76,7 +77,7 @@ function CompactMenuItem({ item, onAdd }: { item: MenuItem; onAdd: (item: MenuIt
     >
       <span className="flex-1 min-w-0 text-sm font-medium text-gray-800 break-words">{item.name}</span>
       <span className="text-xs text-gray-400">{item.category}</span>
-      <span className="text-sm font-bold shrink-0" style={{ color: '#C9972B' }}>Rs. {Number(item.price).toFixed(0)}</span>
+      <span className="text-sm font-bold shrink-0 text-primary">Rs. {Number(item.price).toFixed(0)}</span>
     </button>
   );
 }
@@ -320,7 +321,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
       if (!itemsResult.ok) { setOrderError(itemsResult.error || 'Failed to save order items'); setCheckingOut(false); creatingOrderRef.current = false; return; }
       // Update table status
       if (orderType === 'dine_in' && selectedTableId) { supa(slug, { table: 'tables', method: 'update', eq: ['id', selectedTableId], body: { status: 'occupied', current_order_id: newOrder.id } }).catch(() => {}); setTables((prev) => prev.map((t) => (t.id === selectedTableId ? { ...t, status: 'occupied' } : t))); }
-      // Send to Kitchen Display immediately — no payment needed
+      // Send to Kitchen Display immediately â€” no payment needed
       publish('orders', 'INSERT', { id: newOrder.id, status: 'pending', order_type: orderType });
       // Clear cart for new order
       setCart([]); setKeypadValue(''); setKeypadDisplay(''); setDiscount(null); setOrderNotes(''); setSpecialInstructions(''); setSelectedCustomer(null); setCustomerSearch(''); setCustomerResults([]); setSelectedTableId(null); setCustomerName(''); setCustomerPhone(''); setVehicleType(''); setVehiclePlateNumber(''); setDeliveryAddress(''); setCustomerNameError(''); setCustomerPhoneError(''); setDeliveryAddressError('');
@@ -346,15 +347,8 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50 min-w-0 overflow-hidden" style={{ fontFamily: 'inherit' }}>
-      {showCustomerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowCustomerModal(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 max-h-[85vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-800">Select Customer</h2>
-              <button onClick={() => setShowCustomerModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
-            </div>
-            <div className="p-5 space-y-4 overflow-y-auto flex-1">
-              {selectedCustomer && (
+      <Modal open={showCustomerModal} placement="centered" size="md" title="Select Customer" onClose={() => setShowCustomerModal(false)}>
+            {selectedCustomer && (
                 <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
                   <div className="flex items-center justify-between mb-2">
                     <div><p className="font-semibold text-gray-800">{selectedCustomer.name}</p>{selectedCustomer.phone && <p className="text-sm text-gray-500">{selectedCustomer.phone}</p>}</div>
@@ -366,63 +360,57 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
                     <div className="bg-white rounded-lg p-2"><span className="text-gray-400 block">Credit</span><span className="font-bold text-gray-800">{currencySymbol}{(selectedCustomer as any).credit_balance || 0}</span></div>
                   </div>
                 </div>
-              )}
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Search Customer</label>
-                <input type="text" value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} placeholder="Name or phone..." className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" autoFocus />
+            )}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Search Customer</label>
+              <input type="text" value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} placeholder="Name or phone..." className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" autoFocus />
+            </div>
+            {customerSearchLoading && <p className="text-xs text-gray-400">Searching...</p>}
+            {customerResults.length > 0 && (
+              <div className="border border-gray-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                {customerResults.map((r) => (
+                  <button key={r.id} onClick={async () => { const detail = await supa(slug, { table: 'customers', select: 'id, name, phone, total_orders, total_spent, loyalty_points, credit_balance', eq: ['id', r.id], single: true }); if (detail.ok && detail.data) setSelectedCustomer(detail.data as Customer); else setSelectedCustomer({ id: r.id, name: r.name, phone: r.phone }); setCustomerName(r.name); setCustomerNameError(''); setShowCustomerModal(false); }}
+                    className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-0 text-sm"
+                  ><span className="font-medium text-gray-800">{r.name}</span>{r.phone && <span className="text-gray-400 ml-2">{r.phone}</span>}</button>
+                ))}
               </div>
-              {customerSearchLoading && <p className="text-xs text-gray-400">Searching...</p>}
-              {customerResults.length > 0 && (
-                <div className="border border-gray-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
-                  {customerResults.map((r) => (
-                    <button key={r.id} onClick={async () => { const detail = await supa(slug, { table: 'customers', select: 'id, name, phone, total_orders, total_spent, loyalty_points, credit_balance', eq: ['id', r.id], single: true }); if (detail.ok && detail.data) setSelectedCustomer(detail.data as Customer); else setSelectedCustomer({ id: r.id, name: r.name, phone: r.phone }); setCustomerName(r.name); setCustomerNameError(''); setShowCustomerModal(false); }}
-                      className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-0 text-sm"
-                    ><span className="font-medium text-gray-800">{r.name}</span>{r.phone && <span className="text-gray-400 ml-2">{r.phone}</span>}</button>
-                  ))}
-                </div>
-              )}
-              <div className="border-t border-gray-200 pt-4">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Quick Add Customer</h3>
-                <div className="space-y-2">
-                  <input type="text" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} placeholder="Full Name" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
-                  <input type="tel" value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} placeholder="Phone (optional)" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
-                  <button onClick={async () => {
-                    const name = newCustomerName.trim();
-                    if (!name) { setNewCustomerError('Name is required'); return; }
-                    setNewCustomerError('');
-                    setNewCustomerSaving(true);
-                    try {
-                      const normPhone = newCustomerPhone.trim() ? normalizePhone(newCustomerPhone.trim()) : null;
-                      if (normPhone) {
-                        const dup = await checkDuplicatePhone(slug, normPhone);
-                        if (dup) {
-                          setNewCustomerError(`Customer "${dup.name}" already exists with this phone`);
-                          setNewCustomerSaving(false);
-                          return;
-                        }
+            )}
+            <div className="border-t border-gray-200 pt-4">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Quick Add Customer</h3>
+              <div className="space-y-2">
+                <input type="text" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} placeholder="Full Name" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
+                <input type="tel" value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} placeholder="Phone (optional)" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
+                <button onClick={async () => {
+                  const name = newCustomerName.trim();
+                  if (!name) { setNewCustomerError('Name is required'); return; }
+                  setNewCustomerError('');
+                  setNewCustomerSaving(true);
+                  try {
+                    const normPhone = newCustomerPhone.trim() ? normalizePhone(newCustomerPhone.trim()) : null;
+                    if (normPhone) {
+                      const dup = await checkDuplicatePhone(slug, normPhone);
+                      if (dup) {
+                        setNewCustomerError(`Customer "${dup.name}" already exists with this phone`);
+                        setNewCustomerSaving(false);
+                        return;
                       }
-                      const result = await supa(slug, { table: 'customers', method: 'insert', select: 'id, name, phone', single: true, body: { name, phone: normPhone, loyalty_points: 0, total_orders: 0, total_spent: 0 } });
-                      if (result.ok && result.data) {
-                        setSelectedCustomer(result.data as Customer); setCustomerName(result.data.name); setCustomerNameError(''); setShowCustomerModal(false); setNewCustomerName(''); setNewCustomerPhone(''); publish('customers', 'INSERT', { id: result.data?.id });
-                      } else {
-                        setNewCustomerError(result.error || 'Failed to add customer');
-                      }
-                    } catch (e: any) { setNewCustomerError(e.message || 'Failed to add customer'); }
-                    setNewCustomerSaving(false);
-                  }}
-                    className="w-full py-2 rounded-lg text-sm font-bold text-white disabled:opacity-60 disabled:cursor-not-allowed" style={{ backgroundColor: '#C9972B' }} disabled={newCustomerSaving}>{newCustomerSaving ? 'Adding...' : 'Add Customer'}</button>
-                  {newCustomerError && <p className="text-xs text-red-600">{newCustomerError}</p>}
-                </div>
+                    }
+                    const result = await supa(slug, { table: 'customers', method: 'insert', select: 'id, name, phone', single: true, body: { name, phone: normPhone, loyalty_points: 0, total_orders: 0, total_spent: 0 } });
+                    if (result.ok && result.data) {
+                      setSelectedCustomer(result.data as Customer); setCustomerName(result.data.name); setCustomerNameError(''); setShowCustomerModal(false); setNewCustomerName(''); setNewCustomerPhone(''); publish('customers', 'INSERT', { id: result.data?.id });
+                    } else {
+                      setNewCustomerError(result.error || 'Failed to add customer');
+                    }
+                  } catch (e: any) { setNewCustomerError(e.message || 'Failed to add customer'); }
+                  setNewCustomerSaving(false);
+                }}
+                  className="w-full py-2 rounded-lg text-sm font-bold text-white disabled:opacity-60 disabled:cursor-not-allowed" style={{ backgroundColor: theme.primaryColor }} disabled={newCustomerSaving}>{newCustomerSaving ? 'Adding...' : 'Add Customer'}</button>
+                {newCustomerError && <p className="text-xs text-red-600">{newCustomerError}</p>}
               </div>
             </div>
-          </div>
-        </div>
-      )}
+    </Modal>
 
-      {showDiscountModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowDiscountModal(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold text-gray-800">Add Discount</h2><button onClick={() => setShowDiscountModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button></div>
+      <Modal open={showDiscountModal} placement="centered" size="sm" title="Add Discount" onClose={() => setShowDiscountModal(false)}>
             <div className="space-y-4">
               <div className="flex gap-2">
                 <button onClick={() => setDiscountType('percentage')} className={'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ' + (discountType === 'percentage' ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:bg-gray-50')}>%</button>
@@ -432,35 +420,22 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
               <div className="flex gap-2">
                 <button onClick={() => setShowDiscountModal(false)} className="flex-1 py-2.5 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Cancel</button>
                 {discount && <button onClick={() => { setDiscount(null); setShowDiscountModal(false); }} className="flex-1 py-2.5 rounded-lg text-sm font-semibold border border-red-200 text-red-600 hover:bg-red-50">Remove</button>}
-                <button onClick={() => { const v = parseFloat(discountValue); if (v > 0) { setDiscount({ type: discountType, value: v }); } else { setDiscount(null); } setShowDiscountModal(false); }} className="flex-1 py-2.5 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: '#C9972B' }}>{discount ? 'Update' : 'Apply'}</button>
+                <button onClick={() => { const v = parseFloat(discountValue); if (v > 0) { setDiscount({ type: discountType, value: v }); } else { setDiscount(null); } setShowDiscountModal(false); }} className="flex-1 py-2.5 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: theme.primaryColor }}>{discount ? 'Update' : 'Apply'}</button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+    </Modal>
 
       {/* Notes Modal */}
-      {showNotesModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowNotesModal(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-800">Order Notes</h2>
-              <button onClick={() => setShowNotesModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
-            </div>
+      <Modal open={showNotesModal} placement="centered" size="sm" title="Order Notes" onClose={() => setShowNotesModal(false)}>
             <textarea value={orderNotes} onChange={(e) => setOrderNotes(e.target.value)} placeholder="Kitchen instructions, special requests..." className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg resize-none h-28" autoFocus />
-            <button onClick={() => setShowNotesModal(false)} className="w-full mt-3 py-2.5 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: '#C9972B' }}>Save</button>
-          </div>
-        </div>
-      )}
+            <div className="flex justify-end gap-2 mt-3 w-full">
+              <Button variant="outline" onClick={() => setShowNotesModal(false)}>Cancel</Button>
+              <Button onClick={() => setShowNotesModal(false)}>Save</Button>
+            </div>
+      </Modal>
 
       {/* Promo Code Modal */}
-      {showPromoModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowPromoModal(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-800">Promo Code</h2>
-              <button onClick={() => setShowPromoModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
-            </div>
+      <Modal open={showPromoModal} placement="centered" size="sm" title="Promo Code" onClose={() => setShowPromoModal(false)}>
             <div className="space-y-3">
               <input type="text" value={promoCode} onChange={(e) => { setPromoCode(e.target.value); setPromoError(''); }} placeholder="Enter promo code..." className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg uppercase" autoFocus />
               {promoError && <p className="text-xs text-red-600">{promoError}</p>}
@@ -475,11 +450,9 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
                 } else {
                   setPromoError('Invalid or expired promo code');
                 }
-              }} className="w-full py-2.5 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: '#C9972B' }}>Apply</button>
+              }} className="w-full py-2.5 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: theme.primaryColor }}>Apply</button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {/* Main 3-Column Layout */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
@@ -501,7 +474,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
             {(Object.keys(ORDER_TYPE_LABELS) as OrderTypeOption[]).map((type) => (
               <button key={type} onClick={() => { setOrderType(type); setSelectedTableId(null); }}
                 className={'px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors ' + (orderType === type ? 'text-white' : 'text-gray-500 hover:bg-gray-100')}
-                style={orderType === type ? { backgroundColor: '#C9972B' } : {}}
+                style={orderType === type ? { backgroundColor: theme.primaryColor } : {}}
               >{ORDER_TYPE_LABELS[type]}</button>
             ))}
           </div>
@@ -643,7 +616,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
 
           <div className="border-t border-gray-200 px-4 py-3 flex gap-2 shrink-0">
             <button onClick={handleClearCart} className="flex-1 py-2.5 rounded-xl text-xs font-semibold border border-gray-200 text-gray-500 hover:bg-gray-50">Clear</button>
-            <button onClick={handlePlaceOrder} disabled={cart.length === 0 || checkingOut || newOrderCustomerFieldsError} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg" style={{ backgroundColor: cart.length > 0 && !newOrderCustomerFieldsError ? '#C9972B' : '#9CA3AF' }}>{checkingOut ? 'Placing...' : 'Place Order'}</button>
+            <button onClick={handlePlaceOrder} disabled={cart.length === 0 || checkingOut || newOrderCustomerFieldsError} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg" style={{ backgroundColor: cart.length > 0 && !newOrderCustomerFieldsError ? theme.primaryColor : 'var(--input-placeholder)' }}>{checkingOut ? 'Placing...' : 'Place Order'}</button>
           </div>
         </div>
 
@@ -655,7 +628,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
               {(Object.keys(ORDER_TYPE_LABELS) as OrderTypeOption[]).map((type) => (
                 <button key={type} onClick={() => setOrderType(type)}
                   className={'px-2 py-1 text-[10px] font-semibold rounded-md whitespace-nowrap ' + (orderType === type ? 'text-white' : 'text-gray-500 border border-gray-200')}
-                  style={orderType === type ? { backgroundColor: '#C9972B' } : {}}
+                  style={orderType === type ? { backgroundColor: theme.primaryColor } : {}}
                 >{ORDER_TYPE_LABELS[type]}</button>
               ))}
             </div>
@@ -692,7 +665,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
             </div>
             <button onClick={() => setShowCalculator(!showCalculator)} className={'px-2 py-1.5 text-[10px] font-semibold rounded-md border transition-colors ' + (showCalculator ? 'bg-gray-800 text-white border-gray-800' : 'border-gray-200 text-gray-500')}>{showCalculator ? 'Hide Calc' : 'Calc'}</button>
             <button onClick={() => { setShowCustomerModal(true); setNewCustomerError(''); }} className="px-2.5 py-1.5 text-[10px] font-semibold border border-gray-200 rounded-md text-gray-600">Customer</button>
-            <button onClick={handlePlaceOrder} disabled={cart.length === 0 || checkingOut || newOrderCustomerFieldsError} className="px-5 py-1.5 rounded-md text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: cart.length > 0 && !newOrderCustomerFieldsError ? '#C9972B' : '#9CA3AF' }}>{checkingOut ? 'Placing...' : 'Order'}</button>
+            <button onClick={handlePlaceOrder} disabled={cart.length === 0 || checkingOut || newOrderCustomerFieldsError} className="px-5 py-1.5 rounded-md text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: cart.length > 0 && !newOrderCustomerFieldsError ? theme.primaryColor : 'var(--input-placeholder)' }}>{checkingOut ? 'Placing...' : 'Order'}</button>
           </div>
         </div>
 
@@ -712,12 +685,12 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
             <div className="flex gap-0.5 px-3 pb-2 overflow-x-auto scrollbar-hide">
               <button key="all" onClick={() => setSelectedCategory('all')}
                 className={'px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors ' + (selectedCategory === 'all' ? 'text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700')}
-                style={selectedCategory === 'all' ? { backgroundColor: '#C9972B' } : {}}
+                style={selectedCategory === 'all' ? { backgroundColor: theme.primaryColor } : {}}
               >All</button>
               {allCategories.map((cat) => (
                 <button key={cat} onClick={() => setSelectedCategory(cat)}
                   className={'px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors ' + (selectedCategory === cat ? 'text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700')}
-                  style={selectedCategory === cat ? { backgroundColor: '#C9972B' } : {}}
+                  style={selectedCategory === cat ? { backgroundColor: theme.primaryColor } : {}}
                 >{cat}</button>
               ))}
             </div>

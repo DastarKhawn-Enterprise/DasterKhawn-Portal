@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
+import { Button, Modal } from '@sat-sys/ui';
 import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { useEvent, usePublish } from './use-event';
@@ -980,11 +981,15 @@ export default function SettingsView({ slug, theme }: Props) {
       </div>
 
       {/* ── Branch Modal ── */}
-      {branchModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
-          <div className="bg-white rounded-xl shadow-lg p-5 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <h3 className="text-base font-semibold text-gray-800 mb-4">{branchModal.editing ? 'Edit Branch' : 'Add Branch'}</h3>
-            <div className="space-y-3 mb-4">
+      <Modal open={branchModal.open} placement="centered" size="md" title={branchModal.editing ? 'Edit Branch' : 'Add Branch'} onClose={() => setBranchModal({ open: false, data: {} })} footer={
+        <div className="flex justify-end gap-2 w-full">
+          <Button variant="outline" onClick={() => setBranchModal({ open: false, data: {} })}>Cancel</Button>
+          <Button style={{ backgroundColor: theme.primaryColor }} onClick={saveBranchModal} disabled={saving || !branchModal.data.name} loading={saving}>
+            Save
+          </Button>
+        </div>
+      }>
+            <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Branch Name *</label>
                 <input type="text" value={branchModal.data.name || ''} onChange={(e) => setBranchModal((prev) => ({ ...prev, data: { ...prev.data, name: e.target.value } }))} className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500" />
@@ -1022,20 +1027,16 @@ export default function SettingsView({ slug, theme }: Props) {
                 <input type="email" value={branchModal.data.email || ''} onChange={(e) => setBranchModal((prev) => ({ ...prev, data: { ...prev.data, email: e.target.value } }))} className="w-full px-3 py-2 border border-gray-300 rounded text-sm" />
               </div>
             </div>
-            <div className="flex gap-2">
-              <button onClick={saveBranchModal} disabled={saving || !branchModal.data.name} className="px-4 py-2 text-sm text-white rounded disabled:opacity-50" style={{ backgroundColor: theme.primaryColor }}>{saving ? 'Saving...' : 'Save'}</button>
-              <button onClick={() => setBranchModal({ open: false, data: {} })} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {/* ── Hours Editing Modal ── */}
-      {hoursModal && editHours.length > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
-          <div className="bg-white rounded-xl shadow-lg p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <h3 className="text-base font-semibold text-gray-800 mb-4">Edit Business Hours</h3>
-            <div className="space-y-2 mb-4">
+      <Modal open={!!hoursModal && editHours.length > 0} placement="centered" size="lg" title="Edit Business Hours" onClose={() => setHoursModal(false)} footer={
+        <div className="flex justify-end gap-2 w-full">
+          <Button variant="outline" onClick={() => setHoursModal(false)}>Cancel</Button>
+          <Button style={{ backgroundColor: theme.primaryColor }} onClick={saveHoursModal}>Done</Button>
+        </div>
+      }>
+            <div className="space-y-2">
               {editHours.sort((a, b) => a.day_of_week - b.day_of_week).map((h, idx) => {
                 const realIdx = editHours.findIndex((eh) => eh.day_of_week === h.day_of_week);
                 return (
@@ -1056,17 +1057,11 @@ export default function SettingsView({ slug, theme }: Props) {
                 );
               })}
             </div>
-            <div className="flex gap-2 mb-4 flex-wrap">
+            <div className="flex gap-2 flex-wrap mt-3">
               <button onClick={copyHoursToWeekdays} className="px-3 py-1 text-xs border border-gray-300 rounded text-gray-600 hover:bg-gray-50">Copy Mon to Weekdays</button>
               <button onClick={copyHoursToAllDays} className="px-3 py-1 text-xs border border-gray-300 rounded text-gray-600 hover:bg-gray-50">Copy to All Days</button>
             </div>
-            <div className="flex gap-2">
-              <button onClick={saveHoursModal} className="px-4 py-2 text-sm text-white rounded" style={{ backgroundColor: theme.primaryColor }}>Done</button>
-              <button onClick={() => setHoursModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }

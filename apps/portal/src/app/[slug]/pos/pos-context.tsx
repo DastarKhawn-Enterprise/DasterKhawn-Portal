@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext } from 'react';
-import type { ThemeConfig } from '@sat-sys/pos-ui';
+import type { ThemeConfig, ResolvedTheme, CssVars } from '@sat-sys/ui';
 
 export interface POSContextValue {
   supabaseUrl: string;
@@ -14,6 +14,8 @@ export interface POSContextValue {
   hiddenViews: string[];
   pageTitle: string;
   setPageTitle: (title: string) => void;
+  resolvedTheme: ResolvedTheme;
+  themeCssVars: CssVars;
 }
 
 const POSContext = createContext<POSContextValue | null>(null);

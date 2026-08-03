@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth, useUser, UserButton } from '@clerk/nextjs';
 import Sidebar from './Sidebar';
 import { POSProvider } from './pos-context';
@@ -9,7 +9,8 @@ import { BusinessDateProvider } from './business-date-context';
 import BusinessDatePicker from './business-date-picker';
 import { RealtimeIndicator } from './realtime-indicator';
 import { supa } from './supa-query';
-import type { ThemeConfig } from '@sat-sys/pos-ui';
+import { ThemeProvider, resolveThemeConfig, themeToCssVariables } from '@sat-sys/ui';
+import type { ThemeConfig } from '@sat-sys/ui';
 import type { ViewId } from './Sidebar';
 
 interface POSShellProps {
@@ -85,6 +86,11 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
 
   const hiddenViews = user ? computeHiddenViews(user, enabledModules, staffRole, staffPermissions) : [];
 
+  const { resolvedTheme, themeCssVars } = useMemo(() => {
+    const resolvedTheme = resolveThemeConfig(theme);
+    return { resolvedTheme, themeCssVars: themeToCssVariables(resolvedTheme) };
+  }, [theme]);
+
   if (!isLoaded || !authReady) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -104,15 +110,18 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
     hiddenViews,
     pageTitle,
     setPageTitle,
+    resolvedTheme,
+    themeCssVars,
   };
 
   return (
     <POSProvider value={contextValue}>
+      <ThemeProvider theme={theme}>
       <EventProvider slug={slug} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey}>
       <BusinessDateProvider>
       <div className="h-screen h-dvh flex flex-col overflow-hidden">
-        <header className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-gray-200 flex-shrink-0">
-          <div className="flex items-center gap-3" style={{ color: theme.secondaryColor }}>
+        <header className="flex items-center justify-between px-4 py-2.5 bg-navbar border-b border-navbar-border flex-shrink-0">
+          <div className="flex items-center gap-3 text-navbar-foreground">
             <button
               onClick={() => setMobileSidebarOpen(true)}
               className="md:hidden text-xl p-1 hover:bg-gray-100 rounded"
@@ -160,6 +169,7 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
       </div>
       </BusinessDateProvider>
       </EventProvider>
+      </ThemeProvider>
     </POSProvider>
   );
 }
