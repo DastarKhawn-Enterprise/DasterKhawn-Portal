@@ -11,6 +11,7 @@ import ReceiptView from './ReceiptView';
 import { recordInvoiceReprint } from './audit-reprint';
 import PaymentModal from './PaymentModal';
 import { deductInventorySupa } from './inventory-utils';
+import { applyOrderEditInventory, restoreOrderInventoryOnCancel, type OrderEditItem } from './order-edit-actions';
 import { updateCustomerLoyaltySupa, searchCustomersSupa, findOrCreateCustomerSupa } from './customer-utils';
 import { supa } from './supa-query';
 import useOfflineSync from '@/hooks/useOfflineSync';
@@ -710,6 +711,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
 
   const handleQuickAddToOrder = useCallback(async (item: MenuItem) => {
     if (!selectedOrder || !selectedId || updating) return;
+    if (selectedOrder.payment_status === 'paid' || selectedOrder.invoice_number) { console.warn('[QuickAdd] Order is paid/invoiced; edit blocked'); return; }
     setUpdating(selectedId);
     try {
       const currentItems = selectedOrder.order_items || [];
@@ -731,12 +733,14 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
       const tx = settings?.taxEnabled && (settings?.taxRate || 0) > 0 ? ta * ((settings?.taxRate || 0) / 100) : 0;
       const total = Math.max(0, qs + sc + tx);
       await supa(slug, { table: 'orders', method: 'update', eq: ['id', selectedId], body: { total, tax_amount: tx, service_charge_amount: sc, updated_at: new Date().toISOString() } });
-      deductInventorySupa(slug, [{ id: item.id, quantity: 1 }], selectedId, user?.id).catch((e) => console.error('[QuickAdd inventory]', e));
+      const oldItems: OrderEditItem[] = currentItems.map((oi) => ({ menu_item_id: oi.menu_item_id, quantity: oi.quantity }));
+      const newItemList: OrderEditItem[] = newItems.map((ni) => ({ menu_item_id: ni.menu_item_id, quantity: ni.quantity }));
+      applyOrderEditInventory(slug, selectedId, oldItems, newItemList, typeof navigator !== 'undefined' ? navigator.userAgent : null).catch((e) => console.error('[QuickAdd inventory]', e));
       publish('orders', 'UPDATE', { id: selectedId });
       setOrders((prev) => prev.map((o) => (o.id === selectedId ? { ...o, total, tax_amount: tx, service_charge_amount: sc, order_items: newItems.map((ni) => ({ menu_item_id: ni.menu_item_id, quantity: ni.quantity, price_at_order: ni.price_at_order, menu_items: { name: (ni.menu_item_id === item.id ? item.name : (currentItems.find((ci) => ci.menu_item_id === ni.menu_item_id)?.menu_items?.name || 'Unknown')) } })) } : o)));
     } catch (e) { console.error('[QuickAdd]', e); }
     setUpdating(null);
-  }, [selectedOrder, selectedId, updating, effectiveOrderType, settings, slug, user]);
+  }, [selectedOrder, selectedId, updating, effectiveOrderType, settings, slug]);
 
   // Status update
   const updateStatus = useCallback(async (orderId: string, newStatus: string) => {
@@ -745,6 +749,10 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
       const updateResult = await supa(slug, { table: 'orders', method: 'update', eq: ['id', orderId], body: { status: newStatus } });
       if (!updateResult.ok) { console.error('[Status]', updateResult.error); setUpdating(null); return; }
       publish('orders', 'UPDATE', { id: orderId, status: newStatus });
+
+      if (newStatus === 'cancelled') {
+        restoreOrderInventoryOnCancel(slug, orderId, typeof navigator !== 'undefined' ? navigator.userAgent : null).catch((e) => console.error('[Cancel inventory restore]', e));
+      }
 
       if (newStatus === 'completed') {
         const orderResult = await supa(slug, { table: 'orders', select: 'customer_id, total', eq: ['id', orderId], single: true });
@@ -822,6 +830,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
 
   const handleSaveEdit = useCallback(async () => {
     if (!selectedOrder || !selectedId) return;
+    if (selectedOrder.payment_status === 'paid' || selectedOrder.invoice_number) { console.warn('[Edit Order] Order is paid/invoiced; edit blocked'); setEditingOrder(false); return; }
     setUpdating(selectedId);
     try {
       const editSubtotal = editCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -865,8 +874,10 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
           notes: orderNotes || null, updated_at: new Date().toISOString(),
         },
       });
-      // Re-deduct inventory for the updated items
-      deductInventorySupa(slug, editCart, selectedId, user?.id).catch(e => console.error('[Edit inventory]', e));
+      // Apply inventory DELTA for the order modification (add/remove only; never reprocess whole order).
+      const oldItems: OrderEditItem[] = (selectedOrder.order_items || []).map((oi) => ({ menu_item_id: oi.menu_item_id, quantity: oi.quantity }));
+      const newItemList: OrderEditItem[] = editCart.map((ci) => ({ menu_item_id: ci.id, quantity: ci.quantity }));
+      applyOrderEditInventory(slug, selectedId, oldItems, newItemList, typeof navigator !== 'undefined' ? navigator.userAgent : null).catch((e) => console.error('[Edit inventory]', e));
 
       publish('orders', 'UPDATE', { id: selectedId });
 
@@ -1150,7 +1161,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                     {selectedOrder.status === 'ready' && (
                       <ActionButton label="Complete Order" color="bg-green-600 hover:bg-green-700" disabled={updating === selectedOrder.id} onClick={() => updateStatus(selectedOrder.id, 'completed')} updating={updating === selectedOrder.id} />
                     )}
-                    {selectedOrder.status !== 'completed' && selectedOrder.status !== 'cancelled' && (
+                    {selectedOrder.status !== 'completed' && selectedOrder.status !== 'cancelled' && selectedOrder.payment_status !== 'paid' && !selectedOrder.invoice_number && (
                       <ActionButton label="Edit Order" color="bg-indigo-600 hover:bg-indigo-700" disabled={false} onClick={handleStartEdit} updating={false} />
                     )}
                     {selectedOrder.payment_status !== 'paid' ? (
@@ -1162,7 +1173,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
                       <ActionButton label="Cancel Order" color="bg-danger hover:opacity-90" disabled={updating === selectedOrder.id} onClick={() => updateStatus(selectedOrder.id, 'cancelled')} updating={updating === selectedOrder.id} />
                     )}
                   </div>
-                  {selectedOrder.status !== 'completed' && selectedOrder.status !== 'cancelled' && (
+                  {selectedOrder.status !== 'completed' && selectedOrder.status !== 'cancelled' && selectedOrder.payment_status !== 'paid' && !selectedOrder.invoice_number && (
                     <div className="border-t border-gray-100 pt-4">
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Quick Add Items</h3>

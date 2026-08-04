@@ -10,6 +10,7 @@ import type { MenuItem, ThemeConfig } from '@sat-sys/pos-ui';
 import { fetchKDSOrders, updateKDSOrderStatus } from './orders-actions';
 import { supa } from './supa-query';
 import { deductInventorySupa } from './inventory-utils';
+import { applyOrderEditInventory, restoreOrderInventoryOnCancel, type OrderEditItem } from './order-edit-actions';
 import { updateCustomerLoyaltySupa } from './customer-utils';
 import { useBusinessDate } from './business-date-context';
 import ReceiptView from './ReceiptView';
@@ -697,6 +698,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
     setQuickAddUpdating(true);
     const order = orders.find((o) => o.id === quickAddOrderId);
     if (!order) { setQuickAddUpdating(false); setQuickAddOrderId(null); setQuickAddItems([]); return; }
+    if (order.payment_status === 'paid' || order.invoice_number) { console.warn('[KDS QuickAdd] Order is paid/invoiced; edit blocked'); setQuickAddUpdating(false); setQuickAddOrderId(null); setQuickAddItems([]); return; }
     try {
       const currentItems = order.order_items || [];
       const merged: { menu_item_id: string; quantity: number; price_at_order: number }[] = [...currentItems.map((oi) => ({ menu_item_id: oi.menu_item_id, quantity: oi.quantity, price_at_order: Number(oi.price_at_order) }))];
@@ -708,13 +710,14 @@ export default function KDSView({ slug, theme, brandName }: Props) {
           merged.push({ menu_item_id: qa.id, quantity: qa.quantity, price_at_order: qa.price });
         }
       }
-      const invCart = quickAddItems.map((qa) => ({ id: qa.id, quantity: qa.quantity }));
       await supa(slug, { table: 'order_items', method: 'delete', eq: ['order_id', quickAddOrderId] });
       if (merged.length > 0) {
         await supa(slug, { table: 'order_items', method: 'insert', body: merged.map((m) => ({ ...m, order_id: quickAddOrderId })) });
       }
       await supa(slug, { table: 'orders', method: 'update', eq: ['id', quickAddOrderId], body: { updated_at: new Date().toISOString() } });
-      deductInventorySupa(slug, invCart, quickAddOrderId, user?.id).catch((e) => console.error('[KDS QuickAdd inventory]', e));
+      const oldItems: OrderEditItem[] = currentItems.map((oi) => ({ menu_item_id: oi.menu_item_id, quantity: oi.quantity }));
+      const newItemList: OrderEditItem[] = merged.map((m) => ({ menu_item_id: m.menu_item_id, quantity: m.quantity }));
+      applyOrderEditInventory(slug, quickAddOrderId, oldItems, newItemList, typeof navigator !== 'undefined' ? navigator.userAgent : null).catch((e) => console.error('[KDS QuickAdd inventory]', e));
       publish('orders', 'UPDATE', { id: quickAddOrderId });
       const allNames = new Map<string, string>();
       for (const oi of currentItems) allNames.set(oi.menu_item_id, oi.menu_items?.name || 'Unknown');
@@ -728,7 +731,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
     setQuickAddUpdating(false);
     setQuickAddOrderId(null);
     setQuickAddItems([]);
-  }, [quickAddOrderId, quickAddItems, orders, selectedOrder, slug, user, publish]);
+  }, [quickAddOrderId, quickAddItems, orders, selectedOrder, slug, publish]);
 
   const handlePaymentSuccess = useCallback((_result: any) => {
     const order = paymentOrderRef.current;
@@ -764,6 +767,9 @@ export default function KDSView({ slug, theme, brandName }: Props) {
     setUpdating(orderId);
     try {
       await updateKDSOrderStatus(slug, orderId, newStatus);
+      if (newStatus === 'cancelled') {
+        restoreOrderInventoryOnCancel(slug, orderId, typeof navigator !== 'undefined' ? navigator.userAgent : null).catch((e) => console.error('[KDS Cancel inventory restore]', e));
+      }
       // Award loyalty/update customer profile when an order is completed and linked to a customer
       if (newStatus === 'completed') {
         const coR = await supa(slug, { table: 'orders', select: 'customer_id, total', eq: ['id', orderId], single: true });
@@ -933,7 +939,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
                       onComplete={() => handleStatusUpdate(order.id, 'completed')}
                       onCancel={() => handleStatusUpdate(order.id, 'cancelled')}
                       onSelect={() => setSelectedOrder(order)}
-                      onAddItem={order.status !== 'completed' && order.status !== 'cancelled' ? () => { setQuickAddOrderId(order.id); setMenuSearch(''); } : undefined}
+                      onAddItem={order.status !== 'completed' && order.status !== 'cancelled' && order.payment_status !== 'paid' && !order.invoice_number ? () => { setQuickAddOrderId(order.id); setMenuSearch(''); } : undefined}
                       onPay={order.status === 'completed' ? () => { handlePrintInvoice(order); } : undefined}
                     />
                   ))}
@@ -957,7 +963,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
               onReady={(id) => handleStatusUpdate(id, 'ready')}
               onComplete={(id) => handleStatusUpdate(id, 'completed')}
               onCancel={(id) => handleStatusUpdate(id, 'cancelled')}
-              onAddItem={(id) => { setQuickAddOrderId(id); setMenuSearch(''); }}
+              onAddItem={(id) => { const o = orders.find((ord) => ord.id === id); if (o && o.payment_status !== 'paid' && !o.invoice_number) { setQuickAddOrderId(id); setMenuSearch(''); } }}
               onPay={(id) => { const o = orders.find((ord) => ord.id === id); if (o) handlePrintInvoice(o); }}
             />
           )

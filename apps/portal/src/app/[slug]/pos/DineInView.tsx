@@ -9,6 +9,7 @@ import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
 import ReceiptView from './ReceiptView';
 import { recordInvoiceReprint } from './audit-reprint';
 import { deductInventorySupa } from './inventory-utils';
+import { applyOrderEditInventory, restoreOrderInventoryOnCancel, type OrderEditItem } from './order-edit-actions';
 import { updateCustomerLoyaltySupa, searchCustomersSupa, findOrCreateCustomerSupa } from './customer-utils';
 import { supa } from './supa-query';
 import { useEvent, usePublish } from './use-event';
@@ -371,6 +372,10 @@ export default function DineInView({ slug, theme, brandName }: Props) {
         }
       }
 
+      if (newStatus === 'cancelled') {
+        restoreOrderInventoryOnCancel(slug, orderId, typeof navigator !== 'undefined' ? navigator.userAgent : null).catch((e) => console.error('[DineIn Cancel inventory restore]', e));
+      }
+
       if (newStatus === 'completed' || newStatus === 'cancelled') {
         await supa(slug, { table: 'tables', method: 'update', body: { status: 'available', current_order_id: null }, eq: ['id', selectedTable.id] });
         setTables((prev) => prev.map((t) => (t.id === selectedTable.id ? { ...t, status: 'available' as const, current_order_id: null } : t)));
@@ -392,6 +397,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
 
   const handleStartEdit = useCallback(() => {
     if (!tableOrder) return;
+    if (tableOrder.payment_status === 'paid' || tableOrder.invoice_number) { console.warn('[DineIn Edit] Order is paid/invoiced; edit blocked'); return; }
     setEditCart(
       tableOrder.order_items.map((oi) => ({
         id: oi.menu_item_id,
@@ -422,6 +428,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
 
   const handleSaveEdit = useCallback(async () => {
     if (!tableOrder || !tableOrder.id) return;
+    if (tableOrder.payment_status === 'paid' || tableOrder.invoice_number) { console.warn('[DineIn Edit] Order is paid/invoiced; edit blocked'); setEditingOrder(false); return; }
     setUpdating(tableOrder.id);
     try {
       const subtotal = editCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -447,6 +454,10 @@ export default function DineInView({ slug, theme, brandName }: Props) {
         await supa(slug, { table: 'order_items', method: 'insert', body: items });
       }
       await supa(slug, { table: 'orders', method: 'update', body: { total, tax_amount: taxAmount }, eq: ['id', tableOrder.id] });
+
+      const oldItems: OrderEditItem[] = (tableOrder.order_items || []).map((oi) => ({ menu_item_id: oi.menu_item_id, quantity: oi.quantity }));
+      const newItemList: OrderEditItem[] = editCart.map((ci) => ({ menu_item_id: ci.id, quantity: ci.quantity }));
+      applyOrderEditInventory(slug, tableOrder.id, oldItems, newItemList, typeof navigator !== 'undefined' ? navigator.userAgent : null).catch((e) => console.error('[DineIn Edit inventory]', e));
 
       setTableOrder((prev) =>
         prev ? { ...prev, total, tax_amount: taxAmount, service_charge_amount: serviceCharge, order_items: editCart.map((ci) => ({ menu_item_id: ci.id, quantity: ci.quantity, price_at_order: ci.price, menu_items: { name: ci.name } })) } : prev
@@ -729,7 +740,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
                             <ActionButton label="Complete Order" color="bg-green-600 hover:bg-green-700" disabled={updating === tableOrder.id} onClick={() => handleUpdateStatus(tableOrder.id, 'completed')} updating={updating === tableOrder.id} />
                           )}
                           <ActionButton label="Print Bill" color="bg-gray-600 hover:bg-gray-700" disabled={false} onClick={() => handlePrintBill(tableOrder)} updating={false} />
-                          {tableOrder.status !== 'completed' && tableOrder.status !== 'cancelled' && (
+                          {tableOrder.status !== 'completed' && tableOrder.status !== 'cancelled' && tableOrder.payment_status !== 'paid' && !tableOrder.invoice_number && (
                             <ActionButton label="Edit Order" color="bg-indigo-600 hover:bg-indigo-700" disabled={false} onClick={handleStartEdit} updating={false} />
                           )}
                           {tableOrder.status !== 'cancelled' && (

@@ -42,6 +42,8 @@ const MOVEMENT_LABELS: Record<string, string> = {
   sale: 'Sale',
   adjustment: 'Adjustment',
   wastage: 'Wastage',
+  ORDER_EDIT_ADD: 'Order Edit Add',
+  ORDER_EDIT_REMOVE: 'Order Edit Remove',
 };
 
 export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
