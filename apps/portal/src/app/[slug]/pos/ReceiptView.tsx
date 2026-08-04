@@ -14,6 +14,7 @@ interface ReceiptData {
   status: string;
   total: number;
   createdAt: string;
+  invoiceNumber?: string | null;
   orderType?: string;
   customerName?: string | null;
   customerPhone?: string | null;
@@ -34,6 +35,8 @@ interface Props {
   onClose: () => void;
   footerText?: string;
   currencySymbol?: string;
+  /** True when this is a reprint of an already-paid invoice (shows REPRINT tag). */
+  isReprint?: boolean;
 }
 
 const PRINT_STYLE = `
@@ -61,14 +64,14 @@ const PRINT_STYLE = `
   }
 `;
 
-export default function ReceiptView({ data, brandName, theme, onClose, footerText, currencySymbol }: Props) {
+export default function ReceiptView({ data, brandName, theme, onClose, footerText, currencySymbol, isReprint }: Props) {
   useEffect(() => {
     requestAnimationFrame(() => window.print());
   }, []);
 
   const subtotal = data.items.reduce((s, i) => s + i.price * i.quantity, 0);
 
-  const content = receiptContent(brandName, theme, data, subtotal, footerText, currencySymbol);
+  const content = receiptContent(brandName, theme, data, subtotal, footerText, currencySymbol, isReprint);
 
   return (
     <>
@@ -92,7 +95,7 @@ export default function ReceiptView({ data, brandName, theme, onClose, footerTex
   );
 }
 
-function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData, subtotal: number, footerText?: string, currencySymbol?: string) {
+function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData, subtotal: number, footerText?: string, currencySymbol?: string, isReprint?: boolean) {
   const curr = currencySymbol || 'Rs.';
   const tax = data.taxAmount ?? 0;
   const orderTypeLabel = data.orderType
@@ -106,6 +109,11 @@ function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData
           {brandName}
         </div>
         <div className="text-xs text-gray-500 mt-0.5">Order Receipt</div>
+        {isReprint && (
+          <div className="text-center text-xs font-bold tracking-widest mt-1" style={{ color: theme.primaryColor }}>
+            *** REPRINT ***
+          </div>
+        )}
       </div>
 
       <div className="mb-3 space-y-0.5 text-xs text-gray-600">
@@ -113,6 +121,12 @@ function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData
           <span>Order #</span>
           <span className="font-semibold">{data.orderNumber}</span>
         </div>
+        {data.invoiceNumber && (
+          <div className="flex justify-between">
+            <span>Invoice #</span>
+            <span className="font-semibold">{data.invoiceNumber}</span>
+          </div>
+        )}
         <div className="flex justify-between">
           <span>Date</span>
           <span>{new Date(data.createdAt).toLocaleString()}</span>

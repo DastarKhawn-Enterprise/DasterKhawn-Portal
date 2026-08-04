@@ -8,6 +8,7 @@ import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
 import { ActionButton as SharedActionButton, Badge, Button, EmptyState, Modal, SkeletonTable, orderStatusVariant, orderTypeVariant } from '@sat-sys/ui';
 import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
 import ReceiptView from './ReceiptView';
+import { recordInvoiceReprint } from './audit-reprint';
 import PaymentModal from './PaymentModal';
 import { deductInventorySupa } from './inventory-utils';
 import { updateCustomerLoyaltySupa, searchCustomersSupa, findOrCreateCustomerSupa } from './customer-utils';
@@ -51,6 +52,7 @@ interface Order {
   payment_status?: string | null;
   amount_paid?: number;
   amount_due?: number;
+  invoice_number?: string | null;
   order_items: OrderItem[];
 }
 
@@ -94,7 +96,7 @@ const statusDisplay: Record<string, string> = {
   cancelled: 'Cancelled',
 };
 
-const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, service_charge_amount, discount_amount, discount_type, discount_value, notes, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, vehicle_type, vehicle_plate_number, delivery_address, payment_status, amount_paid, amount_due, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
+const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, service_charge_amount, discount_amount, discount_type, discount_value, notes, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, vehicle_type, vehicle_plate_number, delivery_address, payment_status, amount_paid, amount_due, invoice_number, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
 
 const ORDER_TYPE_DISPLAY: Record<string, string> = {
   dine_in: 'Dine In',
@@ -779,7 +781,8 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
 
   const handlePrintBill = useCallback((order: Order) => {
     setReceiptOrder(order);
-  }, []);
+    recordInvoiceReprint(slug, order, typeof navigator !== 'undefined' ? navigator.userAgent : null);
+  }, [slug]);
 
   const handleStartEdit = useCallback(() => {
     if (!selectedOrder) return;
@@ -1931,32 +1934,34 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     )}
     {receiptOrder && (
       <ReceiptView
-        data={{
-          orderNumber: receiptOrder.order_number,
-          status: receiptOrder.status,
-          total: Number(receiptOrder.total),
-          taxAmount: Number(receiptOrder.tax_amount ?? 0),
-          serviceChargeAmount: Number(receiptOrder.service_charge_amount ?? 0),
-          createdAt: receiptOrder.created_at,
-          orderType: receiptOrder.order_type,
-          customerName: receiptOrder.customer_name,
-          customerPhone: receiptOrder.customer_phone,
-          pickupTime: receiptOrder.pickup_time,
-          vehicleType: receiptOrder.vehicle_type,
-          vehiclePlateNumber: receiptOrder.vehicle_plate_number,
-          deliveryAddress: receiptOrder.delivery_address,
-          tableNumber: null,
-          items: receiptOrder.order_items.map((oi) => ({
-            name: oi.menu_items?.name || 'Unknown',
-            quantity: oi.quantity,
-            price: Number(oi.price_at_order),
-          })),
-        }}
-        brandName={brandName}
-        theme={theme}
-        footerText={settings?.footerText}
-        currencySymbol={settings?.currencySymbol}
-        onClose={() => setReceiptOrder(null)}
+data={{
+            orderNumber: receiptOrder.order_number,
+            status: receiptOrder.status,
+            total: Number(receiptOrder.total),
+            invoiceNumber: receiptOrder.invoice_number ?? null,
+            createdAt: receiptOrder.created_at,
+            orderType: receiptOrder.order_type,
+            customerName: receiptOrder.customer_name,
+            customerPhone: receiptOrder.customer_phone,
+            pickupTime: receiptOrder.pickup_time,
+            vehicleType: receiptOrder.vehicle_type,
+            vehiclePlateNumber: receiptOrder.vehicle_plate_number,
+            deliveryAddress: receiptOrder.delivery_address,
+            taxAmount: Number(receiptOrder.tax_amount ?? 0),
+            serviceChargeAmount: Number(receiptOrder.service_charge_amount ?? 0),
+            tableNumber: null,
+            items: receiptOrder.order_items.map((oi) => ({
+              name: oi.menu_items?.name || 'Unknown',
+              quantity: oi.quantity,
+              price: Number(oi.price_at_order),
+            })),
+          }}
+          brandName={brandName}
+          theme={theme}
+          footerText={settings?.footerText}
+          currencySymbol={settings?.currencySymbol}
+          isReprint
+          onClose={() => setReceiptOrder(null)}
       />
     )}
     </>

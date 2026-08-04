@@ -46,7 +46,7 @@ const ALLOWED_TABLES = new Set([
   'settings', 'customers', 'inventory_items',
   'menu_item_ingredients', 'expenses', 'reservations',
   'item_ledger', 'accounts', 'payments', 'account_transactions',
-  'branches', 'business_hours',
+  'branches', 'business_hours', 'audit_logs',
 ]);
 
 const TABLE_READ_PERMISSION: Record<string, string> = {

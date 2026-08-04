@@ -7,6 +7,7 @@ import { MenuGrid, CartSidebar } from '@sat-sys/pos-ui';
 import { ActionButton as SharedActionButton, Badge, Skeleton, tableStatusVariant } from '@sat-sys/ui';
 import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
 import ReceiptView from './ReceiptView';
+import { recordInvoiceReprint } from './audit-reprint';
 import { deductInventorySupa } from './inventory-utils';
 import { updateCustomerLoyaltySupa, searchCustomersSupa, findOrCreateCustomerSupa } from './customer-utils';
 import { supa } from './supa-query';
@@ -41,6 +42,8 @@ interface Order {
   customer_id?: string | null;
   customer_name?: string | null;
   customer_phone?: string | null;
+  payment_status?: string | null;
+  invoice_number?: string | null;
   order_items: OrderItem[];
 }
 
@@ -141,7 +144,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
 
     supa(slug, {
       table: 'orders',
-      select: 'id, order_number, status, total, tax_amount, created_at, order_items (menu_item_id, quantity, price_at_order, menu_items (name))',
+      select: 'id, order_number, status, total, tax_amount, payment_status, invoice_number, created_at, order_items (menu_item_id, quantity, price_at_order, menu_items (name))',
       eq: ['id', selectedTable.current_order_id],
       single: true,
     })
@@ -382,7 +385,10 @@ export default function DineInView({ slug, theme, brandName }: Props) {
 
   const handlePrintBill = useCallback((order: Order) => {
     setReceiptOrder(order);
-  }, []);
+    if (order.payment_status === 'paid') {
+      recordInvoiceReprint(slug, order, typeof navigator !== 'undefined' ? navigator.userAgent : null);
+    }
+  }, [slug]);
 
   const handleStartEdit = useCallback(() => {
     if (!tableOrder) return;
@@ -748,6 +754,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
           orderNumber: receiptOrder.order_number,
           status: receiptOrder.status,
           total: Number(receiptOrder.total),
+          invoiceNumber: receiptOrder.invoice_number ?? null,
           taxAmount: Number(receiptOrder.tax_amount ?? 0),
           serviceChargeAmount: Number(receiptOrder.service_charge_amount ?? 0),
           createdAt: receiptOrder.created_at,
@@ -766,6 +773,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
         theme={theme}
         footerText={settings?.footerText}
         currencySymbol={settings?.currencySymbol}
+        isReprint={receiptOrder.payment_status === 'paid'}
         onClose={() => setReceiptOrder(null)}
       />
     )}
