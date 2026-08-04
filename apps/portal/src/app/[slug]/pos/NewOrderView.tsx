@@ -9,6 +9,7 @@ import { usePOS } from './pos-context';
 import { searchCustomersSupa, checkDuplicatePhone, normalizePhone, findOrCreateCustomerSupa } from './customer-utils';
 import { usePublish } from './use-event';
 import { generateUniqueOrderNumber } from './order-utils';
+import { recordOrderSale } from './inventory-engine';
 import { validateCustomerName, validateCustomerPhone, validateDeliveryAddress } from './customer-validation';
 
 interface MenuItem { id: string; name: string; description?: string; price: number; category?: string; available?: boolean; }
@@ -321,6 +322,17 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
       if (!itemsResult.ok) { setOrderError(itemsResult.error || 'Failed to save order items'); setCheckingOut(false); creatingOrderRef.current = false; return; }
       // Update table status
       if (orderType === 'dine_in' && selectedTableId) { supa(slug, { table: 'tables', method: 'update', eq: ['id', selectedTableId], body: { status: 'occupied', current_order_id: newOrder.id } }).catch(() => {}); setTables((prev) => prev.map((t) => (t.id === selectedTableId ? { ...t, status: 'occupied' } : t))); }
+      // Deduct inventory at placement (SALE ledger) so stock moves the moment the order is placed
+      recordOrderSale(
+        slug,
+        newOrder.id,
+        cart.map((item) => ({ id: item.id, quantity: item.quantity })),
+        null,
+        typeof navigator !== 'undefined' ? navigator.userAgent : null
+      ).then(() => {
+        publish('inventory_items', 'UPDATE', { id: 'order-' + newOrder.id });
+        publish('item_ledger', 'INSERT', { id: 'order-' + newOrder.id });
+      }).catch((e) => console.error('[PlaceOrder inventory deduct]', e));
       // Send to Kitchen Display immediately — no payment needed
       publish('orders', 'INSERT', { id: newOrder.id, status: 'pending', order_type: orderType });
       // Clear cart for new order

@@ -634,6 +634,17 @@ export default function KDSView({ slug, theme, brandName }: Props) {
     fetchOrders();
   }, [fetchOrders]);
 
+  // Keep the kitchen display in sync across separate terminals. The local event bus only
+  // fires on the same browser, so poll in the background so every tab (ready / preparing /
+  // completed) refreshes even when no in-page event occurs.
+  useEffect(() => {
+    const timer = setInterval(() => debouncedFetchOrders(), 15000);
+    return () => {
+      if (timer) clearInterval(timer);
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    };
+  }, [debouncedFetchOrders]);
+
   // Realtime — apply changes immediately (new orders at the TOP), then reconcile with a debounced refetch
   useEvent('orders', (payload) => {
     if (!bd.isToday) return;
