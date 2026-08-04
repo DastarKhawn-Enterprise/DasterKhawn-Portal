@@ -46,7 +46,7 @@ const ALLOWED_TABLES = new Set([
   'settings', 'customers', 'inventory_items',
   'menu_item_ingredients', 'expenses', 'reservations',
   'item_ledger', 'accounts', 'payments', 'account_transactions',
-  'branches', 'business_hours', 'audit_logs', 'order_edit_history',
+  'branches', 'business_hours', 'audit_logs', 'order_edit_history', 'staff_branches',
 ]);
 
 const TABLE_READ_PERMISSION: Record<string, string> = {
@@ -71,6 +71,7 @@ const TABLE_WRITE_PERMISSION: Record<string, string> = {
   branches: 'settings:edit',
   business_hours: 'settings:edit',
   order_edit_history: 'menu:edit',
+  staff_branches: 'staff:manage',
 };
 
 const PERMISSIONS_OWNER = [

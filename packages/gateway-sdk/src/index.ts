@@ -371,4 +371,62 @@ export async function removeStaffRolesForOtherTenants(
   return { success: true };
 }
 
+export interface TenantMembership {
+  tenant_id: string;
+  role: string;
+  permissions: string[];
+  metadata?: Record<string, any>;
+  tenant: TenantResult;
+}
+
+// Resolves every active tenant a staff member belongs to (authoritative: staff_roles).
+// Used at login/dashboard to route the user into their POS regardless of role name,
+// and to repair stale Clerk publicMetadata from the gateway mapping.
+export async function getTenantMemberships(clerkUserId: string): Promise<TenantMembership[]> {
+  const client = getGatewayClient();
+  const { data, error } = await client
+    .from('staff_roles')
+    .select('id, clerk_user_id, tenant_id, role, permissions, metadata')
+    .eq('clerk_user_id', clerkUserId);
+
+  if (error || !data || data.length === 0) return [];
+
+  const tenantIds = [...new Set(data.map((r) => r.tenant_id))];
+  const { data: tenants } = await client
+    .from('tenants')
+    .select('id, slug, brand_name, supabase_url, supabase_anon_key, status, theme_config, enabled_modules')
+    .in('id', tenantIds);
+
+  const tenantMap = new Map<string, TenantResult>((tenants || []).map((t) => [t.id, t as TenantResult]));
+
+  return data
+    .filter((r) => tenantMap.has(r.tenant_id))
+    .filter((r) => tenantMap.get(r.tenant_id)?.status === 'active')
+    .map((r) => ({
+      tenant_id: r.tenant_id,
+      role: r.role,
+      permissions: r.permissions || [],
+      metadata: r.metadata || {},
+      tenant: tenantMap.get(r.tenant_id)!,
+    }));
+}
+
+// Idempotently backfills a staff_roles.metadata record so existing members
+// created before assignment metadata existed are repaired (no duplicates).
+export async function ensureStaffRoleMetadata(
+  clerkUserId: string,
+  tenantId: string,
+  enrichment: Record<string, any>,
+): Promise<{ success: boolean; error?: string }> {
+  const memberships = await getTenantMemberships(clerkUserId);
+  const m = memberships.find((x) => x.tenant_id === tenantId);
+  if (!m) return { success: false, error: 'No membership found' };
+
+  const existing = m.metadata || {};
+  const needsUpdate = Object.keys(enrichment).some((k) => existing[k] === undefined || existing[k] === null);
+  if (!needsUpdate) return { success: true };
+
+  return updateStaffRole(clerkUserId, tenantId, { metadata: { ...existing, ...enrichment } });
+}
+
 

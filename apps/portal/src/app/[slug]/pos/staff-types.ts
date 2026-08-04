@@ -11,6 +11,15 @@ export interface StaffMeta {
   password_reset_at?: string;
   password_reset_by?: string;
   last_login_at?: string;
+  // Automatic assignment fields (populated on creation, mirrored from gateway)
+  branch_id?: string;
+  branch_name?: string;
+  role_name?: string;
+  tenant_slug?: string;
+  brand_id?: string;
+  assigned_at?: string;
+  created_by?: string;
+  status?: string;
 }
 
 export interface StaffMember {
@@ -150,6 +159,8 @@ export interface CreateStaffData {
   employmentStatus: string;
   permissions: string[];
   password?: string;
+  branchId?: string;
+  branchName?: string;
 }
 
 export interface UpdateStaffData {
@@ -158,4 +169,6 @@ export interface UpdateStaffData {
   phone?: string;
   employmentStatus?: string;
   permissions?: string[];
+  branchId?: string;
+  branchName?: string;
 }

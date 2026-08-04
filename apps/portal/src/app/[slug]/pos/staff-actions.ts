@@ -11,7 +11,8 @@ import {
   removeStaffRolesForOtherTenants,
 } from '@sat-sys/gateway-sdk';
 import type { StaffMember, StaffListResult, StaffMeta, CreateStaffData, UpdateStaffData, StaffRole } from './staff-types';
-import { ROLE_DEFAULTS, getAllPermissions, STAFF_ROLES } from './staff-types';
+import { ROLE_DEFAULTS, getAllPermissions, STAFF_ROLES, getRoleLabel } from './staff-types';
+import { supa } from './supa-query';
 
 function generatePassword(): string {
   return randomBytes(18)
@@ -162,6 +163,47 @@ export async function getStaffList(slug: string): Promise<StaffListResult> {
   }
 }
 
+// Assigns a staff member to a branch inside the current tenant.
+// Idempotent: removes any prior branch mapping for this user in this tenant first,
+// so no duplicate records are ever created.
+async function assignStaffBranch(
+  slug: string,
+  tenantId: string,
+  clerkUserId: string,
+  branchId?: string,
+  branchName?: string,
+  actorUserId?: string,
+) {
+  if (!branchId) return;
+  await supa(slug, { table: 'staff_branches', method: 'delete', eq: ['clerk_user_id', clerkUserId] });
+  await supa(slug, {
+    table: 'staff_branches',
+    method: 'insert',
+    single: true,
+    body: {
+      clerk_user_id: clerkUserId,
+      tenant_id: tenantId,
+      branch_id: branchId,
+      assigned_at: new Date().toISOString(),
+      created_by: actorUserId || null,
+    },
+  });
+}
+
+export async function getBranches(
+  slug: string,
+): Promise<{ success: boolean; branches?: { id: string; name: string; is_default: boolean }[]; error?: string }> {
+  try {
+    const access = await requireStaffAccess(slug);
+    if (!access.authorized) return { success: false, error: access.reason };
+    const res = await supa(slug, { table: 'branches', select: 'id, name, is_default', order: 'name' });
+    if (!res.ok) return { success: false, error: res.error };
+    return { success: true, branches: (res.data as any[]) || [] };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
 export async function createStaffAccount(
   slug: string,
   email: string,
@@ -171,6 +213,8 @@ export async function createStaffAccount(
   employmentStatus?: string,
   customPermissions?: string[],
   password?: string,
+  branchId?: string,
+  branchName?: string,
 ): Promise<{ success: boolean; error?: string; credentials?: { email: string; password: string } }> {
   try {
     const access = await requireStaffAccess(slug);
@@ -203,6 +247,26 @@ export async function createStaffAccount(
       phone: phone || '',
       employment_status: employmentStatus || 'active',
       login_enabled: true,
+      // Automatic assignment (tenant, branch, role, POS context)
+      role_name: getRoleLabel(role),
+      tenant_slug: tenant.slug,
+      brand_id: tenant.id,
+      branch_id: branchId || undefined,
+      branch_name: branchName || undefined,
+      assigned_at: new Date().toISOString(),
+      created_by: access.userId,
+      status: 'active',
+    };
+
+    const assignmentMetadata: Record<string, unknown> = {
+      tenant_id: tenant.id,
+      role,
+      role_name: getRoleLabel(role),
+      tenant_slug: tenant.slug,
+      brand_id: tenant.id,
+      status: 'active',
+      permissions,
+      login_enabled: true,
     };
 
     if (existing.data.length > 0) {
@@ -213,12 +277,7 @@ export async function createStaffAccount(
           lastName: name.split(' ').slice(1).join(' ') || '',
         });
         await client.users.updateUserMetadata(targetUserId, {
-          publicMetadata: {
-            tenant_id: tenant.id,
-            role,
-            permissions,
-            login_enabled: true,
-          },
+          publicMetadata: assignmentMetadata,
         });
         await client.users.updateUser(targetUserId, {
           password: finalPassword,
@@ -232,6 +291,7 @@ export async function createStaffAccount(
       const result = await addStaffRole(targetUserId, tenant.id, role, permissions, meta);
       if (!result.success) return { success: false, error: result.error };
       try { await removeStaffRolesForOtherTenants(targetUserId, tenant.id, 'owner'); } catch {}
+      await assignStaffBranch(slug, tenant.id, targetUserId, branchId, branchName, access.userId);
       return { success: true, credentials: { email, password: finalPassword } };
     }
 
@@ -245,12 +305,7 @@ export async function createStaffAccount(
         skipPasswordChecks: true,
       });
       await client.users.updateUserMetadata(created.id, {
-        publicMetadata: {
-          tenant_id: tenant.id,
-          role,
-          permissions,
-          login_enabled: true,
-        },
+        publicMetadata: assignmentMetadata,
       });
     } catch (e2: any) {
       let msg = e2.message || 'Failed to create user';
@@ -260,6 +315,7 @@ export async function createStaffAccount(
 
     const result = await addStaffRole(created.id, tenant.id, role, permissions, meta);
     if (!result.success) return { success: false, error: result.error };
+    await assignStaffBranch(slug, tenant.id, created.id, branchId, branchName, access.userId);
 
     return {
       success: true,
@@ -325,6 +381,11 @@ export async function updateStaff(
     const newMeta: StaffMeta = { ...existingMeta };
     if (updates.phone !== undefined) newMeta.phone = updates.phone;
     if (updates.employmentStatus !== undefined) newMeta.employment_status = updates.employmentStatus;
+    if (updates.role !== undefined) newMeta.role_name = getRoleLabel(updates.role);
+    if (updates.branchId !== undefined) {
+      newMeta.branch_id = updates.branchId || undefined;
+      if (updates.branchName !== undefined) newMeta.branch_name = updates.branchName || undefined;
+    }
 
     const gatewayUpdates: { role?: string; permissions?: string[]; metadata?: Record<string, any> } = { metadata: newMeta };
     if (updates.role) gatewayUpdates.role = updates.role;
@@ -333,11 +394,17 @@ export async function updateStaff(
     const gatewayResult = await updateStaffRole(clerkUserId, tenant.id, gatewayUpdates);
     if (!gatewayResult.success) return { success: false, error: gatewayResult.error };
 
+    // Reassign branch mapping (idempotent) when a branch change is requested.
+    if (updates.branchId !== undefined) {
+      await assignStaffBranch(slug, tenant.id, clerkUserId, updates.branchId, updates.branchName, access.userId);
+    }
+
     try {
       await client.users.updateUserMetadata(clerkUserId, {
         publicMetadata: {
           tenant_id: tenant.id,
           role: updates.role || target.role,
+          role_name: getRoleLabel(updates.role || target.role),
           permissions: updates.permissions || target.permissions,
           login_enabled: existingMeta.login_enabled !== false,
         },
@@ -567,6 +634,9 @@ export async function removeStaff(
         publicMetadata: { tenant_id: null, role: null, permissions: null, login_enabled: false },
       });
     } catch {}
+
+    // Clean up branch assignment within this tenant (per system rules, other tenants unaffected).
+    await supa(slug, { table: 'staff_branches', method: 'delete', eq: ['clerk_user_id', clerkUserId] });
 
     return await removeStaffRole(clerkUserId, tenant.id);
   } catch (e: any) {

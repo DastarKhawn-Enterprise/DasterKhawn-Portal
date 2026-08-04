@@ -64,17 +64,21 @@ export default async function POSLayout({
 
   let staffRole = '';
   let staffPermissions: string[] = [];
+  let hasStaffRole = false;
   if (!isSuperAdmin) {
     const staffRows = await getStaffByTenant(tenant.id);
     const me = staffRows.find((s) => s.clerk_user_id === userId);
+    hasStaffRole = !!me;
     if (me) {
       staffRole = me.role;
       staffPermissions = me.permissions || [];
     }
   }
 
-  const isAssigned = staffRole === 'owner'
-    || staffRole === 'super_admin'
+  // Authoritative membership check: a staff_roles row for this tenant means the user
+  // is assigned here even if Clerk publicMetadata.tenant_id is stale/missing.
+  const isAssigned = hasStaffRole
+    || staffRole === 'owner'
     || (tenantId !== undefined && tenantId === tenant.id);
 
   if (!isAssigned && !isSuperAdmin) {

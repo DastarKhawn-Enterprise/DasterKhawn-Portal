@@ -5,7 +5,7 @@ import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import {
   getStaffList, createStaffAccount, updateStaff, updateStaffPermissions,
-  resetPassword, toggleLogin, setStaffLeave, removeStaff, exportStaffCsv,
+  resetPassword, toggleLogin, setStaffLeave, removeStaff, exportStaffCsv, getBranches,
 } from './staff-actions';
 import type { StaffMember, StaffListResult, StaffMeta, CreateStaffData, UpdateStaffData } from './staff-types';
 import { Badge, EmptyState, Modal, Skeleton, SkeletonTable, type BadgeVariant } from '@sat-sys/ui';
@@ -124,6 +124,8 @@ export default function StaffManagementView({ slug }: Props) {
 
   const [tempPassword, setTempPassword] = useState<{ email: string; password: string } | null>(null);
 
+  const [branches, setBranches] = useState<{ id: string; name: string; is_default: boolean }[]>([]);
+
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
@@ -154,6 +156,13 @@ export default function StaffManagementView({ slug }: Props) {
   useEffect(() => {
     if (isLoaded && user) fetchData();
   }, [isLoaded, user, fetchData]);
+
+  // Load branches for assignment (only shown if the tenant has branches configured).
+  useEffect(() => {
+    getBranches(slug).then((r) => {
+      if (r.success && r.branches) setBranches(r.branches);
+    }).catch(() => {});
+  }, [slug]);
 
   useEvent('staff', () => { fetchData(); });
 
@@ -198,8 +207,9 @@ export default function StaffManagementView({ slug }: Props) {
   const startItem = sortedStaff.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const endItem = Math.min(page * PAGE_SIZE, sortedStaff.length);
 
-  const handleCreate = async (data: { email: string; name: string; role: string; phone: string; employmentStatus: string; permissions: string[]; password?: string }) => {
-    const result = await createStaffAccount(slug, data.email, data.name, data.role, data.phone, data.employmentStatus, data.permissions, data.password);
+  const handleCreate = async (data: { email: string; name: string; role: string; phone: string; employmentStatus: string; permissions: string[]; password?: string; branchId?: string }) => {
+    const branch = branches.find((b) => b.id === data.branchId);
+    const result = await createStaffAccount(slug, data.email, data.name, data.role, data.phone, data.employmentStatus, data.permissions, data.password, data.branchId, branch?.name);
     if (result.success) {
       if (result.credentials) setTempPassword(result.credentials);
       setShowAddModal(false);
@@ -209,13 +219,16 @@ export default function StaffManagementView({ slug }: Props) {
     return result;
   };
 
-  const handleEdit = async (clerkUserId: string, data: { name?: string; role?: string; phone?: string; employmentStatus?: string; permissions?: string[]; password?: string }) => {
+  const handleEdit = async (clerkUserId: string, data: { name?: string; role?: string; phone?: string; employmentStatus?: string; permissions?: string[]; password?: string; branchId?: string }) => {
+    const branch = branches.find((b) => b.id === data.branchId);
     const result = await updateStaff(slug, clerkUserId, {
       name: data.name,
       role: data.role,
       phone: data.phone,
       employmentStatus: data.employmentStatus,
       permissions: data.permissions,
+      branchId: data.branchId,
+      branchName: branch?.name,
     });
     if (result.success) {
       setShowEditModal(null);
@@ -590,6 +603,7 @@ export default function StaffManagementView({ slug }: Props) {
       {showAddModal && (
         <StaffFormModal
           title="Add Staff"
+          branches={branches}
           onSave={handleCreate}
           onClose={() => setShowAddModal(false)}
         />
@@ -600,6 +614,7 @@ export default function StaffManagementView({ slug }: Props) {
         <StaffFormModal
           title="Edit Staff"
           staff={showEditModal}
+          branches={branches}
           onSave={async (data) => {
             const result = await handleEdit(showEditModal.clerkUserId, data);
             return result;
@@ -765,10 +780,11 @@ function AccessPanel({
 }
 
 function StaffFormModal({
-  title, staff, onSave, onClose,
+  title, staff, branches, onSave, onClose,
 }: {
   title: string; staff?: StaffMember;
-  onSave: (data: { email: string; name: string; role: string; phone: string; employmentStatus: string; permissions: string[]; password?: string }) => Promise<any>;
+  branches: { id: string; name: string; is_default: boolean }[];
+  onSave: (data: { email: string; name: string; role: string; phone: string; employmentStatus: string; permissions: string[]; password?: string; branchId?: string }) => Promise<any>;
   onClose: () => void;
 }) {
   const [email, setEmail] = useState(staff?.email || '');
@@ -777,6 +793,7 @@ function StaffFormModal({
   const [phone, setPhone] = useState(staff?.phone || '');
   const [employmentStatus, setEmploymentStatus] = useState(staff?.metadata.employment_status || 'active');
   const [perms, setPerms] = useState<string[]>([...(staff?.permissions || ROLE_DEFAULTS.cashier || [])]);
+  const [branchId, setBranchId] = useState(staff?.metadata.branch_id || '');
   const [password, setPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -809,6 +826,7 @@ function StaffFormModal({
       employmentStatus,
       permissions: perms,
       password: password.trim() || undefined,
+      branchId: branchId || undefined,
     });
     if (result.success) {
       setSuccess(true);
@@ -864,6 +882,16 @@ function StaffFormModal({
             <label className="text-sm font-medium text-gray-700 mb-1 block">Phone</label>
             <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-input-focus" placeholder="0300-1234567" />
           </div>
+
+          {branches.length > 0 && (
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">Branch</label>
+              <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-input-focus">
+                <option value="">No branch (all branches)</option>
+                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}{b.is_default ? ' (Default)' : ''}</option>)}
+              </select>
+            </div>
+          )}
 
           {/* Permissions */}
           <div>
