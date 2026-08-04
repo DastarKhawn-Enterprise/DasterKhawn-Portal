@@ -9,8 +9,7 @@ import { Badge, Button, EmptyState, Modal, orderStatusVariant, orderTypeVariant 
 import type { MenuItem, ThemeConfig } from '@sat-sys/pos-ui';
 import { fetchKDSOrders, updateKDSOrderStatus } from './orders-actions';
 import { supa } from './supa-query';
-import { deductInventorySupa } from './inventory-utils';
-import { applyOrderEditInventory, restoreOrderInventoryOnCancel, type OrderEditItem } from './order-edit-actions';
+import { applyOrderEditInventory, restoreOrderInventoryOnCancel, type OrderEditItem } from './inventory-engine';
 import { updateCustomerLoyaltySupa } from './customer-utils';
 import { useBusinessDate } from './business-date-context';
 import ReceiptView from './ReceiptView';
@@ -736,8 +735,6 @@ export default function KDSView({ slug, theme, brandName }: Props) {
   const handlePaymentSuccess = useCallback((_result: any) => {
     const order = paymentOrderRef.current;
     if (order) {
-      const invCart = (order.order_items || []).map((oi: KDSOrderItem) => ({ id: oi.menu_item_id, quantity: oi.quantity }));
-      deductInventorySupa(slug, invCart, order.id, user?.id).catch(e => console.error('[KDS Payment inventory]', e));
       generateInvoiceNumber(slug).then(invNum => {
         if (invNum) {
           supa(slug, { table: 'orders', method: 'update', eq: ['id', order.id], body: { invoice_number: invNum } }).catch(e => console.error('[KDS Invoice num]', e));
@@ -748,7 +745,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
         setSelectedOrder((prev) => prev ? { ...prev, payment_status: 'paid' } : null);
       }
     }
-  }, [slug, user, selectedOrder]);
+  }, [slug, selectedOrder]);
 
   const handlePrintBill = useCallback((order: KDSOrder) => {
     setReceiptOrder(order);
@@ -768,7 +765,9 @@ export default function KDSView({ slug, theme, brandName }: Props) {
     try {
       await updateKDSOrderStatus(slug, orderId, newStatus);
       if (newStatus === 'cancelled') {
-        restoreOrderInventoryOnCancel(slug, orderId, typeof navigator !== 'undefined' ? navigator.userAgent : null).catch((e) => console.error('[KDS Cancel inventory restore]', e));
+        restoreOrderInventoryOnCancel(slug, orderId, typeof navigator !== 'undefined' ? navigator.userAgent : null)
+          .then(() => { publish('inventory_items', 'UPDATE', { id: 'cancel-' + orderId }); publish('item_ledger', 'INSERT', { id: 'cancel-' + orderId }); })
+          .catch((e) => console.error('[KDS Cancel inventory restore]', e));
       }
       // Award loyalty/update customer profile when an order is completed and linked to a customer
       if (newStatus === 'completed') {

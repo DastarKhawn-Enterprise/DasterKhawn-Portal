@@ -10,8 +10,7 @@ import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
 import ReceiptView from './ReceiptView';
 import { recordInvoiceReprint } from './audit-reprint';
 import PaymentModal from './PaymentModal';
-import { deductInventorySupa } from './inventory-utils';
-import { applyOrderEditInventory, restoreOrderInventoryOnCancel, type OrderEditItem } from './order-edit-actions';
+import { applyOrderEditInventory, restoreOrderInventoryOnCancel, recordOrderSale, type OrderEditItem } from './inventory-engine';
 import { updateCustomerLoyaltySupa, searchCustomersSupa, findOrCreateCustomerSupa } from './customer-utils';
 import { supa } from './supa-query';
 import useOfflineSync from '@/hooks/useOfflineSync';
@@ -657,6 +656,16 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
           : Promise.resolve({ ok: true } as const),
       ]);
       if (!itemsResult.ok) { console.error('[Checkout items]', itemsResult.error); setCheckingOut(false); return; }
+      recordOrderSale(
+        slug,
+        order.id,
+        cart.map((item) => ({ id: item.id, quantity: item.quantity })),
+        user?.id || null,
+        typeof navigator !== 'undefined' ? navigator.userAgent : null
+      ).then(() => {
+        publish('inventory_items', 'UPDATE', { id: 'ledger' });
+        publish('item_ledger', 'INSERT', { id: 'order-' + order.id });
+      }).catch((e) => console.error('[Checkout inventory deduct]', e));
       if (effectiveOrderType === 'dine_in' && selectedTableId) {
         setOrderedTables((prev) => prev.map((t) => (t.id === selectedTableId ? { ...t, status: 'occupied' } : t)));
       }
@@ -694,20 +703,18 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
     creatingOrderRef.current = false;
-  }, [cart, grandTotal, taxAmt, discountAmount, discount, orderNotes, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, deliveryAddress, vehicleType, vehiclePlateNumber, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, slug, resetCustomerFields, cfg.newOrderMode, router, bd.isToday]);
+  }, [cart, grandTotal, taxAmt, discountAmount, discount, orderNotes, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, deliveryAddress, vehicleType, vehiclePlateNumber, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, slug, resetCustomerFields, cfg.newOrderMode, router, bd.isToday, user?.id]);
 
   const handlePaymentSuccess = useCallback((_result: any) => {
     const order = paymentOrderRef.current;
     if (order) {
-      const invCart = (order.order_items || []).map((oi: OrderItem) => ({ id: oi.menu_item_id, quantity: oi.quantity }));
-      deductInventorySupa(slug, invCart, order.id, user?.id).catch(e => console.error('[Inventory deduct]', e));
       generateInvoiceNumber(slug).then(invNum => {
         if (invNum) {
           supa(slug, { table: 'orders', method: 'update', eq: ['id', order.id], body: { invoice_number: invNum } }).catch(e => console.error('[Invoice num]', e));
         }
       }).catch(e => console.error('[Invoice num]', e));
     }
-  }, [slug, user]);
+  }, [slug]);
 
   const handleQuickAddToOrder = useCallback(async (item: MenuItem) => {
     if (!selectedOrder || !selectedId || updating) return;
@@ -751,7 +758,9 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
       publish('orders', 'UPDATE', { id: orderId, status: newStatus });
 
       if (newStatus === 'cancelled') {
-        restoreOrderInventoryOnCancel(slug, orderId, typeof navigator !== 'undefined' ? navigator.userAgent : null).catch((e) => console.error('[Cancel inventory restore]', e));
+        restoreOrderInventoryOnCancel(slug, orderId, typeof navigator !== 'undefined' ? navigator.userAgent : null)
+          .then(() => { publish('inventory_items', 'UPDATE', { id: 'cancel-' + orderId }); publish('item_ledger', 'INSERT', { id: 'cancel-' + orderId }); })
+          .catch((e) => console.error('[Cancel inventory restore]', e));
       }
 
       if (newStatus === 'completed') {

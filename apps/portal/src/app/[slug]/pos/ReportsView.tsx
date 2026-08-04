@@ -92,6 +92,7 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
 
   // Auto-refresh reports when related data changes
   useEvent('orders', () => { if (bd.isToday) fetchTab(tab); });
+  useEvent('item_ledger', () => { if (bd.isToday) fetchTab(tab); });
 
   // Export CSV
   const handleExport = useCallback(() => {

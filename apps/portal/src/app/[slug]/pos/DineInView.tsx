@@ -8,8 +8,7 @@ import { ActionButton as SharedActionButton, Badge, Skeleton, tableStatusVariant
 import type { MenuItem, CartItem, ThemeConfig } from '@sat-sys/pos-ui';
 import ReceiptView from './ReceiptView';
 import { recordInvoiceReprint } from './audit-reprint';
-import { deductInventorySupa } from './inventory-utils';
-import { applyOrderEditInventory, restoreOrderInventoryOnCancel, type OrderEditItem } from './order-edit-actions';
+import { applyOrderEditInventory, restoreOrderInventoryOnCancel, recordOrderSale, type OrderEditItem } from './inventory-engine';
 import { updateCustomerLoyaltySupa, searchCustomersSupa, findOrCreateCustomerSupa } from './customer-utils';
 import { supa } from './supa-query';
 import { useEvent, usePublish } from './use-event';
@@ -319,7 +318,16 @@ export default function DineInView({ slug, theme, brandName }: Props) {
       const items = cart.map((item) => ({ order_id: order.id, menu_item_id: item.id, quantity: item.quantity, price_at_order: item.price }));
       const [itemsR] = await Promise.all([
         supa(slug, { table: 'order_items', method: 'insert', body: items }),
-        deductInventorySupa(slug, cart).catch((e) => console.error('[DineIn Inventory deduct]', e)),
+        recordOrderSale(
+          slug,
+          order.id,
+          cart.map((item) => ({ id: item.id, quantity: item.quantity })),
+          null,
+          typeof navigator !== 'undefined' ? navigator.userAgent : null
+        ).then(() => {
+          publish('inventory_items', 'UPDATE', { id: 'ledger' });
+          publish('item_ledger', 'INSERT', { id: 'order-' + order.id });
+        }).catch((e) => console.error('[DineIn Inventory deduct]', e)),
         supa(slug, { table: 'tables', method: 'update', body: { status: 'occupied', current_order_id: order.id }, eq: ['id', selectedTable.id] }),
       ]);
       if (!itemsR.ok) { console.error('[DineIn Items]', itemsR.error); setCheckingOut(false); return; }
@@ -373,7 +381,9 @@ export default function DineInView({ slug, theme, brandName }: Props) {
       }
 
       if (newStatus === 'cancelled') {
-        restoreOrderInventoryOnCancel(slug, orderId, typeof navigator !== 'undefined' ? navigator.userAgent : null).catch((e) => console.error('[DineIn Cancel inventory restore]', e));
+        restoreOrderInventoryOnCancel(slug, orderId, typeof navigator !== 'undefined' ? navigator.userAgent : null)
+          .then(() => { publish('inventory_items', 'UPDATE', { id: 'cancel-' + orderId }); publish('item_ledger', 'INSERT', { id: 'cancel-' + orderId }); })
+          .catch((e) => console.error('[DineIn Cancel inventory restore]', e));
       }
 
       if (newStatus === 'completed' || newStatus === 'cancelled') {
