@@ -8,6 +8,7 @@ import { Button, EmptyState, Modal, Skeleton, SkeletonTable, StatusPill } from '
 import { hasPermission } from './permissions';
 import { useEvent } from './use-event';
 import { useBusinessDate } from './business-date-context';
+import { resolveEnabledModules } from '@/lib/module-registry';
 import { DonutChart, BarChart, LineChart, Heatmap } from './reports-charts';
 import {
   getOverviewData, getSalesData, getOrdersData, getItemsData,
@@ -31,6 +32,18 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'customers', label: 'Customers' },
   { id: 'pnl', label: 'Profit & Loss' },
 ];
+
+// Which module gates each report subtab.
+const TAB_MODULE: Record<TabId, string> = {
+  overview: 'reports',
+  sales: 'reports',
+  orders: 'reports',
+  items: 'reports',
+  inventory: 'inventory',
+  staff: 'staff',
+  customers: 'customers',
+  pnl: 'reports',
+};
 
 function pctChange(current: number, previous: number): string {
   if (previous === 0) return current > 0 ? '+100%' : '—';
@@ -83,8 +96,15 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
     setLoading(false);
   }, [slug, dr, filters]);
 
-  const { setPageTitle } = usePOS();
+  const { setPageTitle, enabledModules } = usePOS();
   useEffect(() => { setPageTitle('Reports'); }, [setPageTitle]);
+
+  // Hide subtabs whose gating module is disabled.
+  const effModules = resolveEnabledModules(enabledModules);
+  const visibleTabs = TABS.filter((t) => effModules[TAB_MODULE[t.id]] !== false);
+  useEffect(() => {
+    if (!visibleTabs.some((t) => t.id === tab)) setTab(visibleTabs[0]?.id ?? 'overview');
+  }, [visibleTabs, tab]);
 
   useEffect(() => {
     if (isLoaded && canView) fetchTab(tab);
@@ -162,7 +182,7 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
 
         {/* Tabs */}
         <div className="flex gap-1 mb-4 overflow-x-auto scrollbar-hide print:hidden">
-          {TABS.map((t) => (
+          {visibleTabs.map((t) => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${tab === t.id ? 'text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
               style={tab === t.id ? { backgroundColor: theme.primaryColor } : {}}>

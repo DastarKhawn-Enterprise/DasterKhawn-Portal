@@ -574,15 +574,6 @@ export default function SettingsView({ slug, theme }: Props) {
     setHoursModal(false);
   };
 
-  // --- Modules ---
-  const modules = settings?.enabled_modules?.modules || {};
-  const toggleModule = (key: string, val: boolean) => {
-    if (!settings) return;
-    const newModules = { ...modules, [key]: val };
-    const newSettings = { ...settings, enabled_modules: { ...(settings.enabled_modules || {}), modules: newModules } };
-    setSettings(newSettings);
-  };
-
   // --- Preview data ---
   const previewData = useMemo(() => {
     const scRate = form.serviceChargeEnabled ? Number(form.serviceChargeRate) || 0 : 0;
@@ -913,10 +904,10 @@ export default function SettingsView({ slug, theme }: Props) {
 
             {/* 12. System Settings */}
             <Card title="System Settings">
-              <p className="text-[10px] text-gray-400 mb-1.5">Toggle available modules</p>
+              <p className="text-[10px] text-gray-400 mb-1.5">Module enablement is managed by your administrator from the Super Admin dashboard. Toggles here have been retired — every module now respects a single centralized setting.</p>
               <div className="space-y-0.5">
                 {SYSTEM_MODULES.map((m) => (
-                  <CompactToggle key={m.key} label={m.label} checked={modules[m.key] !== false} onChange={(v) => toggleModule(m.key, v)} disabled={!canEdit} />
+                  <CompactToggle key={m.key} label={m.label} checked disabled onChange={() => {}} />
                 ))}
               </div>
             </Card>

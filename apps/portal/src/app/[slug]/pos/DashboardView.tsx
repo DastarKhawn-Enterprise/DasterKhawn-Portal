@@ -6,6 +6,7 @@ import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { useEvent, usePublish } from './use-event';
 import { supa, supaBatch } from './supa-query';
 import { useBusinessDate } from './business-date-context';
+import { resolveEnabledModules } from '@/lib/module-registry';
 import { Badge, Skeleton, SkeletonTable, orderStatusVariant } from '@sat-sys/ui';
 
 interface Props {
@@ -91,8 +92,11 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
     setAuthReady(true);
   }, [isLoaded, isSignedIn]);
 
-  const { setPageTitle } = usePOS();
+  const { setPageTitle, enabledModules } = usePOS();
   useEffect(() => { setPageTitle('Dashboard'); }, [setPageTitle]);
+  const effModules = resolveEnabledModules(enabledModules);
+  const showOpenTables = effModules.reservations !== false;
+  const showKitchen = effModules.kitchen_display !== false;
   useEffect(() => {
     if (!authReady) return;
     fetchAll();
@@ -150,6 +154,7 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
           </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          {showOpenTables && (
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Open Tables</h3>
             {tables.total === 0 ? (
@@ -164,7 +169,9 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
               </div>
             )}
           </div>
+          )}
 
+          {showKitchen && (
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Kitchen Status</h3>
             {kitchen.pending + kitchen.in_kitchen + kitchen.ready === 0 ? (
@@ -182,6 +189,7 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
               </div>
             )}
           </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

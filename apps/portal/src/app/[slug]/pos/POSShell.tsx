@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { usePathname } from 'next/navigation';
 import { useAuth, useUser, UserButton } from '@clerk/nextjs';
 import Sidebar from './Sidebar';
 import { POSProvider } from './pos-context';
@@ -11,6 +12,7 @@ import { RealtimeIndicator } from './realtime-indicator';
 import { supa } from './supa-query';
 import { Skeleton, ThemeProvider, resolveThemeConfig, themeToCssVariables } from '@sat-sys/ui';
 import type { ThemeConfig } from '@sat-sys/ui';
+import { hiddenViewsForModules, disabledRoutesForModules, MODULE_BY_KEY } from '@/lib/module-registry';
 import type { ViewId } from './Sidebar';
 
 interface POSShellProps {
@@ -29,36 +31,13 @@ function computeHiddenViews(user: any, enabledModules: Record<string, boolean>, 
   const meta = user?.publicMetadata as Record<string, any> | undefined;
   const perms: string[] = authoritativePerms?.length ? authoritativePerms : (meta?.permissions ?? []);
   const role: string = authoritativeRole || meta?.role || '';
-  const hidden: ViewId[] = [];
+  const hidden: ViewId[] = hiddenViewsForModules(enabledModules);
   if (role !== 'super_admin' && role !== 'owner') {
     if (!perms.includes('staff:manage')) hidden.push('staff');
     if (!perms.includes('menu:edit')) { hidden.push('menu'); hidden.push('inventory'); hidden.push('item-ledger'); }
     if (!perms.includes('reports:view')) hidden.push('reports');
     if (!perms.includes('accounts:view')) hidden.push('accounts');
     if (!perms.includes('settings:edit')) { hidden.push('settings'); hidden.push('expenses'); }
-  }
-  const moduleToViews: Record<string, ViewId[]> = {
-    orders: ['current-orders', 'orders-new', 'orders-completed', 'orders-cancelled', 'orders-draft'],
-    dine_in: ['dine-in'],
-    take_away: ['take-away'],
-    delivery: ['delivery'],
-    drive_thru: ['drive-thru'],
-    third_party: ['third-party'],
-    reservations: ['reservations'],
-    menu: ['menu'],
-    inventory: ['inventory', 'item-ledger'],
-    customers: ['customers'],
-    reports: ['reports'],
-    expenses: ['expenses'],
-    staff: ['staff'],
-    settings: ['settings'],
-  };
-  for (const [moduleKey, views] of Object.entries(moduleToViews)) {
-    if (enabledModules[moduleKey] === false) {
-      for (const v of views) {
-        if (!hidden.includes(v)) hidden.push(v);
-      }
-    }
   }
   return hidden;
 }
@@ -85,6 +64,13 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
   }, [authReady, slug]);
 
   const hiddenViews = user ? computeHiddenViews(user, enabledModules, staffRole, staffPermissions) : [];
+  const pathname = usePathname();
+  const posPath = '/' + pathname.split('/').slice(3).join('/');
+  const disabledRoutes = disabledRoutesForModules(enabledModules);
+  const disabledModuleKey = disabledRoutes.includes(posPath)
+    ? MODULE_BY_KEY[Object.keys(MODULE_BY_KEY).find((k) => MODULE_BY_KEY[k].routes?.includes(posPath)) as string]?.label
+    : undefined;
+  const routeBlocked = disabledRoutes.includes(posPath);
 
   const { resolvedTheme, themeCssVars } = useMemo(() => {
     const resolvedTheme = resolveThemeConfig(theme);
@@ -166,7 +152,23 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
             hiddenViews={hiddenViews}
             slug={slug}
           />
-          {children}
+          {routeBlocked ? (
+            <main className="flex-1 flex items-center justify-center bg-gray-50">
+              <div className="text-center p-8 bg-white rounded-2xl border border-gray-200 shadow-sm max-w-md">
+                <div className="text-4xl mb-3">🔒</div>
+                <h1 className="text-xl font-bold text-gray-800 mb-2">Module Disabled</h1>
+                <p className="text-sm text-gray-500">
+                  {disabledModuleKey ? (
+                    <>The <span className="font-semibold text-gray-700">{disabledModuleKey}</span> module is currently disabled for this POS by the administrator. Contact your administrator to enable it.</>
+                  ) : (
+                    'This area is currently disabled for this POS. Contact your administrator to enable it.'
+                  )}
+                </p>
+              </div>
+            </main>
+          ) : (
+            children
+          )}
         </div>
       </div>
       </BusinessDateProvider>

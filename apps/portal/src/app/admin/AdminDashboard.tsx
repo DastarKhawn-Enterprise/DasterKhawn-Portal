@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { toggleTenantStatus, saveTenantTheme, saveTenantModules, getRevenueStats } from './actions';
+import { MODULE_GROUPS, MODULE_BY_KEY, defaultModules, effectiveDetailed } from '@/lib/module-registry';
 import type { ThemeConfig } from '@sat-sys/gateway-sdk';
 import CreateTenantModal from './CreateTenantModal';
 import ThemeEditorModal from './ThemeEditorModal';
@@ -457,44 +458,6 @@ function RevenueModal({
 
 /* ─── Modules Modal ─── */
 
-const MODULE_GROUPS = [
-  {
-    label: 'Core',
-    keys: ['dashboard', 'orders'],
-    locked: true,
-  },
-  {
-    label: 'Order Types',
-    keys: ['dine_in', 'take_away', 'delivery', 'drive_thru', 'third_party'],
-  },
-  {
-    label: 'Management',
-    keys: ['menu', 'inventory', 'customers', 'staff', 'settings', 'expenses'],
-  },
-  {
-    label: 'Features',
-    keys: ['reservations', 'loyalty_points'],
-  },
-];
-
-const MODULE_LABELS: Record<string, string> = {
-  dashboard: 'Dashboard',
-  orders: 'Orders',
-  dine_in: 'Dine In',
-  take_away: 'Take Away',
-  delivery: 'Delivery',
-  drive_thru: 'Drive Thru',
-  third_party: 'Third Party',
-  menu: 'Menu',
-  inventory: 'Inventory',
-  customers: 'Customers',
-  staff: 'Staff',
-  settings: 'Settings',
-  expenses: 'Expenses',
-  reservations: 'Reservations',
-  loyalty_points: 'Loyalty Points',
-};
-
 function ModulesModal({
   tenant,
   onSave,
@@ -504,13 +467,31 @@ function ModulesModal({
   onSave: (modules: Record<string, boolean>) => Promise<void>;
   onClose: () => void;
 }) {
+  // Always express the full set of keys (registry defaults for missing ones) so a
+  // missing key can never silently re-enable a module that was switched off.
   const [modules, setModules] = useState<Record<string, boolean>>(
-    () => tenant.enabled_modules || {},
+    () => ({ ...defaultModules(), ...(tenant.enabled_modules || {}) }),
   );
   const [saving, setSaving] = useState(false);
+  const [query, setQuery] = useState('');
+  const detail = effectiveDetailed(modules);
+
+  const setAll = (keys: string[], value: boolean) => {
+    setModules((prev) => {
+      const next = { ...prev };
+      for (const k of keys) {
+        const def = MODULE_BY_KEY[k];
+        if (!def || def.locked) continue;
+        next[k] = value;
+      }
+      return next;
+    });
+  };
 
   const toggle = (key: string) => {
-    setModules((prev) => ({ ...prev, [key]: prev[key] === undefined ? false : !prev[key] }));
+    const def = MODULE_BY_KEY[key];
+    if (!def || def.locked) return;
+    setModules((prev) => ({ ...prev, [key]: prev[key] === false }));
   };
 
   const handleSave = async () => {
@@ -519,40 +500,85 @@ function ModulesModal({
     setSaving(false);
   };
 
+  const q = query.trim().toLowerCase();
+  const groups = MODULE_GROUPS
+    .map((g) => ({ ...g, keys: g.keys.filter((k) => {
+      const d = MODULE_BY_KEY[k];
+      if (!q) return true;
+      return d.label.toLowerCase().includes(q) || k.toLowerCase().includes(q) || d.description.toLowerCase().includes(q);
+    }) }))
+    .filter((g) => g.keys.length > 0);
+
   return (
     <ModalOverlay onClose={onClose}>
-      <div className="bg-white rounded-lg p-6 max-w-lg mx-auto shadow-xl w-full max-h-[90vh] overflow-y-auto">
-        <h2 className="text-xl font-bold mb-1">Modules — {tenant.brand_name}</h2>
-        <p className="text-xs text-gray-400 mb-4">Enable or disable POS modules for this tenant.</p>
+      <div className="bg-white rounded-lg p-6 max-w-2xl mx-auto shadow-xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-xl font-bold">Modules — {tenant.brand_name}</h2>
+        </div>
+        <p className="text-xs text-gray-400 mb-3">This is the single source of truth for enabling/disabling this tenant&apos;s POS modules. Disabling a module hides its navigation, routes, dashboard widgets, and report tabs.</p>
 
-        {MODULE_GROUPS.map((group) => (
-          <div key={group.label} className="mb-4">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{group.label}</h3>
-            <div className="space-y-2">
-              {group.keys.map((key) => {
-                const enabled = modules[key] !== false;
-                const locked = group.locked;
-                return (
-                  <div key={key} className="flex items-center justify-between">
-                    <span className={`text-sm ${locked ? 'text-gray-400' : 'text-gray-700'}`}>
-                      {MODULE_LABELS[key] || key}
-                      {locked && <span className="text-[10px] text-gray-400 ml-1">(always on)</span>}
-                    </span>
-                    <button
-                      onClick={() => { if (!locked) toggle(key); }}
-                      disabled={locked}
-                      className={`relative w-10 h-5 rounded-full transition-colors ${locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${enabled ? 'bg-green-400' : 'bg-gray-300'}`}
-                    >
-                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </button>
-                  </div>
-                );
-              })}
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search modules..."
+          className="mb-4 w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+
+        {groups.map((group) => {
+          const lockedCount = group.keys.filter((k) => MODULE_BY_KEY[k]?.locked).length;
+          const allOn = group.keys.every((k) => detail[k].enabled);
+          const anyOff = group.keys.some((k) => !detail[k].enabled);
+          const canBulk = group.keys.some((k) => !MODULE_BY_KEY[k].locked);
+          return (
+            <div key={group.label} className="mb-5">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{group.label}</h3>
+                {canBulk && (
+                  <button
+                    onClick={() => setAll(group.keys, allOn ? false : true)}
+                    className="text-[11px] font-medium text-blue-600 hover:underline"
+                  >
+                    {allOn ? 'Turn off all' : anyOff ? 'Turn on all' : ''}
+                  </button>
+                )}
+              </div>
+              <div className="space-y-2">
+                {group.keys.map((key) => {
+                  const d = detail[key];
+                  const def = MODULE_BY_KEY[key];
+                  const locked = !!def.locked;
+                  return (
+                    <div key={key} className="flex items-center justify-between">
+                      <div className="min-w-0 pr-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-sm truncate ${locked ? 'text-gray-400' : 'text-gray-700'}`}>
+                            {d.label}
+                          </span>
+                          {locked && <span className="text-[10px] text-gray-400">(always on)</span>}
+                          {d.dependencyBlocked && !locked && (
+                            <span className="text-[10px] text-amber-600">requires {d.dependencies.map((x) => MODULE_BY_KEY[x]?.label ?? x).join(', ')}</span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-gray-400 truncate">{d.description}</p>
+                      </div>
+                      <button
+                        onClick={() => toggle(key)}
+                        disabled={locked}
+                        title={locked ? 'Core module — cannot be disabled' : d.description}
+                        className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${d.enabled ? 'bg-green-400' : 'bg-gray-300'}`}
+                      >
+                        <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${d.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
-        <div className="flex gap-3 justify-end mt-6">
+        <div className="flex gap-3 justify-end mt-6 border-t border-gray-100 pt-4">
           <button onClick={onClose} className="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-50">
             Cancel
           </button>
