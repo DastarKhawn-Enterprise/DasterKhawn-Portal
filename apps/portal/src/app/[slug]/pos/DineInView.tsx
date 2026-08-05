@@ -38,6 +38,10 @@ interface Order {
   total: number;
   tax_amount?: number;
   service_charge_amount?: number;
+  discount_amount?: number;
+  discount_type?: string | null;
+  discount_value?: number | null;
+  notes?: string | null;
   created_at: string;
   customer_id?: string | null;
   customer_name?: string | null;
@@ -317,7 +321,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
       const orderR = await supa(slug, {
         table: 'orders',
         method: 'insert',
-        body: { status: 'pending', source: 'pos', order_number: orderNumber, total, tax_amount: taxAmount, table_id: selectedTable.id, customer_id: resolvedCustomerId, customer_name: customerName.trim(), customer_phone: resolvedCustomerPhone },
+        body: { status: 'pending', source: 'pos', order_number: orderNumber, order_type: 'dine_in', total, tax_amount: taxAmount, service_charge_amount: serviceCharge, table_id: selectedTable.id, customer_id: resolvedCustomerId, customer_name: customerName.trim(), customer_phone: resolvedCustomerPhone },
         select: 'id, order_number, created_at',
       });
       if (!orderR.ok || !orderR.data?.[0]) { console.error('[DineIn Checkout]', orderR.error); setCheckingOut(false); return; }
@@ -786,6 +790,10 @@ export default function DineInView({ slug, theme, brandName }: Props) {
           invoiceNumber: receiptOrder.invoice_number ?? null,
           taxAmount: Number(receiptOrder.tax_amount ?? 0),
           serviceChargeAmount: Number(receiptOrder.service_charge_amount ?? 0),
+          discountAmount: Number(receiptOrder.discount_amount ?? 0),
+          discountType: receiptOrder.discount_type,
+          discountValue: receiptOrder.discount_value != null ? Number(receiptOrder.discount_value) : null,
+          notes: receiptOrder.notes,
           createdAt: receiptOrder.created_at,
           orderType: 'dine_in',
           customerName: null,

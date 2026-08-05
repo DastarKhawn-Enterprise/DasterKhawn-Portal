@@ -189,6 +189,12 @@ function OrderCard({
           </div>
         )}
 
+        {order.notes && (
+          <div className="text-xs text-gray-600 bg-amber-50 rounded-lg px-2 py-1 line-clamp-2 whitespace-pre-wrap">
+            {order.notes}
+          </div>
+        )}
+
         <div className="flex-1 min-h-0">
           <div className="text-xs text-gray-400 font-medium mb-1 uppercase tracking-wide">
             {order.order_items?.length || 0} Item{(order.order_items?.length || 0) !== 1 ? 's' : ''}
@@ -525,6 +531,23 @@ function DetailPanel({
               ))}
             </div>
           </div>
+
+          {(order.discount_amount ?? 0) > 0 && (
+            <div>
+              <h3 className="text-xs text-gray-400 uppercase tracking-wide font-medium mb-2">Discount</h3>
+              <div className="flex items-center justify-between py-2 px-3 bg-green-50 rounded-lg">
+                <span className="text-gray-600 text-sm">Discount{order.discount_type === 'percentage' ? ` (${order.discount_value}%)` : ''}</span>
+                <span className="text-green-700 font-semibold text-sm">-Rs. {(order.discount_amount ?? 0).toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+
+          {order.notes && (
+            <div>
+              <h3 className="text-xs text-gray-400 uppercase tracking-wide font-medium mb-2">Notes</h3>
+              <div className="py-2 px-3 bg-amber-50 rounded-lg text-sm text-gray-700 whitespace-pre-wrap">{order.notes}</div>
+            </div>
+          )}
         </div>
 
         <div className="px-6 py-4 border-t border-gray-200 flex flex-wrap gap-2">
@@ -584,6 +607,8 @@ export default function KDSView({ slug, theme, brandName }: Props) {
   const [receiptOrder, setReceiptOrder] = useState<KDSOrder | null>(null);
   const paymentOrderRef = useRef<KDSOrder | null>(null);
   paymentOrderRef.current = paymentOrder;
+
+  const [posSettings, setPosSettings] = useState<{ serviceChargeEnabled: boolean; serviceChargeRate: number; serviceChargeDineIn: boolean; serviceChargeTakeaway: boolean; serviceChargeDelivery: boolean; serviceChargeDriveThru: boolean; taxServiceCharge: boolean; taxEnabled: boolean; taxRate: number } | null>(null);
 
   const ordersRef = useRef(orders);
   ordersRef.current = orders;
@@ -695,6 +720,25 @@ export default function KDSView({ slug, theme, brandName }: Props) {
     supa(slug, { table: 'menu_items', select: 'id, name, description, price, category, available', order: 'name', limit: 500 }).then((r) => { if (r.ok) setMenuItems(r.data ?? []); }).catch(() => {});
   }, [slug]);
 
+  useEffect(() => {
+    supa(slug, { table: 'settings', select: 'tax_enabled, tax_rate, enabled_modules', limit: 1 }).then((r) => {
+      if (r.ok && r.data?.[0]) {
+        const rest = r.data[0].enabled_modules?.restaurant || {};
+        setPosSettings({
+          serviceChargeEnabled: !!rest.service_charge_enabled,
+          serviceChargeRate: Number(rest.service_charge_rate) || 0,
+          serviceChargeDineIn: rest.service_charge_dine_in !== false,
+          serviceChargeTakeaway: !!rest.service_charge_takeaway,
+          serviceChargeDelivery: !!rest.service_charge_delivery,
+          serviceChargeDriveThru: !!rest.service_charge_drive_thru,
+          taxServiceCharge: !!rest.tax_service_charge,
+          taxEnabled: !!r.data[0].tax_enabled,
+          taxRate: Number(r.data[0].tax_rate) || 0,
+        });
+      }
+    }).catch(() => {});
+  }, [slug]);
+
   const handleQuickAdd = useCallback((item: MenuItem) => {
     setQuickAddItems((prev) => {
       const existing = prev.find((i) => i.id === item.id);
@@ -724,7 +768,15 @@ export default function KDSView({ slug, theme, brandName }: Props) {
       if (merged.length > 0) {
         await supa(slug, { table: 'order_items', method: 'insert', body: merged.map((m) => ({ ...m, order_id: quickAddOrderId })) });
       }
-      await supa(slug, { table: 'orders', method: 'update', eq: ['id', quickAddOrderId], body: { updated_at: new Date().toISOString() } });
+      // Recalculate the order totals so the invoice stays accurate after a kitchen item add.
+      const qs = merged.reduce((s, m) => s + Number(m.price_at_order) * m.quantity, 0);
+      const ot = order.order_type || 'dine_in';
+      const s = posSettings;
+      const sc = s && s.serviceChargeEnabled && s.serviceChargeRate > 0 && ((ot === 'dine_in' && s.serviceChargeDineIn) || (ot === 'takeaway' && s.serviceChargeTakeaway) || (ot === 'delivery' && s.serviceChargeDelivery) || (ot === 'drive_thru' && s.serviceChargeDriveThru)) ? qs * (s.serviceChargeRate / 100) : 0;
+      const ta = s?.taxServiceCharge ? qs + sc : qs;
+      const tx = s?.taxEnabled && (s?.taxRate || 0) > 0 ? ta * ((s?.taxRate || 0) / 100) : 0;
+      const total = Math.max(0, qs + sc + tx);
+      await supa(slug, { table: 'orders', method: 'update', eq: ['id', quickAddOrderId], body: { total, tax_amount: tx, service_charge_amount: sc, updated_at: new Date().toISOString() } });
       const oldItems: OrderEditItem[] = currentItems.map((oi) => ({ menu_item_id: oi.menu_item_id, quantity: oi.quantity }));
       const newItemList: OrderEditItem[] = merged.map((m) => ({ menu_item_id: m.menu_item_id, quantity: m.quantity }));
       applyOrderEditInventory(slug, quickAddOrderId, oldItems, newItemList, typeof navigator !== 'undefined' ? navigator.userAgent : null).catch((e) => console.error('[KDS QuickAdd inventory]', e));
@@ -733,15 +785,15 @@ export default function KDSView({ slug, theme, brandName }: Props) {
       for (const oi of currentItems) allNames.set(oi.menu_item_id, oi.menu_items?.name || 'Unknown');
       for (const qa of quickAddItems) allNames.set(qa.id, qa.name);
       const newOrderItems = merged.map((m) => ({ menu_item_id: m.menu_item_id, quantity: m.quantity, price_at_order: m.price_at_order, menu_items: { name: allNames.get(m.menu_item_id) || 'Unknown' } }));
-      setOrders((prev) => prev.map((o) => (o.id === quickAddOrderId ? { ...o, order_items: newOrderItems } : o)));
+      setOrders((prev) => prev.map((o) => (o.id === quickAddOrderId ? { ...o, order_items: newOrderItems, total, tax_amount: tx, service_charge_amount: sc } : o)));
       if (selectedOrder?.id === quickAddOrderId) {
-        setSelectedOrder((prev) => prev ? { ...prev, order_items: newOrderItems } : null);
+        setSelectedOrder((prev) => prev ? { ...prev, order_items: newOrderItems, total, tax_amount: tx, service_charge_amount: sc } : null);
       }
     } catch (e) { console.error('[KDS QuickAdd]', e); }
     setQuickAddUpdating(false);
     setQuickAddOrderId(null);
     setQuickAddItems([]);
-  }, [quickAddOrderId, quickAddItems, orders, selectedOrder, slug, publish]);
+  }, [quickAddOrderId, quickAddItems, orders, selectedOrder, slug, publish, posSettings]);
 
   const handlePaymentSuccess = useCallback((_result: any) => {
     const order = paymentOrderRef.current;
@@ -749,6 +801,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
       generateInvoiceNumber(slug).then(invNum => {
         if (invNum) {
           supa(slug, { table: 'orders', method: 'update', eq: ['id', order.id], body: { invoice_number: invNum } }).catch(e => console.error('[KDS Invoice num]', e));
+          setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, payment_status: 'paid', invoice_number: invNum } : o)));
         }
       }).catch(e => console.error('[KDS Invoice num]', e));
       setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, payment_status: 'paid' } : o)));
@@ -1059,6 +1112,10 @@ export default function KDSView({ slug, theme, brandName }: Props) {
             invoiceNumber: receiptOrder.invoice_number ?? null,
             taxAmount: Number(receiptOrder.tax_amount ?? 0),
             serviceChargeAmount: Number(receiptOrder.service_charge_amount ?? 0),
+            discountAmount: Number(receiptOrder.discount_amount ?? 0),
+            discountType: receiptOrder.discount_type,
+            discountValue: receiptOrder.discount_value != null ? Number(receiptOrder.discount_value) : null,
+            notes: receiptOrder.notes,
             createdAt: receiptOrder.created_at,
             orderType: receiptOrder.order_type,
             customerName: receiptOrder.customer_name,

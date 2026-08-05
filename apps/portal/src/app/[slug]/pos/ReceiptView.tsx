@@ -26,6 +26,10 @@ interface ReceiptData {
   items: ReceiptItem[];
   taxAmount?: number;
   serviceChargeAmount?: number;
+  discountAmount?: number;
+  discountType?: string | null;
+  discountValue?: number | null;
+  notes?: string | null;
 }
 
 interface Props {
@@ -207,10 +211,22 @@ function receiptContent(brandName: string, theme: ThemeConfig, data: ReceiptData
             <span>{curr}{(data.serviceChargeAmount ?? 0).toFixed(2)}</span>
           </div>
         )}
+        {(data.discountAmount ?? 0) > 0 && (
+          <div className="flex justify-between text-gray-500">
+            <span>Discount{data.discountType && data.discountValue ? (data.discountType === 'percentage' ? ` (${data.discountValue}%)` : '') : ''}</span>
+            <span>-{curr}{(data.discountAmount ?? 0).toFixed(2)}</span>
+          </div>
+        )}
         <div className="flex justify-between font-bold text-sm border-t border-gray-300 pt-1">
           <span>Total</span>
           <span>{curr}{data.total.toFixed(2)}</span>
         </div>
+        {data.notes && (
+          <div className="mt-2 text-xs text-gray-500">
+            <span className="text-gray-400 uppercase tracking-wide block mb-0.5">Notes</span>
+            <span>{data.notes}</span>
+          </div>
+        )}
       </div>
 
       <div className="text-center mt-4 pt-3 border-t-2 border-dashed border-gray-300 text-xs text-gray-400">

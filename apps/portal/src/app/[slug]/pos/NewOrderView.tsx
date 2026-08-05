@@ -305,7 +305,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
       let pickupTime: string | null = null;
       if (orderType === 'takeaway' || orderType === 'delivery') { const d = new Date(); d.setMinutes(d.getMinutes() + 20); pickupTime = d.toISOString(); }
       const orderNumber = await generateUniqueOrderNumber(slug);
-      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', order_number: orderNumber, total: grandTotal, tax_amount: taxAmount, order_type: orderType, customer_id: resolvedCustomerId, customer_name: customerName.trim(), customer_phone: customerPhone || resolvedCustomerPhone || null, pickup_time: pickupTime };
+      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', order_number: orderNumber, total: grandTotal, tax_amount: taxAmount, service_charge_amount: serviceCharge, order_type: orderType, customer_id: resolvedCustomerId, customer_name: customerName.trim(), customer_phone: customerPhone || resolvedCustomerPhone || null, pickup_time: pickupTime, discount_amount: discountAmount || null, discount_type: discount?.type || null, discount_value: discount?.value || null, notes: [orderNotes, specialInstructions].map((s) => s?.trim()).filter(Boolean).join(' | ') || null };
       if (orderType === 'drive_thru') {
         orderPayload.vehicle_type = vehicleType || null;
         orderPayload.vehicle_plate_number = vehiclePlateNumber || null;
@@ -340,7 +340,7 @@ export default function NewOrderView({ slug, theme, brandName }: Props) {
       calcRef.current = { buffer: 0, op: null, newNumber: false };
     } catch (e: any) { console.error('[PlaceOrder]', e); setOrderError(e.message || 'Order failed'); }
     setCheckingOut(false); creatingOrderRef.current = false;
-  }, [cart, orderType, grandTotal, taxAmount, serviceCharge, selectedCustomer, customerName, customerPhone, vehicleType, vehiclePlateNumber, deliveryAddress, selectedTableId, slug]);
+  }, [cart, orderType, grandTotal, taxAmount, serviceCharge, discountAmount, discount, orderNotes, specialInstructions, selectedCustomer, customerName, customerPhone, vehicleType, vehiclePlateNumber, deliveryAddress, selectedTableId, slug]);
 
   const filteredItems = useMemo(() => {
     let items = menuItems;

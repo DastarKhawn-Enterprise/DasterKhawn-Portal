@@ -53,6 +53,7 @@ interface Order {
   amount_paid?: number;
   amount_due?: number;
   invoice_number?: string | null;
+  table_id?: string | null;
   order_items: OrderItem[];
 }
 
@@ -96,7 +97,7 @@ const statusDisplay: Record<string, string> = {
   cancelled: 'Cancelled',
 };
 
-const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, service_charge_amount, discount_amount, discount_type, discount_value, notes, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, vehicle_type, vehicle_plate_number, delivery_address, payment_status, amount_paid, amount_due, invoice_number, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
+const SELECT_ORDER_FIELDS = 'id, order_number, status, total, tax_amount, service_charge_amount, discount_amount, discount_type, discount_value, notes, created_at, order_type, customer_name, customer_phone, pickup_time, customer_id, vehicle_type, vehicle_plate_number, delivery_address, payment_status, amount_paid, amount_due, invoice_number, table_id, order_items (menu_item_id, quantity, price_at_order, menu_items (name))';
 
 const ORDER_TYPE_DISPLAY: Record<string, string> = {
   dine_in: 'Dine In',
@@ -624,7 +625,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
       }
 
       const orderNumber = await generateUniqueOrderNumber(slug);
-      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', order_number: orderNumber, total, tax_amount: taxAmt, order_type: effectiveOrderType, customer_id: resolvedCustomerId };
+      const orderPayload: Record<string, any> = { status: 'pending', source: 'pos', order_number: orderNumber, total, tax_amount: taxAmt, service_charge_amount: serviceChargeAmt, order_type: effectiveOrderType, customer_id: resolvedCustomerId };
       orderPayload.customer_name = customerName.trim();
       if (shouldCaptureCustomer) {
         if (customerPhone) orderPayload.customer_phone = customerPhone;
@@ -682,6 +683,10 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
         total,
         tax_amount: taxAmt,
         service_charge_amount: serviceChargeAmt,
+        discount_amount: discountAmount || undefined,
+        discount_type: discount?.type || null,
+        discount_value: discount?.value || null,
+        notes: orderNotes || null,
         created_at: order.created_at,
         order_type: effectiveOrderType,
         customer_id: resolvedCustomerId,
@@ -691,6 +696,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
         vehicle_type: shouldCaptureCustomer && effectiveOrderType === 'drive_thru' ? (vehicleType || null) : undefined,
         vehicle_plate_number: shouldCaptureCustomer && effectiveOrderType === 'drive_thru' ? (vehiclePlateNumber || null) : undefined,
         delivery_address: shouldCaptureCustomer && effectiveOrderType === 'delivery' ? deliveryAddress.trim() : undefined,
+        table_id: effectiveOrderType === 'dine_in' && selectedTableId ? selectedTableId : undefined,
         order_items: cart.map((item) => ({
           menu_item_id: item.id,
           quantity: item.quantity,
@@ -703,7 +709,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
     } catch (e) { console.error('[Checkout]', e); }
     setCheckingOut(false);
     creatingOrderRef.current = false;
-  }, [cart, grandTotal, taxAmt, discountAmount, discount, orderNotes, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, deliveryAddress, vehicleType, vehiclePlateNumber, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, slug, resetCustomerFields, cfg.newOrderMode, router, bd.isToday, user?.id]);
+  }, [cart, grandTotal, taxAmt, serviceChargeAmt, discountAmount, discount, orderNotes, effectiveOrderType, isScoped, cfg.showCustomerFields, customerName, customerPhone, deliveryAddress, vehicleType, vehiclePlateNumber, pickupASAP, pickupScheduledTime, selectedTableId, selectedCustomer, settings, slug, resetCustomerFields, cfg.newOrderMode, router, bd.isToday, user?.id, publish]);
 
   const handlePaymentSuccess = useCallback((_result: any) => {
     const order = paymentOrderRef.current;
@@ -711,6 +717,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
       generateInvoiceNumber(slug).then(invNum => {
         if (invNum) {
           supa(slug, { table: 'orders', method: 'update', eq: ['id', order.id], body: { invoice_number: invNum } }).catch(e => console.error('[Invoice num]', e));
+          setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, invoice_number: invNum, payment_status: 'paid' } : o)));
         }
       }).catch(e => console.error('[Invoice num]', e));
     }
@@ -774,12 +781,19 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
       if (newStatus === 'completed' || newStatus === 'cancelled') {
         setOrders((prev) => prev.filter((o) => o.id !== orderId));
         setSelectedId((prev) => (prev === orderId ? null : prev));
+        // Free the table when a dine-in order is completed or cancelled.
+        const tr = await supa(slug, { table: 'orders', select: 'order_type, table_id', eq: ['id', orderId], single: true });
+        if (tr.ok && tr.data?.order_type === 'dine_in' && tr.data?.table_id) {
+          supa(slug, { table: 'tables', method: 'update', eq: ['id', tr.data.table_id], body: { status: 'available', current_order_id: null } }).catch((e) => console.error('[Table free]', e));
+          publish('tables', 'UPDATE', { id: tr.data.table_id, status: 'available' });
+          setOrderedTables((prev) => prev.map((t) => (t.id === tr.data?.table_id ? { ...t, status: 'available' as const } : t)));
+        }
       } else {
         setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)));
       }
     } catch (e) { console.error('[Status]', e); }
     setUpdating(null);
-  }, [slug]);
+  }, [slug, publish]);
 
   const handleNewOrder = useCallback(() => {
     setCart([]);
@@ -1969,7 +1983,10 @@ data={{
             deliveryAddress: receiptOrder.delivery_address,
             taxAmount: Number(receiptOrder.tax_amount ?? 0),
             serviceChargeAmount: Number(receiptOrder.service_charge_amount ?? 0),
-            tableNumber: null,
+            discountAmount: Number(receiptOrder.discount_amount ?? 0),
+            discountType: receiptOrder.discount_type,
+            discountValue: receiptOrder.discount_value != null ? Number(receiptOrder.discount_value) : null,
+            notes: receiptOrder.notes,
             items: receiptOrder.order_items.map((oi) => ({
               name: oi.menu_items?.name || 'Unknown',
               quantity: oi.quantity,
