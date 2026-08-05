@@ -7,6 +7,7 @@ import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { Button, Modal, Skeleton } from '@sat-sys/ui';
 import { supa } from './supa-query';
 import { useEvent, usePublish } from './use-event';
+import { SOUND_OPTIONS, playNotificationSound } from './notification-sound';
 import { MODULE_LABELS } from '@/lib/module-registry';
 
 interface Props {
@@ -259,6 +260,7 @@ export default function SettingsView({ slug, theme }: Props) {
     autoPrintReceipt: false, defaultPaymentMethod: 'cash',
     lowStockAlerts: true, defaultLowStockThreshold: '10', allowNegativeStock: false,
     autoDeductIngredients: true, writeItemLedger: false,
+    notificationSoundEnabled: true, notificationVolume: 70, notificationSound: 'ding',
   });
 
   const initialFormRef = useRef<string>('');
@@ -320,6 +322,7 @@ export default function SettingsView({ slug, theme }: Props) {
   useEffect(() => {
     if (!settings) return;
     const rest = settings.enabled_modules?.restaurant || {};
+    const notif = settings.enabled_modules?.notifications || {};
     const g = (key: string, fallback: any = '') => rest[key] ?? fallback;
     const f = {
       taxEnabled: settings.tax_enabled,
@@ -384,6 +387,9 @@ export default function SettingsView({ slug, theme }: Props) {
       allowNegativeStock: !!g('allow_negative_stock', false),
       autoDeductIngredients: g('auto_deduct_ingredients', true) !== false,
       writeItemLedger: !!g('write_item_ledger', false),
+      notificationSoundEnabled: notif.soundEnabled !== false,
+      notificationVolume: typeof notif.volume === 'number' ? notif.volume : 70,
+      notificationSound: notif.sound || 'ding',
     };
     setForm(f);
     initialFormRef.current = JSON.stringify(f);
@@ -459,6 +465,11 @@ export default function SettingsView({ slug, theme }: Props) {
         ...(settings.enabled_modules || {}),
         modules: settings.enabled_modules?.modules || {},
         restaurant,
+        notifications: {
+          soundEnabled: !!form.notificationSoundEnabled,
+          volume: Number(form.notificationVolume) || 0,
+          sound: form.notificationSound || 'ding',
+        },
       };
 
       const result = await supa(slug, { table: 'settings', method: 'update', eq: ['id', settings.id], body });
@@ -660,6 +671,30 @@ export default function SettingsView({ slug, theme }: Props) {
                 <div>{F('Default Landing Page', form.defaultLandingPage, (v) => update('defaultLandingPage', v), { options: LANDING_PAGES, disabled: !canEdit })}</div>
                 <div>{F('Dark Mode', form.darkMode, (v) => update('darkMode', v), { type: 'checkbox', disabled: !canEdit, help: 'Dark theme for POS' })}</div>
               </Grid>
+            </Card>
+
+            {/* 1b. Notifications */}
+            <Card title="Notifications">
+              <div className="flex items-center justify-between py-1">
+                <div>
+                  <p className="text-xs text-gray-700">New Order Sound</p>
+                  <p className="text-[10px] text-gray-400">Play an alert when a new order is received (for all staff in this POS).</p>
+                </div>
+                <input type="checkbox" checked={form.notificationSoundEnabled} onChange={(e) => update('notificationSoundEnabled', e.target.checked)} disabled={!canEdit} className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50" />
+              </div>
+              <Grid cols={2}>
+                <div>{F('Sound', form.notificationSound, (v) => update('notificationSound', v), { options: SOUND_OPTIONS.map((o) => ({ value: o.value, label: o.label })), disabled: !canEdit || !form.notificationSoundEnabled })}</div>
+                <div>{F('Volume', form.notificationVolume, (v) => update('notificationVolume', v), { type: 'number', min: 0, max: 100, disabled: !canEdit || !form.notificationSoundEnabled })}</div>
+              </Grid>
+              <button
+                type="button"
+                onClick={() => playNotificationSound({ soundEnabled: form.notificationSoundEnabled, volume: Number(form.notificationVolume) || 0, sound: form.notificationSound })}
+                disabled={!canEdit}
+                className="mt-2 px-3 py-1.5 text-xs text-white rounded font-medium transition-colors disabled:opacity-50"
+                style={{ backgroundColor: theme.primaryColor }}
+              >
+                Test Sound
+              </button>
             </Card>
 
             {/* 2. Contact Information */}

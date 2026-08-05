@@ -6,6 +6,7 @@ import { useAuth, useUser, UserButton } from '@clerk/nextjs';
 import Sidebar from './Sidebar';
 import { POSProvider } from './pos-context';
 import { EventProvider } from './event-context';
+import NotificationSoundProvider from './NotificationSoundProvider';
 import { BusinessDateProvider } from './business-date-context';
 import BusinessDatePicker from './business-date-picker';
 import { RealtimeIndicator } from './realtime-indicator';
@@ -68,7 +69,7 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
 
   if (!isLoaded || !authReady) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-gray-50">
+      <main className="min-h-screen flex items-center justify-center bg-background">
         <div className="w-full max-w-md px-6">
           <Skeleton variant="card" rows={4} />
         </div>
@@ -95,22 +96,23 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
     <POSProvider value={contextValue}>
       <ThemeProvider theme={theme}>
       <EventProvider slug={slug} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey}>
+      <NotificationSoundProvider slug={slug} />
       <BusinessDateProvider>
       <div className="h-screen h-dvh flex flex-col overflow-hidden">
-        <header className="flex items-center justify-between px-4 py-2.5 bg-navbar border-b border-navbar-border flex-shrink-0">
+<header className="flex items-center justify-between px-4 py-2.5 bg-navbar border-b border-navbar-border flex-shrink-0">
           <div className="flex items-center gap-3 text-navbar-foreground">
             <button
               onClick={() => setMobileSidebarOpen(true)}
-              className="md:hidden text-xl p-1 hover:bg-gray-100 rounded"
+              className="md:hidden text-xl p-1 rounded hover:bg-surface-hover"
             >
               ☰
             </button>
             <span className="text-lg font-bold">{brandName}</span>
-            {pageTitle && <><span className="text-gray-300 mx-1.5 text-sm">/</span><span className="text-sm font-medium text-gray-600 truncate max-w-[200px]">{pageTitle}</span></>}
+            {pageTitle && <><span className="text-input-border mx-1.5 text-sm">/</span><span className="text-sm font-medium text-text-secondary truncate max-w-[200px]">{pageTitle}</span></>}
             {(user?.publicMetadata as Record<string, any> | undefined)?.role === 'super_admin' && (
               <a
                 href="/dashboard"
-                className="ml-2 px-3 py-1 text-xs font-medium rounded border bg-white hover:bg-gray-50 transition-colors"
+                className="ml-2 px-3 py-1 text-xs font-medium rounded border bg-surface hover:bg-surface-secondary transition-colors"
                 style={{ borderColor: theme.primaryColor, color: theme.primaryColor }}
               >
                 ← All POS
@@ -121,10 +123,10 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
             <input
               type="text"
               placeholder="Search menu, orders..."
-              className="hidden lg:block w-48 xl:w-56 px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-500 placeholder-gray-400"
+              className="hidden lg:block w-48 xl:w-56 px-3 py-1.5 text-sm border border-border rounded-lg bg-background text-muted placeholder-input-placeholder"
               disabled
             />
-            <button className="lg:hidden text-gray-400 text-lg p-1">🔍</button>
+            <button className="lg:hidden text-input-placeholder text-lg p-1">🔍</button>
             <BusinessDatePicker />
             <RealtimeIndicator />
             <UserButton afterSignOutUrl="/" />
@@ -142,13 +144,13 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
             slug={slug}
           />
           {routeBlocked ? (
-            <main className="flex-1 flex items-center justify-center bg-gray-50">
-              <div className="text-center p-8 bg-white rounded-2xl border border-gray-200 shadow-sm max-w-md">
+            <main className="flex-1 flex items-center justify-center bg-background">
+              <div className="text-center p-8 bg-surface rounded-2xl border border-card-border shadow-sm max-w-md">
                 <div className="text-4xl mb-3">🔒</div>
-                <h1 className="text-xl font-bold text-gray-800 mb-2">Module Disabled</h1>
-                <p className="text-sm text-gray-500">
+                <h1 className="text-xl font-bold text-foreground mb-2">Module Disabled</h1>
+                <p className="text-sm text-muted">
                   {disabledModuleKey ? (
-                    <>The <span className="font-semibold text-gray-700">{disabledModuleKey}</span> module is currently disabled for this POS by the administrator. Contact your administrator to enable it.</>
+                    <>The <span className="font-semibold text-text-secondary">{disabledModuleKey}</span> module is currently disabled for this POS by the administrator. Contact your administrator to enable it.</>
                   ) : (
                     'This area is currently disabled for this POS. Contact your administrator to enable it.'
                   )}
