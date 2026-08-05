@@ -104,7 +104,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
 
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
-  const bd = useBusinessDate();
+  const bd = useBusinessDate('customers');
   const monthStart = bd.start;
   const monthEnd = bd.end;
   const { start: prevStart, end: prevEnd } = previousRange(bd.start, bd.end);

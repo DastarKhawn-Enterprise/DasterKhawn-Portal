@@ -87,7 +87,7 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
   const canEdit = hasPermission(perms, role, 'menu:edit');
   const isSuperAdmin = role === 'super_admin';
 
-  const bd = useBusinessDate();
+  const bd = useBusinessDate('item-ledger');
   const canEditDate = canEdit && (bd.isToday || isSuperAdmin);
 
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -192,8 +192,12 @@ export default function ItemLedgerView({ slug, theme, currencySymbol }: Props) {
   }, [slug, histories, items]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
-  useEvent('item_ledger', () => { fetchItems(); });
-  useEvent('inventory_items', () => { fetchItems(); });
+  // Purchases/cancels also update inventory_items, so a single subscription covers both
+  // stock level and ledger history changes (removes a duplicate fetch per event).
+  useEvent('inventory_items', () => {
+    fetchItems();
+    if (expandedId) fetchItemHistory(expandedId);
+  });
 
   const toggleExpand = (itemId: string) => {
     setExpandedId((prev) => (prev === itemId ? null : itemId));

@@ -35,18 +35,15 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
   const [orderTypes, setOrderTypes] = useState<OrderTypeRow[]>([]);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const fetchingRef = useRef(false);
-  const bd = useBusinessDate();
+  const totalsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bd = useBusinessDate('dashboard');
 
-  const fetchAll = useCallback(async () => {
-    if (fetchingRef.current) return;
-    fetchingRef.current = true;
+  // Fast widgets (active count, kitchen, tables, recent) — refreshed instantly on realtime.
+  const fetchCore = useCallback(async () => {
     try {
       const start = bd.start;
       const end = bd.end;
-
-      const [completedOrdersRes, activeRes, kitchenRes, tablesRes, recentRes] = await supaBatch(slug, [
-        { table: 'orders', select: 'total, order_type', eq: ['status', 'completed'], gte: ['created_at', start], lte: ['created_at', end], limit: 5000 },
+      const [activeRes, kitchenRes, tablesRes, recentRes] = await supaBatch(slug, [
         { table: 'orders', select: 'id', notIn: ['status', ['completed', 'cancelled']], head: true },
         { table: 'orders', select: 'status', in: ['status', ['pending', 'in_kitchen', 'ready']] },
         { table: 'tables', select: 'id, status' },
@@ -54,13 +51,31 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
       ]);
 
       const activeCount = activeRes.ok ? (activeRes.count ?? 0) : 0;
+      if (kitchenRes.ok && kitchenRes.data) {
+        const counts: KitchenCounts = { pending: 0, in_kitchen: 0, ready: 0 };
+        for (const o of kitchenRes.data) { const status = o.status as keyof KitchenCounts; if (status in counts) counts[status]++; }
+        setKitchen(counts);
+      }
+      if (tablesRes.ok && tablesRes.data) {
+        setTables({ total: tablesRes.data.length, occupied: tablesRes.data.filter((t: any) => t.status === 'occupied').length });
+      }
+      if (recentRes.ok && recentRes.data) setRecentOrders(recentRes.data as RecentOrder[]);
+      setSummary((prev) => ({ ...prev, activeOrders: activeCount }));
+    } catch (e) { console.error('[Dashboard] core fetch error:', e); }
+  }, [slug, bd.start, bd.end]);
 
-      if (completedOrdersRes.ok && completedOrdersRes.data) {
-        const orders = completedOrdersRes.data;
+  // Heavy widgets (completed-order totals + order-type split) — debounced so bursts of
+  // realtime events never block the dashboard with a 5000-row reload.
+  const fetchTotals = useCallback(async () => {
+    try {
+      const start = bd.start;
+      const end = bd.end;
+      const res = await supa(slug, { table: 'orders', select: 'total, order_type', eq: ['status', 'completed'], gte: ['created_at', start], lte: ['created_at', end], limit: 5000 });
+      if (res.ok && res.data) {
+        const orders = res.data;
         const totalOrders = orders.length;
         const totalRevenue = orders.reduce((s: number, o: any) => s + (Number(o.total) || 0), 0);
-        setSummary({ totalOrders, totalRevenue, activeOrders: activeCount, avgOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0 });
-
+        setSummary((prev) => ({ ...prev, totalOrders, totalRevenue, avgOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0 }));
         const grouped = new Map<string, { count: number; revenue: number }>();
         for (const o of orders) {
           const key = o.order_type || 'unknown';
@@ -70,22 +85,25 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
         }
         setOrderTypes(Array.from(grouped.entries()).map(([order_type, v]) => ({ order_type, count: v.count, revenue: v.revenue })).sort((a, b) => b.revenue - a.revenue));
       } else { setOrderTypes([]); }
-
-      if (kitchenRes.ok && kitchenRes.data) {
-        const counts: KitchenCounts = { pending: 0, in_kitchen: 0, ready: 0 };
-        for (const o of kitchenRes.data) { const status = o.status as keyof KitchenCounts; if (status in counts) counts[status]++; }
-        setKitchen(counts);
-      }
-
-      if (tablesRes.ok && tablesRes.data) {
-        setTables({ total: tablesRes.data.length, occupied: tablesRes.data.filter((t: any) => t.status === 'occupied').length });
-      }
-
-      if (recentRes.ok && recentRes.data) setRecentOrders(recentRes.data as RecentOrder[]);
-      } catch (e) { console.error('[Dashboard] fetch error:', e); }
-    setLoaded(true);
-    fetchingRef.current = false;
+      setLoaded(true);
+    } catch (e) { console.error('[Dashboard] totals fetch error:', e); }
   }, [slug, bd.start, bd.end]);
+
+  const refetchAll = useCallback(() => {
+    fetchCore();
+    fetchTotals();
+  }, [fetchCore, fetchTotals]);
+
+  // Realtime: fast widgets refresh immediately; heavy totals coalesce on a short debounce.
+  const onRealtime = useCallback(() => {
+    if (!bd.isToday) return;
+    fetchCore();
+    if (totalsTimerRef.current) clearTimeout(totalsTimerRef.current);
+    totalsTimerRef.current = setTimeout(() => fetchTotals(), 800);
+  }, [bd.isToday, fetchCore, fetchTotals]);
+  useEffect(() => () => {
+    if (totalsTimerRef.current) clearTimeout(totalsTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -99,12 +117,12 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
   const showKitchen = effModules.kitchen_display !== false;
   useEffect(() => {
     if (!authReady) return;
-    fetchAll();
-  }, [authReady, fetchAll]);
+    refetchAll();
+  }, [authReady, refetchAll]);
 
-  // Realtime subscriptions — refresh on any orders/tables change (only when viewing today)
-  useEvent('orders', () => { if (bd.isToday) fetchAll(); });
-  useEvent('tables', () => { if (bd.isToday) fetchAll(); });
+  // Realtime subscriptions — fast widgets refresh instantly; heavy totals coalesce
+  useEvent('orders', onRealtime);
+  useEvent('tables', onRealtime);
   const publish = usePublish();
 
   if (!isLoaded || !authReady) {
@@ -127,7 +145,7 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
     <div className="flex-1 overflow-y-auto scrollbar-hide bg-gray-50 p-4 md:p-6">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-end mb-5">
-          <button onClick={fetchAll} disabled={fetchingRef.current} className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50">Refresh</button>
+          <button onClick={refetchAll} className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50">Refresh</button>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

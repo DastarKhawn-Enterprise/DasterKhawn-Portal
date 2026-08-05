@@ -47,7 +47,7 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
   const perms = (meta?.permissions ?? []) as string[];
   const role = (meta?.role ?? '') as string;
   const canEdit = hasPermission(perms, role, 'settings:edit');
-  const bd = useBusinessDate();
+  const bd = useBusinessDate('expenses');
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);

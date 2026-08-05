@@ -140,7 +140,7 @@ export default function AccountsView({ slug, theme, currencySymbol }: Props) {
   const [selectedAccId, setSelectedAccId] = useState<string | null>(null);
   const [showTransfer, setShowTransfer] = useState(false);
   const [showIncome, setShowIncome] = useState(false);
-  const bd = useBusinessDate();
+  const bd = useBusinessDate('accounts');
 
   const [tfFrom, setTfFrom] = useState('');
   const [tfTo, setTfTo] = useState('');

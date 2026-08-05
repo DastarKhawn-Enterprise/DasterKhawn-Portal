@@ -590,7 +590,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
   const prevCountRef = useRef(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const bd = useBusinessDate();
+  const bd = useBusinessDate('orders');
 
   const fetchOrders = useCallback(async () => {
     setFetchLoading(true);
@@ -624,7 +624,7 @@ export default function KDSView({ slug, theme, brandName }: Props) {
 
   const debouncedFetchOrders = useCallback(() => {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    refreshTimerRef.current = setTimeout(() => fetchOrders(), 1200);
+    refreshTimerRef.current = setTimeout(() => fetchOrders(), 250);
   }, [fetchOrders]);
 
   const { setPageTitle } = usePOS();

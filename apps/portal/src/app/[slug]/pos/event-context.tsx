@@ -30,29 +30,35 @@ export function EventProvider({
   children: React.ReactNode;
 }) {
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
-  const busRef = useRef<ReturnType<typeof getEventBus> | null>(null);
+  const credsRef = useRef({ slug, supabaseUrl, supabaseAnonKey });
+  credsRef.current = { slug, supabaseUrl, supabaseAnonKey };
 
   useEffect(() => {
-    const bus = getEventBus(slug, supabaseUrl, supabaseAnonKey);
-    busRef.current = bus;
-    const unsubStatus = bus.onStatusChange(setStatus);
+    // Attach a status listener to the shared bus (idempotent connect is handled by
+    // getEventBus + subscribe, so the bus is never torn down/rebuilt here).
+    const { slug: s, supabaseUrl: u, supabaseAnonKey: k } = credsRef.current;
+    const bus = getEventBus(s, u, k);
     bus.connect();
+    const unsubStatus = bus.onStatusChange(setStatus);
+    return () => unsubStatus();
+  }, [slug]);
 
-    return () => {
-      unsubStatus();
-      destroyEventBus(slug);
-    };
-  }, [slug, supabaseUrl, supabaseAnonKey]);
+  // Resolve the bus directly from creds on every call so subscriptions are never
+  // dropped during the provider's own effect ordering (child effects run first).
+  const resolveBus = useCallback(() => {
+    const { slug: s, supabaseUrl: u, supabaseAnonKey: k } = credsRef.current;
+    return getEventBus(s, u, k);
+  }, []);
 
   const subscribe = useCallback((table: string | '*', callback: EventCallback): UnsubscribeFn => {
-    const bus = busRef.current;
-    if (!bus) return () => {};
+    const bus = resolveBus();
+    bus.connect();
     return bus.subscribe(table, callback);
-  }, []);
+  }, [resolveBus]);
 
   const publish = useCallback((table: string, event: 'INSERT' | 'UPDATE' | 'DELETE', data?: Record<string, unknown>) => {
-    busRef.current?.publishManually(table, event, data);
-  }, []);
+    resolveBus().publishManually(table, event, data);
+  }, [resolveBus]);
 
   return (
     <EventContext.Provider value={{ subscribe, publish, status, slug }}>

@@ -156,7 +156,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
   const fetchingRef = useRef(false);
   const creatingOrderRef = useRef(false);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const bd = useBusinessDate();
+  const bd = useBusinessDate('orders');
 
   // Customer fields (takeaway / delivery / drive_thru)
   const [customerName, setCustomerName] = useState('');
@@ -375,7 +375,7 @@ export default function CurrentOrdersView({ slug, theme, brandName, viewConfig }
 
   const scheduleRefresh = useCallback(() => {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    refreshTimerRef.current = setTimeout(() => fetchOrdersInitial(), 1200);
+    refreshTimerRef.current = setTimeout(() => fetchOrdersInitial(), 250);
   }, [fetchOrdersInitial]);
 
   // Realtime — apply changes immediately (new orders at the TOP), then reconcile with a debounced refetch

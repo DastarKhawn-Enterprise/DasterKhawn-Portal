@@ -122,7 +122,7 @@ export default function DineInView({ slug, theme, brandName }: Props) {
     if (r.ok) setTables(r.data as TableRecord[]);
   }, [slug]);
 
-  // Initial tables load + Realtime notification (best-effort via anon key) + polling fallback
+  // Initial tables load + Realtime notification (best-effort via anon key)
   const { setPageTitle } = usePOS();
   useEffect(() => { setPageTitle('Dine In'); }, [setPageTitle]);
   useEffect(() => {
@@ -130,8 +130,16 @@ export default function DineInView({ slug, theme, brandName }: Props) {
     fetchTables();
   }, [authReady, fetchTables]);
 
-  useEvent('orders', () => { fetchTables(); });
-  useEvent('tables', () => { fetchTables(); });
+  // Coalesce bursts of orders/tables events into a single refresh (dedupes repeated fetches).
+  const tablesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleTablesRefresh = useCallback(() => {
+    if (tablesTimerRef.current) clearTimeout(tablesTimerRef.current);
+    tablesTimerRef.current = setTimeout(() => fetchTables(), 200);
+  }, [fetchTables]);
+  useEffect(() => () => { if (tablesTimerRef.current) clearTimeout(tablesTimerRef.current); }, []);
+
+  useEvent('orders', () => { scheduleTablesRefresh(); });
+  useEvent('tables', () => { scheduleTablesRefresh(); });
 
   // When selectedTable changes to occupied, fetch its order
   useEffect(() => {

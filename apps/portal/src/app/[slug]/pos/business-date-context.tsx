@@ -1,8 +1,19 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
-export type BusinessDateMode = 'today' | 'yesterday' | 'last7' | 'last30' | 'custom';
+export type BusinessDateMode =
+  | 'today'
+  | 'yesterday'
+  | 'this_week'
+  | 'last_week'
+  | 'this_month'
+  | 'last_month'
+  | 'last7'
+  | 'last30'
+  | 'last90'
+  | 'custom'
+  | 'range';
 
 export interface BusinessDateValue {
   mode: BusinessDateMode;
@@ -11,14 +22,18 @@ export interface BusinessDateValue {
   end: string;
   startDate: string;
   endDate: string;
+  /** Custom range start/end for 'range' mode (date-key form). */
+  rangeStart: string;
+  rangeEnd: string;
   isToday: boolean;
   label: string;
   display: string;
   setMode: (m: BusinessDateMode) => void;
   setCustomDate: (d: string) => void;
+  setRange: (start: string, end: string) => void;
 }
 
-const STORAGE_KEY = 'satpos.businessDate';
+const STORAGE_PREFIX = 'satpos.businessDate';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -44,6 +59,12 @@ export function addDays(key: string, days: number): string {
   return toDateKey(d);
 }
 
+export function addMonths(key: string, months: number): string {
+  const d = parseDateKey(key);
+  d.setMonth(d.getMonth() + months);
+  return toDateKey(d);
+}
+
 export function startOfDay(key: string): Date {
   return parseDateKey(key);
 }
@@ -58,50 +79,79 @@ export function formatDisplay(key: string): string {
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-const MODES: BusinessDateMode[] = ['today', 'yesterday', 'last7', 'last30', 'custom'];
+const ALL_MODES: BusinessDateMode[] = ['today', 'yesterday', 'this_week', 'last_week', 'this_month', 'last_month', 'last7', 'last30', 'last90', 'custom', 'range'];
 
 const MODE_LABELS: Record<BusinessDateMode, string> = {
   today: 'Today',
   yesterday: 'Yesterday',
+  this_week: 'This Week',
+  last_week: 'Last Week',
+  this_month: 'This Month',
+  last_month: 'Last Month',
   last7: 'Last 7 Days',
   last30: 'Last 30 Days',
+  last90: 'Last 90 Days',
   custom: 'Custom',
+  range: 'Custom Range',
 };
 
-export function computeRange(mode: BusinessDateMode, dateKey: string): { start: string; end: string } {
-  const now = new Date();
+/** Monday-start week helper. */
+function weekStartKey(today: string): string {
+  const d = parseDateKey(today);
+  const day = d.getDay(); // 0=Sun
+  const delta = (day + 6) % 7; // days since Monday
+  d.setDate(d.getDate() - delta);
+  return toDateKey(d);
+}
+
+/** Returns [startKey, endKey] for a mode, using today as the anchor for rolling presets. */
+function computeKeyRange(mode: BusinessDateMode, dateKey: string, rangeStart?: string, rangeEnd?: string): [string, string] {
+  const today = todayKey();
   switch (mode) {
     case 'today':
-      return { start: startOfDay(dateKey).toISOString(), end: endOfDay(dateKey).toISOString() };
+      return [today, today];
     case 'yesterday':
-      return { start: startOfDay(dateKey).toISOString(), end: endOfDay(dateKey).toISOString() };
-    case 'last7': {
-      const s = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
-      return { start: s.toISOString(), end: endOfDay(todayKey()).toISOString() };
+      return [addDays(today, -1), addDays(today, -1)];
+    case 'this_week': {
+      const ws = weekStartKey(today);
+      return [ws, today];
     }
-    case 'last30': {
-      const s = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
-      return { start: s.toISOString(), end: endOfDay(todayKey()).toISOString() };
+    case 'last_week': {
+      const ws = weekStartKey(today);
+      const lws = addDays(ws, -7);
+      return [lws, addDays(ws, -1)];
     }
+    case 'this_month': {
+      const d = parseDateKey(today);
+      return [toDateKey(new Date(d.getFullYear(), d.getMonth(), 1)), today];
+    }
+    case 'last_month': {
+      const first = new Date(parseDateKey(today).getFullYear(), parseDateKey(today).getMonth(), 1);
+      const lmStart = new Date(first.getFullYear(), first.getMonth() - 1, 1);
+      const lmEnd = new Date(first.getFullYear(), first.getMonth(), 0);
+      return [toDateKey(lmStart), toDateKey(lmEnd)];
+    }
+    case 'last7':
+      return [addDays(today, -6), today];
+    case 'last30':
+      return [addDays(today, -29), today];
+    case 'last90':
+      return [addDays(today, -89), today];
+    case 'range':
+      return [rangeStart || dateKey, rangeEnd || dateKey];
     case 'custom':
-      return { start: startOfDay(dateKey).toISOString(), end: endOfDay(dateKey).toISOString() };
+      return [dateKey, dateKey];
   }
 }
 
-export function computeDateRange(mode: BusinessDateMode, dateKey: string): { startDate: string; endDate: string } {
-  const now = new Date();
-  switch (mode) {
-    case 'today':
-      return { startDate: dateKey, endDate: todayKey() };
-    case 'yesterday':
-      return { startDate: dateKey, endDate: dateKey };
-    case 'last7':
-      return { startDate: toDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6)), endDate: todayKey() };
-    case 'last30':
-      return { startDate: toDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29)), endDate: todayKey() };
-    case 'custom':
-      return { startDate: dateKey, endDate: dateKey };
-  }
+export function computeRange(mode: BusinessDateMode, dateKey: string, rangeStart?: string, rangeEnd?: string): { start: string; end: string } {
+  const [s, e] = computeKeyRange(mode, dateKey, rangeStart, rangeEnd);
+  return { start: startOfDay(s).toISOString(), end: endOfDay(e).toISOString() };
+}
+
+export function computeDateRange(mode: BusinessDateMode, dateKey: string, rangeStart?: string, rangeEnd?: string): { startDate: string; endDate: string } {
+  const [s, e] = computeKeyRange(mode, dateKey, rangeStart, rangeEnd);
+  return { startDate: s, endDate: e };
 }
 
 export function previousRange(start: string, end: string): { start: string; end: string } {
@@ -114,89 +164,142 @@ export function previousRange(start: string, end: string): { start: string; end:
 interface PersistedState {
   mode: BusinessDateMode;
   dateKey: string;
+  rangeStart?: string;
+  rangeEnd?: string;
 }
 
-function loadInitial(): PersistedState {
-  const today = todayKey();
-  const defaults: PersistedState = { mode: 'today', dateKey: today };
+function defaultState(): PersistedState {
+  return { mode: 'today', dateKey: todayKey() };
+}
+
+function storageKey(pageKey: string): string {
+  return `${STORAGE_PREFIX}.${pageKey}`;
+}
+
+function loadInitial(pageKey: string): PersistedState {
+  const defaults = defaultState();
   if (typeof window === 'undefined') return defaults;
   try {
     const url = new URL(window.location.href);
     const urlDate = url.searchParams.get('date');
     if (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) {
+      const today = todayKey();
       if (urlDate === today) return { mode: 'today', dateKey: urlDate };
       if (urlDate === addDays(today, -1)) return { mode: 'yesterday', dateKey: urlDate };
       return { mode: 'custom', dateKey: urlDate };
     }
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(pageKey));
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed.dateKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.dateKey)) {
-        const mode: BusinessDateMode = MODES.includes(parsed.mode) ? parsed.mode : 'custom';
-        if (mode === 'today' || mode === 'yesterday') {
-          const expected = mode === 'today' ? today : addDays(today, -1);
-          return { mode, dateKey: expected };
-        }
-        if (mode === 'last7' || mode === 'last30') return { mode, dateKey: today };
-        return { mode, dateKey: parsed.dateKey };
+        const mode: BusinessDateMode = ALL_MODES.includes(parsed.mode) ? parsed.mode : 'custom';
+        return {
+          mode,
+          dateKey: parsed.dateKey,
+          rangeStart: typeof parsed.rangeStart === 'string' ? parsed.rangeStart : undefined,
+          rangeEnd: typeof parsed.rangeEnd === 'string' ? parsed.rangeEnd : undefined,
+        };
       }
     }
   } catch {}
   return defaults;
 }
 
-const BusinessDateContext = createContext<BusinessDateValue | null>(null);
-
-export function useBusinessDate() {
-  const ctx = useContext(BusinessDateContext);
-  if (!ctx) throw new Error('useBusinessDate must be used within BusinessDateProvider');
-  return ctx;
+interface PageDateController {
+  stateMap: Record<string, PersistedState>;
+  setMode: (pageKey: string, mode: BusinessDateMode) => void;
+  setCustomDate: (pageKey: string, d: string) => void;
+  setRange: (pageKey: string, start: string, end: string) => void;
 }
 
-export function BusinessDateProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<PersistedState>(loadInitial);
+const PageDateContext = createContext<PageDateController | null>(null);
 
-  useEffect(() => {
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.set('date', state.dateKey);
-      window.history.replaceState(null, '', url.toString());
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {}
-  }, [state]);
+export function usePageDate(pageKey: string): BusinessDateValue {
+  const ctx = useContext(PageDateContext);
+  if (!ctx) throw new Error('usePageDate must be used within BusinessDateProvider');
+  // Stable per-page localStorage value used until the user changes it via a setter.
+  const fallback = useMemo(() => loadInitial(pageKey), [pageKey]);
+  const state = ctx.stateMap[pageKey] ?? fallback;
 
-  const setMode = useCallback((mode: BusinessDateMode) => {
-    setState((prev) => {
-      if (mode === 'custom') return { mode, dateKey: prev.dateKey };
-      const today = todayKey();
-      if (mode === 'today') return { mode, dateKey: today };
-      if (mode === 'yesterday') return { mode, dateKey: addDays(today, -1) };
-      return { mode, dateKey: today };
-    });
-  }, []);
-
-  const setCustomDate = useCallback((d: string) => {
-    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
-    setState({ mode: 'custom', dateKey: d });
-  }, []);
-
-  const value = useMemo<BusinessDateValue>(() => {
-    const { start, end } = computeRange(state.mode, state.dateKey);
-    const { startDate, endDate } = computeDateRange(state.mode, state.dateKey);
+  return useMemo(() => {
+    const { mode, dateKey } = state;
+    const { start, end } = computeRange(mode, dateKey, state.rangeStart, state.rangeEnd);
+    const { startDate, endDate } = computeDateRange(mode, dateKey, state.rangeStart, state.rangeEnd);
+    const isToday = mode === 'today';
+    let display: string;
+    if (mode === 'range' && state.rangeStart && state.rangeEnd) {
+      display = `${formatDisplay(state.rangeStart)} – ${formatDisplay(state.rangeEnd)}`;
+    } else {
+      display = formatDisplay(startDate);
+    }
     return {
-      mode: state.mode,
-      dateKey: state.dateKey,
+      mode,
+      dateKey,
       start,
       end,
       startDate,
       endDate,
-      isToday: state.mode === 'today',
-      label: MODE_LABELS[state.mode],
-      display: formatDisplay(state.dateKey),
-      setMode,
-      setCustomDate,
+      rangeStart: state.rangeStart || startDate,
+      rangeEnd: state.rangeEnd || endDate,
+      isToday,
+      label: MODE_LABELS[mode],
+      display,
+      setMode: (m) => ctx.setMode(pageKey, m),
+      setCustomDate: (d) => ctx.setCustomDate(pageKey, d),
+      setRange: (s, e) => ctx.setRange(pageKey, s, e),
     };
-  }, [state, setMode, setCustomDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, pageKey, ctx.setMode, ctx.setCustomDate, ctx.setRange]);
+}
 
-  return <BusinessDateContext.Provider value={value}>{children}</BusinessDateContext.Provider>;
+/** Back-compat default page helper used by the header picker & pages. */
+export function useBusinessDate(pageKey = 'default'): BusinessDateValue {
+  return usePageDate(pageKey);
+}
+
+export function BusinessDateProvider({ children }: { children: React.ReactNode }) {
+  const [stateMap, setStateMap] = useState<Record<string, PersistedState>>({});
+
+  const persist = useCallback((pageKey: string, state: PersistedState) => {
+    try {
+      localStorage.setItem(storageKey(pageKey), JSON.stringify(state));
+    } catch {}
+  }, []);
+
+  const setMode = useCallback((pageKey: string, mode: BusinessDateMode) => {
+    const today = todayKey();
+    let next: PersistedState;
+    if (mode === 'custom') {
+      next = { mode, dateKey: today };
+    } else if (mode === 'range') {
+      // Entering range mode keeps an existing single-day range until setRange is used.
+      next = { mode, dateKey: today, rangeStart: today, rangeEnd: today };
+    } else {
+      const [startDate, endDate] = computeKeyRange(mode, today, today, today);
+      next = { mode, dateKey: mode === 'yesterday' ? addDays(today, -1) : startDate };
+    }
+    setStateMap((prev) => ({ ...prev, [pageKey]: next }));
+    persist(pageKey, next);
+  }, [persist]);
+
+  const setCustomDate = useCallback((pageKey: string, d: string) => {
+    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+    const next: PersistedState = { mode: 'custom', dateKey: d };
+    setStateMap((prev) => ({ ...prev, [pageKey]: next }));
+    persist(pageKey, next);
+  }, [persist]);
+
+  const setRange = useCallback((pageKey: string, start: string, end: string) => {
+    if (!start || !end) return;
+    const next: PersistedState = { mode: 'range', dateKey: start, rangeStart: start, rangeEnd: end };
+    setStateMap((prev) => ({ ...prev, [pageKey]: next }));
+    persist(pageKey, next);
+  }, [persist]);
+
+  const value = useMemo<PageDateController>(
+    () => ({ stateMap, setMode, setCustomDate, setRange }),
+    [stateMap, setMode, setCustomDate, setRange],
+  );
+
+  return <PageDateContext.Provider value={value}>{children}</PageDateContext.Provider>;
 }

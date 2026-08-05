@@ -20,6 +20,8 @@ export class EventBus {
   private subscribedTables = new Set<string>();
   private destroyed = false;
   private connectAttempt = 0;
+  private pendingTables = new Set<string>();
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(slug: string, supabaseUrl: string, supabaseAnonKey: string) {
     this.slug = slug;
@@ -68,10 +70,35 @@ export class EventBus {
 
   connect() {
     if (this.destroyed) return;
+    // Idempotent — never tear down an already-active channel (prevents dropped
+    // events + status flicker when multiple subscribers connect at once).
+    if (this.channel) return;
     this.setStatus('connecting');
     this.reconnectAttempts = 0;
     this.connectAttempt++;
     this.doConnect();
+  }
+
+  /** Coalesce table additions so a burst of subscriptions triggers ONE channel rebuild. */
+  private scheduleFlush() {
+    if (this.flushTimer) return;
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      if (this.destroyed) return;
+      if (this.pendingTables.size === 0) return;
+      for (const t of this.pendingTables) this.subscribedTables.add(t);
+      this.pendingTables.clear();
+      if (!this.channel) {
+        this.connect();
+      } else if (this.status === 'connected') {
+        // All postgres_changes listeners must be added before subscribe(), so a
+        // rebuild is required — but only one rebuild per burst of subscriptions.
+        this.doConnect();
+      } else {
+        // Still connecting — wait and retry so listeners are captured pre-subscribe.
+        this.scheduleFlush();
+      }
+    }, 0);
   }
 
   private doConnect() {
@@ -130,19 +157,6 @@ export class EventBus {
       });
   }
 
-  private handlePgChange(table: string, raw: any) {
-    const payload: EventPayload = {
-      table,
-      event: raw.event_type as 'INSERT' | 'UPDATE' | 'DELETE',
-      new: raw.new ?? null,
-      old: raw.old ?? null,
-      timestamp: Date.now(),
-      slug: this.slug,
-    };
-    this.dispatch(table, payload);
-    this.broadcastToOtherTabs(payload);
-  }
-
   private dispatch(table: string, payload: EventPayload) {
     const tableListeners = this.subscribers.get(table);
     if (tableListeners) {
@@ -178,14 +192,9 @@ export class EventBus {
     }
     this.subscribers.get(key)!.add(callback);
 
-    if (table !== '*' && !this.subscribedTables.has(table)) {
-      this.subscribedTables.add(table);
-      // Reconnect to add the new table listener (all listeners added before subscribe in doConnect)
-      if (this.channel && this.status === 'connected') {
-        this.doConnect();
-      } else if (!this.channel) {
-        this.connect();
-      }
+    if (table !== '*' && !this.subscribedTables.has(table) && !this.pendingTables.has(table)) {
+      this.pendingTables.add(table);
+      this.scheduleFlush();
     }
 
     return () => {
@@ -228,6 +237,10 @@ export class EventBus {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
     if (this.channel) {
       this.channel.unsubscribe();
       this.channel = null;
@@ -237,6 +250,7 @@ export class EventBus {
       this.broadcastChannel = null;
     }
     this.subscribers.clear();
+    this.pendingTables.clear();
     this.statusListeners.clear();
     this.subscribedTables.clear();
     this.setStatus('disconnected');

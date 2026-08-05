@@ -1,5 +1,7 @@
 'use client';
 
+import { memo } from 'react';
+
 interface Props {
   method: string;
   size?: number;
@@ -45,7 +47,7 @@ const LOGO_MAP: Record<string, string> = {
   cash: '/payment-logos/cash.png',
 };
 
-export default function PaymentMethodLogo({ method, size = 24, className = '' }: Props) {
+function PaymentMethodLogo({ method, size = 24, className = '' }: Props) {
   const cls = `inline-block shrink-0 ${className}`;
   const norm = normalize(method);
 
@@ -67,3 +69,5 @@ export default function PaymentMethodLogo({ method, size = 24, className = '' }:
 
   return <FallbackSvg type={fallbackType} className={cls} size={size} />;
 }
+
+export default memo(PaymentMethodLogo);

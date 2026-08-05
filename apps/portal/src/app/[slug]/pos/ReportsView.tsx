@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
@@ -66,7 +66,7 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
   const [filters, setFilters] = useState<ReportFilters>({ includeCancelled: false, includeRefunded: false });
   const [showFilters, setShowFilters] = useState(false);
   const [loading, setLoading] = useState(false);
-  const bd = useBusinessDate();
+  const bd = useBusinessDate('reports');
 
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [sales, setSales] = useState<SalesData | null>(null);
@@ -110,9 +110,16 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
     if (isLoaded && canView) fetchTab(tab);
   }, [isLoaded, canView, tab, fetchTab]);
 
-  // Auto-refresh reports when related data changes
-  useEvent('orders', () => { if (bd.isToday) fetchTab(tab); });
-  useEvent('item_ledger', () => { if (bd.isToday) fetchTab(tab); });
+  // Auto-refresh reports when related data changes, coalescing bursts so a flurry of
+  // realtime events doesn't fire overlapping heavy report queries.
+  const reportTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleTabRefresh = useCallback(() => {
+    if (reportTimerRef.current) clearTimeout(reportTimerRef.current);
+    reportTimerRef.current = setTimeout(() => fetchTab(tab), 700);
+  }, [fetchTab, tab]);
+  useEffect(() => () => { if (reportTimerRef.current) clearTimeout(reportTimerRef.current); }, []);
+  useEvent('orders', () => { if (bd.isToday) scheduleTabRefresh(); });
+  useEvent('item_ledger', () => { if (bd.isToday) scheduleTabRefresh(); });
 
   // Export CSV
   const handleExport = useCallback(() => {
