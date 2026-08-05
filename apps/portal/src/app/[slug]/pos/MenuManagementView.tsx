@@ -16,7 +16,6 @@ import {
   getMenuItemIngredients,
   getInventoryItems,
   saveIngredients,
-  checkMenuEditPermission,
 } from './menu-actions';
 
 interface MenuItemRecord {
@@ -46,7 +45,8 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
   const publish = usePublish();
   const { isLoaded, isSignedIn } = useAuth();
   const [authReady, setAuthReady] = useState(false);
-  const [canEdit, setCanEdit] = useState(false);
+  // The Menu module gates this whole page; inside a module, full access.
+  const [canEdit, setCanEdit] = useState(true);
   const [items, setItems] = useState<MenuItemRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -68,12 +68,10 @@ export default function MenuManagementView({ slug, theme, currencySymbol: _curre
   const [ingLoadError, setIngLoadError] = useState('');
   const currencySymbol = _currencySymbol || 'Rs.';
 
-  // Check edit permission via server action (reads staff_roles)
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
     setAuthReady(true);
-    checkMenuEditPermission(slug).then(setCanEdit);
-  }, [isLoaded, isSignedIn, slug]);
+  }, [isLoaded, isSignedIn]);
 
   // Fetch all menu items
   const fetchItems = useCallback(async () => {

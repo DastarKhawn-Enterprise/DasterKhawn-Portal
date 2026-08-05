@@ -5,7 +5,6 @@ import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { Badge, Button, ConfirmDialog, EmptyState, Modal, Skeleton, SkeletonTable } from '@sat-sys/ui';
-import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { useEvent, usePublish } from './use-event';
 
@@ -28,10 +27,8 @@ const UNITS = ['pcs', 'kg', 'liters', 'grams', 'ml', 'oz', 'lb', 'bags', 'boxes'
 export default function InventoryView({ slug, theme }: Props) {
   const publish = usePublish();
   const { user, isLoaded } = useUser();
-  const meta = user?.publicMetadata as Record<string, any> | undefined;
-  const perms = (meta?.permissions ?? []) as string[];
-  const role = (meta?.role ?? '') as string;
-  const canEdit = hasPermission(perms, role, 'menu:edit');
+  // The Inventory module gates this whole page; inside a module, full access.
+  const canEdit = true;
 
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);

@@ -63,7 +63,6 @@ export default async function POSLayout({
   const isSuperAdmin = role === 'super_admin';
 
   let staffRole = '';
-  let staffPermissions: string[] = [];
   let hasStaffRole = false;
   if (!isSuperAdmin) {
     const staffRows = await getStaffByTenant(tenant.id);
@@ -71,7 +70,6 @@ export default async function POSLayout({
     hasStaffRole = !!me;
     if (me) {
       staffRole = me.role;
-      staffPermissions = me.permissions || [];
     }
   }
 
@@ -95,8 +93,6 @@ export default async function POSLayout({
       theme={tenant.theme_config}
       slug={params.slug}
       enabledModules={enabledModules}
-      staffRole={staffRole}
-      staffPermissions={staffPermissions}
     >
       {children}
     </POSShell>

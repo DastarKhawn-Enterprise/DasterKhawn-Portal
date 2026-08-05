@@ -49,38 +49,9 @@ const ALLOWED_TABLES = new Set([
   'branches', 'business_hours', 'audit_logs', 'order_edit_history', 'staff_branches',
 ]);
 
-const TABLE_READ_PERMISSION: Record<string, string> = {
-  customers: 'customers:view',
-};
+const TABLE_READ_PERMISSION: Record<string, string> = {};
 
-const TABLE_WRITE_PERMISSION: Record<string, string> = {
-  menu_items: 'menu:edit',
-  menu_item_ingredients: 'menu:edit',
-  inventory_items: 'menu:edit',
-  orders: 'orders:create',
-  order_items: 'orders:create',
-  tables: 'orders:create',
-  customers: 'customers:edit',
-  settings: 'settings:edit',
-  expenses: 'settings:edit',
-  reservations: 'orders:create',
-  item_ledger: 'menu:edit',
-  accounts: 'accounts:manage',
-  payments: 'orders:create',
-  account_transactions: 'accounts:manage',
-  branches: 'settings:edit',
-  business_hours: 'settings:edit',
-  order_edit_history: 'menu:edit',
-  staff_branches: 'staff:manage',
-};
-
-const PERMISSIONS_OWNER = [
-  'orders:create', 'orders:view', 'orders:update',
-  'menu:view', 'menu:edit', 'reports:view',
-  'staff:manage', 'settings:edit',
-  'accounts:view', 'accounts:manage', 'accounts:transactions',
-  'accounts:transfer', 'accounts:adjust',
-];
+const TABLE_WRITE_PERMISSION: Record<string, string> = {};
 
 type CheckAccessResult = { authorized: false; reason: string } | { authorized: true; tenant: { id: string; supabase_url: string; slug: string }; serviceKey: string };
 

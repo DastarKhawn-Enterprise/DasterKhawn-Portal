@@ -5,9 +5,9 @@ import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { Button, Modal, Skeleton } from '@sat-sys/ui';
-import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { useEvent, usePublish } from './use-event';
+import { MODULE_LABELS } from '@/lib/module-registry';
 
 interface Props {
   slug: string;
@@ -123,17 +123,7 @@ const PAYMENT_METHODS = [
   { value: 'debit_card', label: 'Debit Card' },
 ];
 
-const SYSTEM_MODULES = [
-  { key: 'kitchen_display', label: 'Kitchen Display' },
-  { key: 'table_management', label: 'Table Management' },
-  { key: 'reservations', label: 'Reservations' },
-  { key: 'inventory_alerts', label: 'Inventory Alerts' },
-  { key: 'negative_stock', label: 'Negative Stock' },
-  { key: 'customer_loyalty', label: 'Customer Loyalty' },
-  { key: 'expenses', label: 'Expenses' },
-  { key: 'accounts', label: 'Accounts' },
-  { key: 'online_ordering', label: 'Online Ordering' },
-];
+const SYSTEM_MODULES = [{ key: 'null', label: '' }];
 
 function formatTime24(val: string | null | undefined): string {
   if (!val) return '';
@@ -226,10 +216,8 @@ function CompactToggle({ label, checked, onChange, disabled }: { label: string; 
 export default function SettingsView({ slug, theme }: Props) {
   const publish = usePublish();
   const { user, isLoaded } = useUser();
-  const meta = user?.publicMetadata as Record<string, any> | undefined;
-  const perms = (meta?.permissions ?? []) as string[];
-  const role = (meta?.role ?? '') as string;
-  const canEdit = hasPermission(perms, role, 'settings:edit');
+  // The Settings module gates this whole page; inside a module, full access.
+  const canEdit = true;
 
   const [settings, setSettings] = useState<SettingsRow | null>(null);
   const [branches, setBranches] = useState<BranchRow[]>([]);
@@ -904,10 +892,10 @@ export default function SettingsView({ slug, theme }: Props) {
 
             {/* 12. System Settings */}
             <Card title="System Settings">
-              <p className="text-[10px] text-gray-400 mb-1.5">Module enablement is managed by your administrator from the Super Admin dashboard. Toggles here have been retired — every module now respects a single centralized setting.</p>
+              <p className="text-[10px] text-gray-400 mb-1.5">Module enablement is managed by your administrator from the Super Admin dashboard. Every sidebar tab maps to exactly one module toggle.</p>
               <div className="space-y-0.5">
-                {SYSTEM_MODULES.map((m) => (
-                  <CompactToggle key={m.key} label={m.label} checked disabled onChange={() => {}} />
+                {MODULE_LABELS && Object.keys(MODULE_LABELS).map((k) => (
+                  <CompactToggle key={k} label={MODULE_LABELS[k]} checked disabled onChange={() => {}} />
                 ))}
               </div>
             </Card>

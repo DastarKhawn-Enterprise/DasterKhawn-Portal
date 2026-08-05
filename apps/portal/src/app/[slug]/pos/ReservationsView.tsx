@@ -5,7 +5,6 @@ import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { Badge, Button, ConfirmDialog, EmptyState, Modal, Skeleton, SkeletonTable, reservationStatusVariant } from '@sat-sys/ui';
-import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { useEvent, usePublish } from './use-event';
 
@@ -44,10 +43,8 @@ type FilterMode = 'upcoming' | 'past' | 'all';
 export default function ReservationsView({ slug, theme }: Props) {
   const publish = usePublish();
   const { user, isLoaded } = useUser();
-  const meta = user?.publicMetadata as Record<string, any> | undefined;
-  const perms = (meta?.permissions ?? []) as string[];
-  const role = (meta?.role ?? '') as string;
-  const canEdit = hasPermission(perms, role, 'orders:create') || hasPermission(perms, role, 'orders:update');
+  // The Reservations module gates this whole page; inside a module, full access.
+  const canEdit = true;
 
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [tables, setTables] = useState<TableRecord[]>([]);

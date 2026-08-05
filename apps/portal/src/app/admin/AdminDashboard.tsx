@@ -480,8 +480,7 @@ function ModulesModal({
     setModules((prev) => {
       const next = { ...prev };
       for (const k of keys) {
-        const def = MODULE_BY_KEY[k];
-        if (!def || def.locked) continue;
+        if (!MODULE_BY_KEY[k]) continue;
         next[k] = value;
       }
       return next;
@@ -489,8 +488,7 @@ function ModulesModal({
   };
 
   const toggle = (key: string) => {
-    const def = MODULE_BY_KEY[key];
-    if (!def || def.locked) return;
+    if (!MODULE_BY_KEY[key]) return;
     setModules((prev) => ({ ...prev, [key]: prev[key] === false }));
   };
 
@@ -515,7 +513,7 @@ function ModulesModal({
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-xl font-bold">Modules — {tenant.brand_name}</h2>
         </div>
-        <p className="text-xs text-gray-400 mb-3">This is the single source of truth for enabling/disabling this tenant&apos;s POS modules. Disabling a module hides its navigation, routes, dashboard widgets, and report tabs.</p>
+        <p className="text-xs text-gray-400 mb-3">One toggle per sidebar tab. Disabling a module hides its sidebar item and blocks its routes. When a module is enabled, the user has full access to everything inside it.</p>
 
         <input
           type="text"
@@ -526,47 +524,34 @@ function ModulesModal({
         />
 
         {groups.map((group) => {
-          const lockedCount = group.keys.filter((k) => MODULE_BY_KEY[k]?.locked).length;
           const allOn = group.keys.every((k) => detail[k].enabled);
           const anyOff = group.keys.some((k) => !detail[k].enabled);
-          const canBulk = group.keys.some((k) => !MODULE_BY_KEY[k].locked);
           return (
             <div key={group.label} className="mb-5">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{group.label}</h3>
-                {canBulk && (
-                  <button
-                    onClick={() => setAll(group.keys, allOn ? false : true)}
-                    className="text-[11px] font-medium text-blue-600 hover:underline"
-                  >
-                    {allOn ? 'Turn off all' : anyOff ? 'Turn on all' : ''}
-                  </button>
-                )}
+                <button
+                  onClick={() => setAll(group.keys, allOn ? false : true)}
+                  className="text-[11px] font-medium text-blue-600 hover:underline"
+                >
+                  {allOn ? 'Turn off all' : anyOff ? 'Turn on all' : ''}
+                </button>
               </div>
               <div className="space-y-2">
                 {group.keys.map((key) => {
                   const d = detail[key];
-                  const def = MODULE_BY_KEY[key];
-                  const locked = !!def.locked;
                   return (
                     <div key={key} className="flex items-center justify-between">
                       <div className="min-w-0 pr-3">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`text-sm truncate ${locked ? 'text-gray-400' : 'text-gray-700'}`}>
-                            {d.label}
-                          </span>
-                          {locked && <span className="text-[10px] text-gray-400">(always on)</span>}
-                          {d.dependencyBlocked && !locked && (
-                            <span className="text-[10px] text-amber-600">requires {d.dependencies.map((x) => MODULE_BY_KEY[x]?.label ?? x).join(', ')}</span>
-                          )}
-                        </div>
+                        <span className={`text-sm truncate text-gray-700`}>
+                          {d.label}
+                        </span>
                         <p className="text-[11px] text-gray-400 truncate">{d.description}</p>
                       </div>
                       <button
                         onClick={() => toggle(key)}
-                        disabled={locked}
-                        title={locked ? 'Core module — cannot be disabled' : d.description}
-                        className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${d.enabled ? 'bg-green-400' : 'bg-gray-300'}`}
+                        title={d.description}
+                        className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 cursor-pointer ${d.enabled ? 'bg-green-400' : 'bg-gray-300'}`}
                       >
                         <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${d.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
                       </button>

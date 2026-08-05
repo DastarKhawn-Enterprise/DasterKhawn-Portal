@@ -12,7 +12,6 @@ import { Badge, EmptyState, Modal, Skeleton, SkeletonTable, type BadgeVariant } 
 import {
   getRoleLabel, getAllPermissions, ROLE_DEFAULTS, STAFF_ROLES, PERMISSION_PAGES,
 } from './staff-types';
-import { hasPermission } from './permissions';
 import { useEvent, usePublish } from './use-event';
 
 interface Props { slug: string }
@@ -89,16 +88,13 @@ export default function StaffManagementView({ slug }: Props) {
   const publish = usePublish();
   const { user, isLoaded } = useUser();
   const meta = user?.publicMetadata as Record<string, any> | undefined;
-  const metaPerms = (meta?.permissions ?? []) as string[];
   const metaRole = (meta?.role ?? '') as string;
 
   const [currentUser, setCurrentUser] = useState<StaffListResult['currentUser'] | null>(null);
 
   const effRole = currentUser?.role || metaRole;
-  const effPerms = currentUser?.permissions && currentUser.permissions.length > 0
-    ? currentUser.permissions
-    : metaPerms;
-  const canManage = hasPermission(effPerms, effRole, 'staff:manage');
+  // The Staff module gates this whole page; inside a module, full access.
+  const canManage = true;
   const isOwnerOrSuper = effRole === 'owner' || effRole === 'super_admin';
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [summaryCounts, setSummaryCounts] = useState({ total: 0, active: 0, onLeave: 0, inactive: 0 });

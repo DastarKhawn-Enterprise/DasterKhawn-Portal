@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { Badge, Button, EmptyState, Modal, Skeleton, SkeletonTable } from '@sat-sys/ui';
-import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { normalizePhone, checkDuplicatePhone } from './customer-utils';
 import { usePOS } from './pos-context';
@@ -52,13 +51,11 @@ function formatDate(d: string | null) {
 export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true, currencySymbol }: Props) {
   const publish = usePublish();
   const { user, isLoaded } = useUser();
-  const meta = user?.publicMetadata as Record<string, any> | undefined;
-  const perms = (meta?.permissions ?? []) as string[];
-  const role = (meta?.role ?? '') as string;
-  const canView = hasPermission(perms, role, 'customers:view');
-  const canCreate = hasPermission(perms, role, 'customers:create');
-  const canEdit = hasPermission(perms, role, 'customers:edit');
-  const canManage = hasPermission(perms, role, 'customers:manage');
+  // The Customers module gates this whole page; inside a module, full access.
+  const canView = true;
+  const canCreate = true;
+  const canEdit = true;
+  const canManage = true;
   const [authReady, setAuthReady] = useState(false);
 
   const [customers, setCustomers] = useState<Customer[]>([]);

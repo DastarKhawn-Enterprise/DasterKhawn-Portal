@@ -5,7 +5,6 @@ import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { Badge, EmptyState, Modal, Skeleton, SkeletonTable } from '@sat-sys/ui';
-import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { processTransfer, processExpense, processAdjustment } from './payment-actions';
 import PaymentMethodLogo from './PaymentMethodLogo';
@@ -123,13 +122,11 @@ function DonutChart({ data, total, currencySymbol }: { data: { label: string; va
 export default function AccountsView({ slug, theme, currencySymbol }: Props) {
   const publish = usePublish();
   const { user, isLoaded } = useUser();
-  const meta = user?.publicMetadata as Record<string, any> | undefined;
-  const perms = (meta?.permissions ?? []) as string[];
-  const role = (meta?.role ?? '') as string;
-  const canView = hasPermission(perms, role, 'accounts:view');
-  const canManage = hasPermission(perms, role, 'accounts:manage');
-  const canTransfer = hasPermission(perms, role, 'accounts:transfer');
-  const canAdjust = hasPermission(perms, role, 'accounts:adjust');
+  // The Accounts module gates this whole page; inside a module, full access.
+  const canView = true;
+  const canManage = true;
+  const canTransfer = true;
+  const canAdjust = true;
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [txns, setTxns] = useState<Transaction[]>([]);

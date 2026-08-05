@@ -3,79 +3,10 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { SIDEBAR_NAV as NAV_ITEMS, viewIdForPath } from '@/lib/sidebar-nav';
+import type { ViewId } from '@/lib/sidebar-nav';
 
-export type ViewId =
-  | 'dashboard'
-  | 'current-orders'
-  | 'orders-new'
-  | 'orders-completed'
-  | 'orders-cancelled'
-  | 'orders-draft'
-  | 'dine-in'
-  | 'take-away'
-  | 'delivery'
-  | 'drive-thru'
-  | 'third-party'
-  | 'reservations'
-  | 'menu'
-  | 'inventory'
-  | 'item-ledger'
-  | 'customers'
-  | 'reports'
-  | 'expenses'
-  | 'accounts'
-  | 'staff'
-  | 'settings';
-
-interface NavItem {
-  id: ViewId;
-  label: string;
-  icon: string;
-  path: string;
-  children?: { id: ViewId; label: string; path: string }[];
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '⊞', path: '/dashboard' },
-  {
-    id: 'current-orders',
-    label: 'Orders',
-    icon: '☰',
-    path: '/orders',
-    children: [
-      { id: 'current-orders', label: 'Current Orders', path: '/orders' },
-      { id: 'orders-new', label: 'New Order', path: '/orders/new' },
-      { id: 'orders-completed', label: 'Completed', path: '/orders/completed' },
-      { id: 'orders-cancelled', label: 'Cancelled', path: '/orders/cancelled' },
-      { id: 'orders-draft', label: 'Draft', path: '/orders/draft' },
-    ],
-  },
-  { id: 'dine-in', label: 'Dine In', icon: '🍽', path: '/dine-in' },
-  { id: 'take-away', label: 'Take Away', icon: '🛍', path: '/take-away' },
-  { id: 'delivery', label: 'Delivery', icon: '🚚', path: '/delivery' },
-  { id: 'drive-thru', label: 'Drive Thru', icon: '🚗', path: '/drive-thru' },
-  { id: 'third-party', label: 'Third Party', icon: '🤝', path: '/third-party' },
-  { id: 'reservations', label: 'Reservations', icon: '📋', path: '/reservations' },
-  { id: 'menu', label: 'Menu', icon: '📖', path: '/menu' },
-  { id: 'inventory', label: 'Inventory', icon: '📦', path: '/inventory' },
-  { id: 'item-ledger', label: 'Item Ledger', icon: '📋', path: '/item-ledger' },
-  { id: 'customers', label: 'Customers', icon: '👥', path: '/customers' },
-  { id: 'reports', label: 'Reports', icon: '📊', path: '/reports' },
-  { id: 'expenses', label: 'Expenses', icon: '💰', path: '/expenses' },
-  { id: 'accounts', label: 'Accounts', icon: '🏦', path: '/accounts' },
-  { id: 'staff', label: 'Staff', icon: '👤', path: '/staff' },
-  { id: 'settings', label: 'Settings', icon: '⚙', path: '/settings' },
-];
-
-const PATH_TO_VIEW: Record<string, ViewId> = {};
-for (const item of NAV_ITEMS) {
-  PATH_TO_VIEW[item.path] = item.id;
-  if (item.children) {
-    for (const child of item.children) {
-      PATH_TO_VIEW[child.path] = child.id;
-    }
-  }
-}
+export type { ViewId };
 
 interface SidebarProps {
   collapsed: boolean;
@@ -94,7 +25,7 @@ function navLink(path: string, slug: string) {
 export default function Sidebar({ collapsed, onToggleCollapse, accentColor, mobileOpen, onMobileClose, hiddenViews, slug }: SidebarProps) {
   const pathname = usePathname();
   const posPath = '/' + pathname.split('/').slice(3).join('/');
-  const activeView = PATH_TO_VIEW[posPath] || 'dashboard';
+  const activeView = viewIdForPath(posPath);
 
   const [ordersOpen, setOrdersOpen] = useState(true);
 
@@ -128,11 +59,11 @@ export default function Sidebar({ collapsed, onToggleCollapse, accentColor, mobi
                 <button
                   onClick={() => setOrdersOpen(!ordersOpen)}
                   className={`flex items-center w-full px-4 py-2.5 text-sm transition-colors ${
-                    isActive(item.id)
+                    isActive(item.id) || item.children?.some((c) => isActive(c.id))
                       ? 'font-semibold'
                       : 'text-sidebar-foreground hover:bg-sidebar-hover hover:text-white'
                   }`}
-                  style={isActive(item.id) ? { backgroundColor: accentColor + '26', color: accentColor } : {}}
+                  style={(isActive(item.id) || item.children?.some((c) => isActive(c.id))) ? { backgroundColor: accentColor + '26', color: accentColor } : {}}
                 >
                   <span className="text-[17px] w-6 text-center flex-shrink-0">{item.icon}</span>
                   {!collapsed && (

@@ -5,7 +5,6 @@ import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { Button, EmptyState, Modal, Skeleton, SkeletonTable, StatusPill } from '@sat-sys/ui';
-import { hasPermission } from './permissions';
 import { useEvent } from './use-event';
 import { useBusinessDate } from './business-date-context';
 import { resolveEnabledModules } from '@/lib/module-registry';
@@ -58,10 +57,8 @@ function fmt(n: number, sym?: string): string {
 
 export default function ReportsView({ slug, theme, currencySymbol }: Props) {
   const { user, isLoaded } = useUser();
-  const meta = user?.publicMetadata as Record<string, any> | undefined;
-  const perms = (meta?.permissions ?? []) as string[];
-  const role = (meta?.role ?? '') as string;
-  const canView = hasPermission(perms, role, 'reports:view');
+  // The Reports module gates this whole page; inside a module, full access.
+  const canView = true;
   const [tab, setTab] = useState<TabId>('overview');
   const [filters, setFilters] = useState<ReportFilters>({ includeCancelled: false, includeRefunded: false });
   const [showFilters, setShowFilters] = useState(false);

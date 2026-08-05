@@ -22,27 +22,16 @@ interface POSShellProps {
   theme: ThemeConfig;
   slug: string;
   enabledModules: Record<string, boolean>;
-  staffRole?: string;
-  staffPermissions?: string[];
   children: React.ReactNode;
 }
 
-function computeHiddenViews(user: any, enabledModules: Record<string, boolean>, authoritativeRole?: string, authoritativePerms?: string[]): ViewId[] {
-  const meta = user?.publicMetadata as Record<string, any> | undefined;
-  const perms: string[] = authoritativePerms?.length ? authoritativePerms : (meta?.permissions ?? []);
-  const role: string = authoritativeRole || meta?.role || '';
-  const hidden: ViewId[] = hiddenViewsForModules(enabledModules);
-  if (role !== 'super_admin' && role !== 'owner') {
-    if (!perms.includes('staff:manage')) hidden.push('staff');
-    if (!perms.includes('menu:edit')) { hidden.push('menu'); hidden.push('inventory'); hidden.push('item-ledger'); }
-    if (!perms.includes('reports:view')) hidden.push('reports');
-    if (!perms.includes('accounts:view')) hidden.push('accounts');
-    if (!perms.includes('settings:edit')) { hidden.push('settings'); hidden.push('expenses'); }
-  }
-  return hidden;
+function computeHiddenViews(enabledModules: Record<string, boolean>): ViewId[] {
+  // Only module gating drives navigation visibility. No feature-level
+  // permissions exist: when a module is enabled the user has full access.
+  return hiddenViewsForModules(enabledModules);
 }
 
-export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, theme, slug, enabledModules, staffRole, staffPermissions, children }: POSShellProps) {
+export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, theme, slug, enabledModules, children }: POSShellProps) {
   const { isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -63,7 +52,7 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
     }).catch(() => {});
   }, [authReady, slug]);
 
-  const hiddenViews = user ? computeHiddenViews(user, enabledModules, staffRole, staffPermissions) : [];
+  const hiddenViews = computeHiddenViews(enabledModules);
   const pathname = usePathname();
   const posPath = '/' + pathname.split('/').slice(3).join('/');
   const disabledRoutes = disabledRoutesForModules(enabledModules);

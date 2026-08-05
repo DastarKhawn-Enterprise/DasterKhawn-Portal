@@ -5,7 +5,6 @@ import { usePOS } from './pos-context';
 import { useUser } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { Badge, Button, ConfirmDialog, EmptyState, Modal, Skeleton, SkeletonTable } from '@sat-sys/ui';
-import { hasPermission } from './permissions';
 import { supa } from './supa-query';
 import { processExpense } from './payment-actions';
 import { useEvent, usePublish } from './use-event';
@@ -43,10 +42,8 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
   const publish = usePublish();
   const { user, isLoaded } = useUser();
-  const meta = user?.publicMetadata as Record<string, any> | undefined;
-  const perms = (meta?.permissions ?? []) as string[];
-  const role = (meta?.role ?? '') as string;
-  const canEdit = hasPermission(perms, role, 'settings:edit');
+  // The Expenses module gates this whole page; inside a module, full access.
+  const canEdit = true;
   const bd = useBusinessDate('expenses');
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
