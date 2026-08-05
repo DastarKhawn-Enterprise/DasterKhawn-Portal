@@ -27,7 +27,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, accentColor, mobi
   const posPath = '/' + pathname.split('/').slice(3).join('/');
   const activeView = viewIdForPath(posPath);
 
-  const [ordersOpen, setOrdersOpen] = useState(true);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ orders: true });
 
   const isActive = (id: ViewId) => activeView === id;
 
@@ -54,10 +54,11 @@ export default function Sidebar({ collapsed, onToggleCollapse, accentColor, mobi
       <div className="flex-1 overflow-y-auto scrollbar-hide">
         {visibleItems.map((item) => {
           if (item.children) {
+            const groupOpen = openGroups[item.id] !== false;
             return (
               <div key={item.id}>
                 <button
-                  onClick={() => setOrdersOpen(!ordersOpen)}
+                  onClick={() => setOpenGroups((prev) => ({ ...prev, [item.id]: !(prev[item.id] !== false) }))}
                   className={`flex items-center w-full px-4 py-2.5 text-sm transition-colors ${
                     isActive(item.id) || item.children?.some((c) => isActive(c.id))
                       ? 'font-semibold'
@@ -69,11 +70,11 @@ export default function Sidebar({ collapsed, onToggleCollapse, accentColor, mobi
                   {!collapsed && (
                     <>
                       <span className="ml-3 flex-1 text-left">{item.label}</span>
-                      <span className="text-xs text-gray-500">{ordersOpen ? '▾' : '▸'}</span>
+                      <span className="text-xs text-gray-500">{groupOpen ? '▾' : '▸'}</span>
                     </>
                   )}
                 </button>
-                {ordersOpen && !collapsed && item.children.map((child) => (
+                {groupOpen && !collapsed && item.children.map((child) => (
                   <Link
                     key={child.id}
                     href={navLink(child.path, slug)}

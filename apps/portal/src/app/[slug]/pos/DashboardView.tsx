@@ -5,7 +5,7 @@ import { useAuth } from '@clerk/nextjs';
 import type { ThemeConfig } from '@sat-sys/pos-ui';
 import { useEvent, usePublish } from './use-event';
 import { supa, supaBatch } from './supa-query';
-import { useBusinessDate } from './business-date-context';
+import { useBusinessDate, todayKey } from './business-date-context';
 import { resolveEnabledModules } from '@/lib/module-registry';
 import { Badge, Skeleton, SkeletonTable, orderStatusVariant } from '@sat-sys/ui';
 
@@ -35,6 +35,7 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
   const [orderTypes, setOrderTypes] = useState<OrderTypeRow[]>([]);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [wastage, setWastage] = useState({ todayQty: 0, todayCost: 0, monthQty: 0, monthCost: 0 });
   const totalsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bd = useBusinessDate('dashboard');
 
@@ -64,8 +65,6 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
     } catch (e) { console.error('[Dashboard] core fetch error:', e); }
   }, [slug, bd.start, bd.end]);
 
-  // Heavy widgets (completed-order totals + order-type split) — debounced so bursts of
-  // realtime events never block the dashboard with a 5000-row reload.
   const fetchTotals = useCallback(async () => {
     try {
       const start = bd.start;
@@ -89,10 +88,36 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
     } catch (e) { console.error('[Dashboard] totals fetch error:', e); }
   }, [slug, bd.start, bd.end]);
 
+  const fetchWastage = useCallback(async () => {
+    try {
+      const monthStart = todayKey().slice(0, 8) + '01';
+      const monthEnd = todayKey();
+      const r = await supa(slug, {
+        table: 'item_ledger', select: 'quantity_change, unit_cost, created_at',
+        eq: ['movement_type', 'wastage'],
+        gte: ['created_at', `${monthStart}T00:00:00.000Z`],
+        lte: ['created_at', `${monthEnd}T23:59:59.999Z`],
+        limit: 5000,
+      });
+      if (r.ok && r.data) {
+        const today = todayKey();
+        let todayQty = 0, todayCost = 0, monthQty = 0, monthCost = 0;
+        for (const w of r.data as any[]) {
+          const qty = Math.abs(Number(w.quantity_change) || 0);
+          const cost = qty * (Number(w.unit_cost) || 0);
+          monthQty += qty; monthCost += cost;
+          if ((w.created_at || '').slice(0, 10) === today) { todayQty += qty; todayCost += cost; }
+        }
+        setWastage({ todayQty, todayCost, monthQty, monthCost });
+      }
+    } catch (e) { console.error('[Dashboard] wastage fetch error:', e); }
+  }, [slug]);
+
   const refetchAll = useCallback(() => {
     fetchCore();
     fetchTotals();
-  }, [fetchCore, fetchTotals]);
+    fetchWastage();
+  }, [fetchCore, fetchTotals, fetchWastage]);
 
   // Realtime: fast widgets refresh immediately; heavy totals coalesce on a short debounce.
   const onRealtime = useCallback(() => {
@@ -115,6 +140,7 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
   const effModules = resolveEnabledModules(enabledModules);
   const showOpenTables = effModules.reservations !== false;
   const showKitchen = effModules.orders !== false;
+  const showWastage = effModules.inventory !== false;
   useEffect(() => {
     if (!authReady) return;
     refetchAll();
@@ -123,6 +149,7 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
   // Realtime subscriptions — fast widgets refresh instantly; heavy totals coalesce
   useEvent('orders', onRealtime);
   useEvent('tables', onRealtime);
+  useEvent('item_ledger', () => { if (bd.isToday) fetchWastage(); });
   const publish = usePublish();
 
   if (!isLoaded || !authReady) {
@@ -170,6 +197,26 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
               <p className="text-xs text-gray-400 mt-1">per completed order</p>
             </div>
           </div>
+
+          {showWastage && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="bg-red-50 rounded-xl border border-red-200 p-4">
+              <p className="text-xs text-red-500 uppercase tracking-wider mb-1">Today&apos;s Wastage</p>
+              <p className="text-2xl font-medium text-red-700">{wastage.todayQty}</p>
+              <p className="text-xs text-red-400 mt-1">{currencySymbol}{wastage.todayCost.toFixed(2)} cost</p>
+            </div>
+            <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
+              <p className="text-xs text-amber-600 uppercase tracking-wider mb-1">This Month Wastage</p>
+              <p className="text-2xl font-medium text-amber-700">{wastage.monthQty}</p>
+              <p className="text-xs text-amber-500 mt-1">{currencySymbol}{wastage.monthCost.toFixed(2)} cost</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Wastage Cost (Month)</p>
+              <p className="text-2xl font-medium text-gray-800">{currencySymbol}{wastage.monthCost.toFixed(2)}</p>
+              <p className="text-xs text-gray-400 mt-1">based on latest unit cost</p>
+            </div>
+          </div>
+          )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           {showOpenTables && (

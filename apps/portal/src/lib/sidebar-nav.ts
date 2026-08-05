@@ -21,6 +21,7 @@ export type ViewId =
   | 'menu'
   | 'inventory'
   | 'item-ledger'
+  | 'wastage-management'
   | 'customers'
   | 'reports'
   | 'expenses'
@@ -61,8 +62,18 @@ export const SIDEBAR_NAV: SidebarNavItem[] = [
   { id: 'third-party', label: 'Third Party', icon: '🤝', path: '/third-party', isModule: false },
   { id: 'reservations', label: 'Reservations', icon: '📋', path: '/reservations' },
   { id: 'menu', label: 'Menu', icon: '📖', path: '/menu' },
-  { id: 'inventory', label: 'Inventory', icon: '📦', path: '/inventory' },
-  { id: 'item-ledger', label: 'Item Ledger', icon: '📋', path: '/item-ledger' },
+  {
+    id: 'inventory',
+    label: 'Inventory',
+    icon: '📦',
+    path: '/inventory',
+    isModule: true,
+    children: [
+      { id: 'inventory', label: 'Inventory', path: '/inventory', isModule: false },
+      { id: 'item-ledger', label: 'Item Ledger', path: '/item-ledger', isModule: true },
+      { id: 'wastage-management', label: 'Wastage Management', path: '/wastage-management', isModule: false },
+    ],
+  },
   { id: 'customers', label: 'Customers', icon: '👥', path: '/customers' },
   { id: 'reports', label: 'Reports', icon: '📊', path: '/reports' },
   { id: 'expenses', label: 'Expenses', icon: '💰', path: '/expenses' },

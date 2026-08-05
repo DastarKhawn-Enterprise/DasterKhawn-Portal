@@ -15,6 +15,7 @@ export const POS_PATH_TO_PAGE_KEY: Record<string, string> = {
   '/customers': 'customers',
   '/item-ledger': 'item-ledger',
   '/inventory': 'inventory',
+  '/wastage-management': 'wastage-management',
   '/reservations': 'reservations',
   '/menu': 'menu',
   '/settings': 'settings',

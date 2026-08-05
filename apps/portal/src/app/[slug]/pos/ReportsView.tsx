@@ -11,22 +11,23 @@ import { resolveEnabledModules } from '@/lib/module-registry';
 import { DonutChart, BarChart, LineChart, Heatmap } from './reports-charts';
 import {
   getOverviewData, getSalesData, getOrdersData, getItemsData,
-  getInventoryData, getStaffData, getCustomersData, getPnLData,
+  getInventoryData, getStaffData, getCustomersData, getPnLData, getWastageReports,
 } from './reports-actions';
 import type {
   OverviewData, SalesData, OrdersData, ItemsData,
-  InventoryData, StaffData, CustomerData, PnLData, DateRange, ReportFilters,
+  InventoryData, StaffData, CustomerData, PnLData, DateRange, ReportFilters, WastageReportData,
 } from './reports-actions';
 
 interface Props { slug: string; theme: ThemeConfig; currencySymbol: string }
 
-type TabId = 'overview' | 'sales' | 'orders' | 'items' | 'inventory' | 'staff' | 'customers' | 'pnl';
+type TabId = 'overview' | 'sales' | 'orders' | 'items' | 'inventory' | 'staff' | 'customers' | 'pnl' | 'wastage';
 const TABS: { id: TabId; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'sales', label: 'Sales' },
   { id: 'orders', label: 'Orders' },
   { id: 'items', label: 'Items' },
   { id: 'inventory', label: 'Inventory' },
+  { id: 'wastage', label: 'Wastage' },
   { id: 'staff', label: 'Staff' },
   { id: 'customers', label: 'Customers' },
   { id: 'pnl', label: 'Profit & Loss' },
@@ -39,6 +40,7 @@ const TAB_MODULE: Record<TabId, string> = {
   orders: 'reports',
   items: 'reports',
   inventory: 'inventory',
+  wastage: 'inventory',
   staff: 'staff',
   customers: 'customers',
   pnl: 'reports',
@@ -73,6 +75,7 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
   const [staff, setStaff] = useState<StaffData | null>(null);
   const [customers, setCustomers] = useState<CustomerData | null>(null);
   const [pnl, setPnl] = useState<PnLData | null>(null);
+  const [wastage, setWastage] = useState<WastageReportData | null>(null);
 
   const dr = useMemo<DateRange>(() => ({ start: bd.start, end: bd.end }), [bd.start, bd.end]);
 
@@ -88,6 +91,7 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
         case 'staff': setStaff(await getStaffData(slug, dr)); break;
         case 'customers': setCustomers(await getCustomersData(slug, dr)); break;
         case 'pnl': setPnl(await getPnLData(slug, dr)); break;
+        case 'wastage': setWastage(await getWastageReports(slug, dr)); break;
       }
     } catch (e) { console.error('Reports fetch error:', e); }
     setLoading(false);
@@ -152,6 +156,9 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
     } else if (tab === 'inventory' && inventory) {
       csv = 'Stock Value,Low Stock Items,Out of Stock\n' +
         `${inventory.stockValue},${inventory.lowStockItems.length},${inventory.outOfStockItems.length}\n`;
+    } else if (tab === 'wastage' && wastage) {
+      csv = 'Item,Qty,Amount\n' +
+        wastage.byItem.map((i) => `"${i.name}",${i.qty},${i.amount.toFixed(2)}`).join('\n');
     }
 
     if (!csv) { csv = `Reports Export - ${tab}\nDate Range: ${s.start} to ${s.end}\n`; }
@@ -160,7 +167,7 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = `report-${tab}-${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-  }, [tab, overview, orders, sales, items, staff, customers, pnl, inventory, dr]);
+  }, [tab, overview, orders, sales, items, staff, customers, pnl, inventory, wastage, dr]);
 
   const handlePrint = useCallback(() => {
     window.print();
@@ -205,8 +212,9 @@ export default function ReportsView({ slug, theme, currencySymbol }: Props) {
         {!loading && tab === 'staff' && staff && <StaffTab data={staff} currencySymbol={currencySymbol} />}
         {!loading && tab === 'customers' && customers && <CustomersTab data={customers} currencySymbol={currencySymbol} />}
         {!loading && tab === 'pnl' && pnl && <PnLTab data={pnl} currencySymbol={currencySymbol} />}
+        {!loading && tab === 'wastage' && wastage && <WastageTab data={wastage} currencySymbol={currencySymbol} theme={theme} />}
 
-        {!loading && !overview && !sales && !orders && !items && !inventory && !staff && !customers && !pnl && (
+        {!loading && !overview && !sales && !orders && !items && !inventory && !staff && !customers && !pnl && !wastage && (
           <p className="text-gray-400 text-sm text-center py-12">Select a date range and tab to view reports.</p>
         )}
 
@@ -667,6 +675,101 @@ function PnLTab({ data, currencySymbol }: { data: PnLData; currencySymbol: strin
           <Row label="Net Profit / Loss" value={data.netProfit} currencySymbol={currencySymbol} bold large />
           <Row label="Net Margin" value={netMargin} suffix="%" />
         </div>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Wastage Tab ───
+function WastageTab({ data, currencySymbol, theme }: { data: WastageReportData; currencySymbol: string; theme: ThemeConfig }) {
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card><Stat label="Total Wasted Qty" value={data.summary.totalQty} /></Card>
+        <Card><Stat label="Wastage Cost" value={fmt(data.summary.totalAmount, currencySymbol)} /></Card>
+        <Card><Stat label="Entries" value={data.summary.entries} /></Card>
+        <Card><Stat label="Top Wasted Item" value={data.topItems[0]?.name || '—'} /></Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card title="By Item">
+          {data.byItem.length === 0 ? <p className="text-gray-400 text-sm text-center py-4">No wastage recorded</p> : (
+            <table className="w-full text-xs">
+              <thead><tr className="text-gray-500 border-b"><th className="text-left py-1.5 font-medium">Item</th><th className="text-right py-1.5 font-medium">Qty</th><th className="text-right py-1.5 font-medium">Cost</th></tr></thead>
+              <tbody>
+                {data.byItem.slice(0, 20).map((i, idx) => (
+                  <tr key={idx} className="border-b border-gray-100">
+                    <td className="py-1 font-medium">{i.name}</td>
+                    <td className="py-1 text-right">{i.qty} {i.unit}</td>
+                    <td className="py-1 text-right">{currencySymbol}{i.amount.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+
+        <Card title="By Reason">
+          {data.byReason.length === 0 ? <p className="text-gray-400 text-sm text-center py-4">No wastage recorded</p> : (
+            data.byReason.map((d) => {
+              const total = data.byReason.reduce((s, r) => s + r.amount, 0);
+              return (
+                <div key={d.label} className="flex items-center gap-2 text-xs py-0.5">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />
+                  <span className="w-32 truncate text-gray-600">{d.label}</span>
+                  <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${total > 0 ? (d.amount / total) * 100 : 0}%`, backgroundColor: d.color }} />
+                  </div>
+                  <span className="w-20 text-right font-medium">{currencySymbol}{d.amount.toFixed(0)}</span>
+                  <span className="w-12 text-right text-gray-500">{total > 0 ? ((d.amount / total) * 100).toFixed(1) : 0}%</span>
+                </div>
+              );
+            })
+          )}
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card title="By Category">
+          {data.byCategory.length === 0 ? <p className="text-gray-400 text-sm text-center py-4">No wastage recorded</p> : (
+            data.byCategory.map((d) => {
+              const total = data.byCategory.reduce((s, r) => s + r.amount, 0);
+              return (
+                <div key={d.label} className="flex items-center gap-2 text-xs py-0.5">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />
+                  <span className="w-32 truncate text-gray-600">{d.label}</span>
+                  <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${total > 0 ? (d.amount / total) * 100 : 0}%`, backgroundColor: d.color }} />
+                  </div>
+                  <span className="w-20 text-right font-medium">{currencySymbol}{d.amount.toFixed(0)}</span>
+                  <span className="w-12 text-right text-gray-500">{total > 0 ? ((d.amount / total) * 100).toFixed(1) : 0}%</span>
+                </div>
+              );
+            })
+          )}
+        </Card>
+
+        <Card title="By Employee">
+          {data.byEmployee.length === 0 ? <p className="text-gray-400 text-sm text-center py-4">No wastage recorded</p> : (
+            <table className="w-full text-xs">
+              <thead><tr className="text-gray-500 border-b"><th className="text-left py-1.5 font-medium">Employee</th><th className="text-right py-1.5 font-medium">Cost</th></tr></thead>
+              <tbody>
+                {data.byEmployee.map((e, idx) => (
+                  <tr key={idx} className="border-b border-gray-100">
+                    <td className="py-1 font-medium">{e.name}</td>
+                    <td className="py-1 text-right">{currencySymbol}{e.amount.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      </div>
+
+      <Card title="Wastage by Day">
+        {data.byDate.length === 0 ? <p className="text-gray-400 text-sm text-center py-4">No wastage recorded</p> : (
+          <BarChart data={data.byDate.length > 0 ? data.byDate : [{ label: 'No data', value: 0 }]} height={160} format={(v) => `${currencySymbol}${v.toFixed(0)}`} barColor="var(--chart-3)" />
+        )}
       </Card>
     </div>
   );

@@ -19,6 +19,7 @@ const PATH_TO_VIEW: Record<string, string> = {
   '/menu': 'menu',
   '/inventory': 'inventory',
   '/item-ledger': 'item-ledger',
+  '/wastage-management': 'wastage-management',
   '/customers': 'customers',
   '/reports': 'reports',
   '/expenses': 'expenses',

@@ -73,6 +73,16 @@ export interface PnLData {
   expenseBreakdown: { category: string; amount: number }[];
 }
 
+export interface WastageReportData {
+  summary: { totalQty: number; totalAmount: number; entries: number };
+  byItem: { name: string; unit: string; qty: number; amount: number }[];
+  byCategory: { label: string; qty: number; amount: number; color: string }[];
+  byReason: { label: string; qty: number; amount: number; color: string }[];
+  byEmployee: { name: string; qty: number; amount: number }[];
+  byDate: { label: string; value: number }[];
+  topItems: { name: string; qty: number; amount: number }[];
+}
+
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16'];
 const ORDER_COLORS: Record<string, string> = { dine_in: '#3b82f6', takeaway: '#10b981', delivery: '#f59e0b', drive_thru: '#8b5cf6', third_party: '#ec4899' };
 const PAYMENT_COLORS: Record<string, string> = {
@@ -546,6 +556,82 @@ export async function getPnLData(slug: string, dr: DateRange): Promise<PnLData> 
     totalSales, discounts, netSales, taxCollected, serviceCharge, cogs, grossProfit,
     expenses, netProfit,
     expenseBreakdown: Object.entries(expenseBreakdown).map(([category, amount]) => ({ category, amount })),
+  };
+}
+
+function extractTag(notes: string | null | undefined, tag: string): string {
+  if (!notes) return '';
+  const m = notes.match(new RegExp(`${tag}:\\s*([^·;|]*?)(?:\\s*·|\\s*;|\\s*$)`));
+  return m ? m[1].trim() : '';
+}
+
+export async function getWastageReports(slug: string, dr: DateRange): Promise<WastageReportData> {
+  const { start, end } = dr;
+  const [ledgerRes, invRes] = await Promise.all([
+    supa(slug, {
+      table: 'item_ledger', select: 'inventory_item_id, quantity_change, total_cost, unit_cost, notes, created_by, created_at',
+      eq: ['movement_type', 'wastage'],
+      gte: ['created_at', start], lte: ['created_at', end], limit: 20000,
+    }),
+    supa(slug, { table: 'inventory_items', select: 'id, name, unit', limit: 5000 }),
+  ]);
+
+  const items = invRes.ok && invRes.data ? invRes.data : [];
+  const itemMap = new Map<string, { name: string; unit: string }>();
+  for (const it of items) itemMap.set(it.id, { name: it.name || it.id, unit: it.unit || '' });
+
+  const rows = ledgerRes.ok && ledgerRes.data ? ledgerRes.data : [];
+  let totalQty = 0;
+  let totalAmount = 0;
+
+  const itemAgg = new Map<string, number>();
+  const catAgg = new Map<string, number>();
+  const reasonAgg = new Map<string, number>();
+  const empAgg = new Map<string, number>();
+  const dateAgg = new Map<string, number>();
+  const costOf = new Map<string, number>();
+
+  // Latest recorded per-unit cost per item (fallback when a row has no unit_cost).
+  for (const r of rows) {
+    if (r.unit_cost != null && Number(r.unit_cost) > 0) costOf.set(r.inventory_item_id, Number(r.unit_cost));
+  }
+
+  for (const r of rows) {
+    const qty = Math.abs(Number(r.quantity_change ?? 0));
+    const unitCost = Number(r.unit_cost) || costOf.get(r.inventory_item_id) || 0;
+    const amount = qty * unitCost;
+    totalQty += qty;
+    totalAmount += amount;
+    itemAgg.set(r.inventory_item_id, (itemAgg.get(r.inventory_item_id) || 0) + qty);
+    const cat = extractTag(r.notes, 'Category') || 'Uncategorized';
+    catAgg.set(cat, (catAgg.get(cat) || 0) + amount);
+    const reason = extractTag(r.notes, 'Reason') || 'Other';
+    reasonAgg.set(reason, (reasonAgg.get(reason) || 0) + amount);
+    const emp = extractTag(r.notes, 'Employee') || r.created_by || 'Unknown';
+    empAgg.set(emp, (empAgg.get(emp) || 0) + amount);
+    const d = (r.created_at || '').split('T')[0];
+    dateAgg.set(d, (dateAgg.get(d) || 0) + amount);
+  }
+
+  const byItem = Array.from(itemAgg.entries()).map(([id, q]) => {
+    const meta = itemMap.get(id) || { name: id, unit: '' };
+    const unitCost = costOf.get(id) || 0;
+    return { name: meta.name, unit: meta.unit, qty: q, amount: unitCost > 0 ? q * unitCost : 0 };
+  }).filter((i) => i.qty > 0).sort((a, b) => b.amount - a.amount);
+
+  const byCategory = Array.from(catAgg.entries()).map(([label, value], i) => ({ label, qty: 0, amount: value, color: COLORS[i % COLORS.length] })).sort((a, b) => b.amount - a.amount);
+  const byReason = Array.from(reasonAgg.entries()).map(([label, value], i) => ({ label, qty: 0, amount: value, color: COLORS[i % COLORS.length] })).sort((a, b) => b.amount - a.amount);
+  const byEmployee = Array.from(empAgg.entries()).map(([name, amount]) => ({ name, qty: 0, amount })).sort((a, b) => b.amount - a.amount);
+  const byDate = Array.from(dateAgg.entries()).map(([label, value]) => ({ label: label.slice(5), value })).sort((a, b) => a.label.localeCompare(b.label));
+
+  return {
+    summary: { totalQty, totalAmount, entries: rows.length },
+    byItem: byItem.slice(0, 50),
+    byCategory: byCategory.slice(0, 20),
+    byReason,
+    byEmployee: byEmployee.slice(0, 20),
+    byDate,
+    topItems: byItem.slice(0, 10).map((i) => ({ name: i.name, qty: i.qty, amount: i.amount })),
   };
 }
 
