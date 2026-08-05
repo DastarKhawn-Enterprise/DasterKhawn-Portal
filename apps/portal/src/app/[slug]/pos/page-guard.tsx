@@ -2,31 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { usePOS } from './pos-context';
-
-const PATH_TO_VIEW: Record<string, string> = {
-  '/dashboard': 'dashboard',
-  '/orders': 'current-orders',
-  '/orders/new': 'orders-new',
-  '/orders/completed': 'orders-completed',
-  '/orders/cancelled': 'orders-cancelled',
-  '/orders/draft': 'orders-draft',
-  '/dine-in': 'dine-in',
-  '/take-away': 'take-away',
-  '/delivery': 'delivery',
-  '/drive-thru': 'drive-thru',
-  '/third-party': 'third-party',
-  '/reservations': 'reservations',
-  '/menu': 'menu',
-  '/inventory': 'inventory',
-  '/item-ledger': 'item-ledger',
-  '/wastage-management': 'wastage-management',
-  '/customers': 'customers',
-  '/reports': 'reports',
-  '/expenses': 'expenses',
-  '/accounts': 'accounts',
-  '/staff': 'staff',
-  '/settings': 'settings',
-};
+import { viewIdForPath } from '@/lib/sidebar-nav';
 
 export function usePageGuard() {
   const { hiddenViews, slug } = usePOS();
@@ -34,7 +10,7 @@ export function usePageGuard() {
   const router = useRouter();
 
   const posPath = '/' + pathname.split('/').slice(3).join('/');
-  const viewId = PATH_TO_VIEW[posPath];
+  const viewId = viewIdForPath(posPath);
 
   if (viewId && hiddenViews.includes(viewId)) {
     router.replace(`/${slug}/pos/dashboard`);

@@ -1,81 +1,73 @@
-/* Single source of truth for modules across the platform.
-   A module is EXACTLY one sidebar tab. The list is derived from the sidebar
-   navigation configuration (lib/sidebar-nav.ts) so there is always a 1:1
-   relationship between a visible sidebar tab and its ON/OFF toggle.
+/* ============================================================================
+   MODULE REGISTRY — derived 100% from lib/sidebar-nav.ts.
 
-   - Order types (Dine In, Take Away, Delivery, Drive Thru, Third Party) are
-     sidebar entries but are NOT modules.
-   - Order status sub-tabs (Completed, Cancelled, Draft) are NOT modules; they
-     are covered by the "Orders" module.
-   - There are no feature-level permissions (no Create/Edit/Delete/Print/etc.).
-     When a module is enabled, the user has access to everything inside it.
+   There is no second module list here. The navigation configuration is the
+   single source of truth: every sidebar tab (except namespace groups) is a
+   module, and this file turns that nav tree into the flat module definitions
+   used by Module Management, permissions, route guards, and every surface.
 
-   Future-proofing: this registry is intentionally kept small so a granular
-   permission model (Inventory.View / Inventory.Edit / ...) can be layered on
-   later without reworking the module concept. */
+   PERMISSION semantics: a module maps to a feature-level permission key. When
+   a module is enabled the user has access to everything inside it; the
+   permission key is metadata (for the access panel) sourced from the registry.
+   ========================================================================== */
 
 import type { SidebarNavItem, ViewId } from './sidebar-nav';
 import { SIDEBAR_NAV } from './sidebar-nav';
 
 export interface ModuleDef {
+  /** Unique module ID == sidebar tab id. */
   key: string;
   label: string;
   description: string;
-  /** Effective default when the tenant record has no stored value for this key. */
+  /** Effective default when the tenant has no stored value for this key. */
   defaultEnabled: boolean;
-  /** Sidebar views hidden when this module is disabled. */
+  /** Sidebar views hidden when this module is disabled (always just itself). */
   views: ViewId[];
   /** POS-relative routes blocked when this module is disabled. */
   routes: string[];
+  /** Feature-level permission key that gates this module. */
+  permission: string | null;
+  /** Sidebar namespace parent id ('' for root modules). */
+  parent: ViewId | '';
+  /** Ordering within the parent group. */
+  sort: number;
+  /** Future feature-flag name (empty when unused). */
+  feature: string;
+  /** Sidebar icon. */
+  icon?: string;
 }
 
-/**
- * Expand one sidebar nav item into module coverage.
- * - A plain item covers itself.
- * - A group covers the group plus all children that are NOT themselves modules
- *   (e.g. "Orders" covers Current Orders / Completed / Cancelled / Draft).
- */
-function expandItem(item: SidebarNavItem): { views: ViewId[]; routes: string[] } {
-  if (!item.children) {
-    return { views: [item.id], routes: [item.path] };
-  }
-  const views: ViewId[] = [item.id];
-  const routes: string[] = [item.path];
-  for (const child of item.children) {
-    if (child.isModule === false) {
-      views.push(child.id);
-      routes.push(child.path);
-    }
-  }
-  return { views, routes };
+function buildModule(item: SidebarNavItem): ModuleDef {
+  return {
+    key: item.id,
+    label: item.label,
+    description: item.description || `${item.label} module.`,
+    defaultEnabled: true,
+    views: [item.id],
+    routes: [item.path],
+    permission: item.permission ?? null,
+    parent: item.parent ?? '',
+    sort: item.sort ?? 1000,
+    feature: item.feature ?? '',
+    icon: item.icon,
+  };
 }
 
-/** Every sidebar tab that is a module, in sidebar order. */
+/** Every module in sidebar order. Namespace groups (isModule:false) are skipped. */
 export const MODULES: ModuleDef[] = (() => {
   const out: ModuleDef[] = [];
   for (const item of SIDEBAR_NAV) {
-    if (item.isModule === false) continue;
-    const { views, routes } = expandItem(item);
-    out.push({
-      key: item.id,
-      label: item.label,
-      description: `${item.label} module.`,
-      defaultEnabled: true,
-      views,
-      routes,
-    });
-    // Child nav items that are their own modules (e.g. New Order).
-    for (const child of item.children || []) {
-      if (child.isModule === true) {
-        out.push({
-          key: child.id,
-          label: child.label,
-          description: `${child.label} module.`,
-          defaultEnabled: true,
-          views: [child.id],
-          routes: [child.path],
-        });
+    if (item.isModule === false) {
+      // Namespace group (Orders / Inventory): its children are independent modules.
+      for (const child of item.children || []) {
+        if (child.isModule === false) continue;
+        out.push(buildModule(child));
       }
+      continue;
+    }
+    out.push(buildModule(item));
+    for (const child of item.children || []) {
+      if (child.isModule === true) out.push(buildModule(child));
     }
   }
   return out;
@@ -89,6 +81,16 @@ export const MODULE_GROUPS: { label: string; keys: string[] }[] = [
 ];
 
 export const MODULE_LABELS: Record<string, string> = Object.fromEntries(MODULES.map((m) => [m.key, m.label]));
+
+/** Permission key per module (reads from the registry). */
+export function modulePermission(moduleId: string): string | null {
+  return MODULE_BY_KEY[moduleId]?.permission ?? null;
+}
+
+/** Feature-flag name per module (future-proofing). */
+export function moduleFeature(moduleId: string): string {
+  return MODULE_BY_KEY[moduleId]?.feature ?? '';
+}
 
 /** Default state for every known module key presented to the admin editor. */
 export function defaultModules(): Record<string, boolean> {
@@ -128,18 +130,30 @@ export function disabledRoutesForModules(raw: Record<string, boolean> | undefine
   return routes;
 }
 
-export function effectiveDetailed(raw: Record<string, boolean> | undefined): Record<string, { enabled: boolean; dependencyBlocked: boolean; label: string; description: string; category: string; locked: boolean; dependencies: string[] }> {
+/** Enabled/disabled status for a single module key. */
+export function moduleEnabled(modules: Record<string, boolean> | undefined, key: string): boolean {
+  return resolveEnabledModules(modules)[key] !== false;
+}
+
+/** Rich per-module state used by the admin Module Management editor. */
+export function effectiveDetailed(raw: Record<string, boolean> | undefined): Record<string, {
+  enabled: boolean; dependencyBlocked: boolean; label: string; description: string;
+  permission: string | null; parent: ViewId | ''; sort: number; feature: string; icon?: string;
+}> {
   const effective = resolveEnabledModules(raw);
   const out: Record<string, any> = {};
   for (const m of MODULES) {
     out[m.key] = {
+      key: m.key,
       enabled: effective[m.key],
       dependencyBlocked: false,
       label: m.label,
       description: m.description,
-      category: 'Modules',
-      locked: false,
-      dependencies: [],
+      permission: m.permission,
+      parent: m.parent,
+      sort: m.sort,
+      feature: m.feature,
+      icon: m.icon,
     };
   }
   return out;

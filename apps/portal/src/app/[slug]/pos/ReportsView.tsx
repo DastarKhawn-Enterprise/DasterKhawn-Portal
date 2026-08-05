@@ -40,7 +40,7 @@ const TAB_MODULE: Record<TabId, string> = {
   orders: 'reports',
   items: 'reports',
   inventory: 'inventory',
-  wastage: 'inventory',
+  wastage: 'wastage-management',
   staff: 'staff',
   customers: 'customers',
   pnl: 'reports',

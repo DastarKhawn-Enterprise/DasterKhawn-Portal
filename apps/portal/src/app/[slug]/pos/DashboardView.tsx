@@ -139,8 +139,8 @@ export default function DashboardView({ theme, slug, currencySymbol }: Props) {
   useEffect(() => { setPageTitle('Dashboard'); }, [setPageTitle]);
   const effModules = resolveEnabledModules(enabledModules);
   const showOpenTables = effModules.reservations !== false;
-  const showKitchen = effModules.orders !== false;
-  const showWastage = effModules.inventory !== false;
+  const showKitchen = effModules['current-orders'] !== false;
+  const showWastage = effModules['wastage-management'] !== false;
   useEffect(() => {
     if (!authReady) return;
     refetchAll();

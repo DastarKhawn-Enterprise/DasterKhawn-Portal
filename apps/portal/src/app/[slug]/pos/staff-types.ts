@@ -1,3 +1,5 @@
+import { MODULES } from '@/lib/module-registry';
+
 export interface StaffMeta {
   phone?: string;
   employment_status?: string;
@@ -132,24 +134,23 @@ export function getAllPermissions(): PermissionDef[] {
   return ALL_PERMISSIONS;
 }
 
-export const PERMISSION_PAGES = [
-  { key: 'dashboard', label: 'Dashboard', perm: null },
-  { key: 'pos', label: 'POS', perm: 'orders:create' },
-  { key: 'orders', label: 'Orders', perm: 'orders:view' },
-  { key: 'kitchen', label: 'Kitchen Display', perm: 'orders:view' },
-  { key: 'tables', label: 'Table Management', perm: 'orders:create' },
-  { key: 'menu', label: 'Menu Management', perm: 'menu:view' },
-  { key: 'inventory', label: 'Inventory', perm: 'menu:edit' },
-  { key: 'item-ledger', label: 'Item Ledger', perm: 'menu:edit' },
-  { key: 'customers', label: 'Customers', perm: 'customers:view' },
-  { key: 'staff', label: 'Staff Management', perm: 'staff:manage' },
-  { key: 'accounts', label: 'Accounts', perm: 'accounts:view' },
-  { key: 'expenses', label: 'Expenses', perm: 'settings:edit' },
-  { key: 'reports', label: 'Reports', perm: 'reports:view' },
-  { key: 'settings', label: 'Settings', perm: 'settings:edit' },
-  { key: 'reservations', label: 'Reservations', perm: 'orders:create' },
-  { key: 'third-party', label: 'Third Party', perm: 'orders:create' },
-];
+export const PERMISSION_PAGES = (() => {
+  // Page access comes from the SINGLE SOURCE OF TRUTH (lib/sidebar-nav.ts via
+  // lib/module-registry.ts): every module yields one access row using its own
+  // permission key. Extra non-module surfaces (POS / Kitchen / Tables) are
+  // appended and keep their legacy permission mapping.
+  const fromRegistry = MODULES.map((m) => ({
+    key: m.key,
+    label: m.label,
+    perm: m.permission ?? null,
+  }));
+  const extra: { key: string; label: string; perm: string | null }[] = [
+    { key: 'pos', label: 'POS', perm: 'orders:create' },
+    { key: 'kitchen', label: 'Kitchen Display', perm: 'orders:view' },
+    { key: 'tables', label: 'Table Management', perm: 'orders:create' },
+  ];
+  return [...fromRegistry, ...extra];
+})();
 
 export interface CreateStaffData {
   email: string;
