@@ -100,26 +100,26 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
       <BusinessDateProvider>
       <div className="h-screen h-dvh flex flex-col overflow-hidden">
 <header className="flex items-center justify-between px-4 py-2.5 bg-navbar border-b border-navbar-border flex-shrink-0">
-          <div className="flex items-center gap-3 text-navbar-foreground">
+          <div className="flex items-center gap-3 min-w-0 text-navbar-foreground">
             <button
               onClick={() => setMobileSidebarOpen(true)}
-              className="md:hidden text-xl p-1 rounded hover:bg-surface-hover"
+              className="md:hidden text-xl p-1 rounded hover:bg-surface-hover flex-shrink-0"
             >
               ☰
             </button>
-            <span className="text-lg font-bold">{brandName}</span>
-            {pageTitle && <><span className="text-input-border mx-1.5 text-sm">/</span><span className="text-sm font-medium text-text-secondary truncate max-w-[200px]">{pageTitle}</span></>}
+            <span className="text-lg font-bold truncate whitespace-nowrap">{brandName}</span>
+            {pageTitle && <><span className="text-input-border mx-1.5 text-sm whitespace-nowrap">/</span><span className="text-sm font-medium text-text-secondary truncate max-w-[200px] whitespace-nowrap">{pageTitle}</span></>}
             {(user?.publicMetadata as Record<string, any> | undefined)?.role === 'super_admin' && (
               <a
                 href="/dashboard"
-                className="ml-2 px-3 py-1 text-xs font-medium rounded border bg-surface hover:bg-surface-secondary transition-colors"
+                className="ml-2 px-3 py-1 text-xs font-medium rounded border bg-surface hover:bg-surface-secondary transition-colors whitespace-nowrap flex-shrink-0"
                 style={{ borderColor: theme.primaryColor, color: theme.primaryColor }}
               >
                 ← All POS
               </a>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-shrink-0">
             <input
               type="text"
               placeholder="Search menu, orders..."

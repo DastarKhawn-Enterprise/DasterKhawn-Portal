@@ -380,7 +380,7 @@ export default function StaffManagementView({ slug }: Props) {
             <div className="p-8"><Skeleton variant="table" rows={4} cols={6} /></div>
           ) : (
             <>
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden max-sm:hidden">
+              <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto max-sm:hidden">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-200 text-gray-400 text-xs uppercase tracking-wider">
@@ -459,14 +459,14 @@ export default function StaffManagementView({ slug }: Props) {
                       onClick={() => { setSelectedStaff(s); setMobileDrawerOpen(true); }}
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-sm font-bold text-gray-600">{initials(s.name)}</div>
-                          <div>
-                            <div className="font-medium text-gray-800 text-sm">{s.name}{isCurrent && <span className="text-xs text-gray-400 ml-1">(You)</span>}</div>
-                            <div className="text-xs text-gray-500">{s.email || s.phone || ''}</div>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-sm font-bold text-gray-600 flex-shrink-0">{initials(s.name)}</div>
+                          <div className="min-w-0">
+                            <div className="font-medium text-gray-800 text-sm truncate">{s.name}{isCurrent && <span className="text-xs text-gray-400 ml-1">(You)</span>}</div>
+                            <div className="text-xs text-gray-500 truncate">{s.email || s.phone || ''}</div>
                           </div>
                         </div>
-                        <StatusBadge status={status} />
+                        <span className="flex-shrink-0"><StatusBadge status={status} /></span>
                       </div>
                       <div className="flex items-center gap-2">
                         <RoleBadge role={s.role} />

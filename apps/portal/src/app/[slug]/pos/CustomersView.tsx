@@ -460,7 +460,7 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
                   </button>
                 </div>
                 {/* Sort row */}
-                <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-100 text-xs text-gray-500">
+                <div className="flex items-center flex-wrap gap-3 mt-2 pt-2 border-t border-gray-100 text-xs text-gray-500">
                   <span className="text-gray-400">Sort:</span>
                   {(['name', 'created_at', 'total_orders', 'total_spent', 'last_order_date'] as SortField[]).map(f => (
                     <button key={f} onClick={() => toggleSort(f)}
@@ -552,15 +552,15 @@ export default function CustomersView({ slug, theme, loyaltyPointsEnabled = true
                   customers.map((c) => (
                     <div key={c.id} className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:bg-gray-50" onClick={() => openProfile(c)}>
                       <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
                           <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0"
                             style={{ backgroundColor: avatarColor(c.name) }}>{initials(c.name)}</div>
-                          <div>
-                            <div className="font-medium text-gray-800">{c.name}</div>
-                            <div className="text-xs text-gray-400">{c.phone || 'No phone'}</div>
+                          <div className="min-w-0">
+                            <div className="font-medium text-gray-800 truncate">{c.name}</div>
+                            <div className="text-xs text-gray-400 truncate">{c.phone || 'No phone'}</div>
                           </div>
                         </div>
-                        <Badge variant={c.status === 'active' ? 'success' : 'neutral'} size="sm" pill>{c.status === 'active' ? 'Active' : 'Inactive'}</Badge>
+                        <Badge variant={c.status === 'active' ? 'success' : 'neutral'} size="sm" pill className="flex-shrink-0">{c.status === 'active' ? 'Active' : 'Inactive'}</Badge>
                       </div>
                       <div className="flex gap-4 text-sm text-gray-600 mt-2">
                         <div><span className="text-gray-400">Orders:</span> <span className="font-medium">{c.total_orders}</span></div>

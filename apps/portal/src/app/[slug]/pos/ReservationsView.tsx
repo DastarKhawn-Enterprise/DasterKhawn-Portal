@@ -223,8 +223,8 @@ export default function ReservationsView({ slug, theme }: Props) {
               {filteredReservations.map((r) => (
                 <div key={r.id} className={`bg-white rounded-lg shadow-sm border p-4 ${r.status !== 'confirmed' ? 'opacity-60' : ''}`}>
                   <div className="flex items-start justify-between mb-2">
-                    <div><div className="text-sm font-semibold text-gray-800">{r.guest_name}</div><div className="text-xs text-gray-500">{r.guest_phone || '—'}</div></div>
-                    <Badge variant={reservationStatusVariant(r.status)} size="sm" pill>{STATUS_LABELS[r.status]}</Badge>
+                    <div className="min-w-0"><div className="text-sm font-semibold text-gray-800 truncate">{r.guest_name}</div><div className="text-xs text-gray-500 truncate">{r.guest_phone || '—'}</div></div>
+                    <Badge variant={reservationStatusVariant(r.status)} size="sm" pill className="flex-shrink-0">{STATUS_LABELS[r.status]}</Badge>
                   </div>
                   <div className="text-xs text-gray-500 mb-2">{r.reservation_date} · {r.reservation_time.slice(0, 5)} · {r.party_size} {r.party_size === 1 ? 'guest' : 'guests'}</div>
                   <div className="text-xs text-gray-500 mb-2">Table: {r.table_id ? (r.tables?.table_number || '—') : <span className="italic">Unassigned</span>}</div>

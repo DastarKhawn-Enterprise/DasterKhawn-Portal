@@ -234,11 +234,11 @@ export default function ExpensesView({ slug, theme, currencySymbol }: Props) {
               {expenses.map((exp) => (
                 <div key={exp.id} className="bg-white rounded-xl border border-gray-200 p-4">
                   <div className="flex items-start justify-between mb-2">
-                    <div>
+                    <div className="min-w-0">
                       <Badge variant="info" className="mb-1">{CATEGORY_LABELS[exp.category] || exp.category}</Badge>
                       <div className="text-sm text-gray-500">{exp.expense_date}</div>
                     </div>
-                    <div className="text-lg font-bold" style={{ color: theme.primaryColor }}>{currencySymbol}{Number(exp.amount).toFixed(2)}</div>
+                    <div className="text-lg font-bold flex-shrink-0 whitespace-nowrap" style={{ color: theme.primaryColor }}>{currencySymbol}{Number(exp.amount).toFixed(2)}</div>
                   </div>
                   {exp.description && <p className="text-sm text-gray-600 mb-2">{exp.description}</p>}
                   <div className="flex gap-2">

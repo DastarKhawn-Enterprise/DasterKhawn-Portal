@@ -218,11 +218,11 @@ export default function InventoryView({ slug, theme }: Props) {
                 return (
                   <div key={item.id} className="bg-white rounded-xl border border-gray-200 p-4">
                     <div className="flex items-start justify-between mb-2">
-                      <div className="font-semibold text-gray-800">{item.name}</div>
+                      <div className="font-semibold text-gray-800 min-w-0 truncate">{item.name}</div>
                       {isLow ? (
-                        <Badge variant="danger">Low</Badge>
+                        <Badge variant="danger" className="flex-shrink-0">Low</Badge>
                       ) : (
-                        <Badge variant="success">OK</Badge>
+                        <Badge variant="success" className="flex-shrink-0">OK</Badge>
                       )}
                     </div>
                     <div className="grid grid-cols-2 gap-y-1 gap-x-4 text-sm text-gray-600 mb-3">
