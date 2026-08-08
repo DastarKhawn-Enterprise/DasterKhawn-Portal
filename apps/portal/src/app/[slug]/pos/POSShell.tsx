@@ -108,7 +108,6 @@ export default function POSShell({ supabaseUrl, supabaseAnonKey, brandName, them
               ☰
             </button>
             <span className="text-lg font-bold truncate whitespace-nowrap">{brandName}</span>
-            {pageTitle && <><span className="text-input-border mx-1.5 text-sm whitespace-nowrap">/</span><span className="text-sm font-medium text-text-secondary truncate max-w-[200px] whitespace-nowrap">{pageTitle}</span></>}
             {(user?.publicMetadata as Record<string, any> | undefined)?.role === 'super_admin' && (
               <a
                 href="/dashboard"
